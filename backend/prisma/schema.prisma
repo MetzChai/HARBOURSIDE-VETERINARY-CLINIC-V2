@@ -1,0 +1,303 @@
+// Prisma schema for Neon PostgreSQL — used for migrations & client generation.
+// Complex triggers/enums are applied via db/schema.sql (npm run db:push).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  admin
+  owner
+
+  @@map("app_role")
+}
+
+enum PetStatus {
+  available
+  deceased
+
+  @@map("pet_status")
+}
+
+enum ApptType {
+  scheduled
+  walk_in
+  request
+
+  @@map("appt_type")
+}
+
+enum ApptStatus {
+  Scheduled
+  Completed
+  Missed
+  Cancelled
+  Requested
+
+  @@map("appt_status")
+}
+
+enum TxnType {
+  in
+  out
+
+  @@map("txn_type")
+}
+
+enum ItemCategory {
+  vaccine
+  medication
+  dewormer
+  supply
+
+  @@map("item_category")
+}
+
+model User {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email            String   @unique
+  passwordHash     String?  @map("password_hash")
+  fullName         String?  @map("full_name")
+  googleId         String?  @unique @map("google_id")
+  emailVerified    Boolean  @default(false) @map("email_verified")
+  mustVerifyGmail  Boolean  @default(false) @map("must_verify_gmail")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  profile  Profile?
+  roles    UserRole[]
+  owners   Owner[]
+
+  @@map("users")
+}
+
+model Profile {
+  id        String   @id @db.Uuid
+  fullName  String?  @map("full_name")
+  email     String?
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model UserRole {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      AppRole
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+model Owner {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  name      String
+  contact   String?
+  email     String?
+  address   String?
+  imageUrl  String?  @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  pets         Pet[]
+  appointments Appointment[]
+  messages     Message[]
+  labTransactions LabTransaction[]
+
+  @@map("owners")
+}
+
+model Pet {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  name         String
+  species      String?
+  breed        String?
+  gender       String?
+  dob          DateTime? @db.Date
+  imageUrl     String?   @map("image_url")
+  status       PetStatus @default(available)
+  causeOfDeath String?   @map("cause_of_death")
+  deceasedDate DateTime? @map("deceased_date") @db.Date
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  owner        Owner         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  vaccinations Vaccination[]
+  dewormings   Deworming[]
+  careRecords  CareRecord[]
+
+  @@map("pets")
+}
+
+model Appointment {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  petId     String?    @map("pet_id") @db.Uuid
+  ownerId   String?    @map("owner_id") @db.Uuid
+  date      DateTime   @db.Date
+  time      String
+  vet       String?
+  reason    String?
+  type      ApptType   @default(scheduled)
+  status    ApptStatus @default(Scheduled)
+  careType  String     @default("checkup") @map("care_type")
+  notes     String?
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  pet  Pet?   @relation(fields: [petId], references: [id], onDelete: Cascade)
+  owner Owner? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
+
+model Vaccination {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  petId         String    @map("pet_id") @db.Uuid
+  appointmentId String?   @unique @map("appointment_id") @db.Uuid
+  vaccineType   String    @map("vaccine_type")
+  dateGiven     DateTime? @map("date_given") @db.Date
+  nextDue       DateTime? @map("next_due") @db.Date
+  vet           String?
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@map("vaccinations")
+}
+
+model Deworming {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  petId     String    @map("pet_id") @db.Uuid
+  product   String
+  dateGiven DateTime? @map("date_given") @db.Date
+  nextDue   DateTime? @map("next_due") @db.Date
+  vet       String?
+  notes     String?
+  status    String    @default("Scheduled")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@map("dewormings")
+}
+
+model CareRecord {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  petId         String    @map("pet_id") @db.Uuid
+  appointmentId String?   @unique @map("appointment_id") @db.Uuid
+  date          DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  vet           String?
+  recordType    String    @default("checkup") @map("record_type")
+  diagnosis     String?
+  treatment     String?
+  medication    String?
+  dosage        String?
+  outcome       String?
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@map("care_records")
+}
+
+model InventoryItem {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  brand          String?
+  dosage         String?
+  category       ItemCategory @default(supply)
+  quantity       Int          @default(0)
+  unit           String?      @default("unit")
+  expirationDate DateTime?    @map("expiration_date") @db.Date
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  transactions InventoryTransaction[]
+
+  @@map("inventory_items")
+}
+
+model InventoryTransaction {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId         String   @map("item_id") @db.Uuid
+  type           TxnType
+  quantity       Int
+  batchNo        String?  @map("batch_no")
+  expirationDate DateTime? @map("expiration_date") @db.Date
+  reason         String?
+  petId          String?  @map("pet_id") @db.Uuid
+  date           DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_transactions")
+}
+
+model LabTransaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  petId     String?  @map("pet_id") @db.Uuid
+  ownerId   String?  @map("owner_id") @db.Uuid
+  date      DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  vet       String?
+  status    String   @default("Unpaid")
+  total     Decimal  @default(0) @db.Decimal
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  owner Owner? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  items LabTransactionItem[]
+
+  @@map("lab_transactions")
+}
+
+model LabTransactionItem {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionId String  @map("transaction_id") @db.Uuid
+  description   String
+  quantity      Int     @default(1)
+  unitPrice     Decimal @default(0) @map("unit_price") @db.Decimal
+  lineTotal     Decimal @default(0) @map("line_total") @db.Decimal
+
+  transaction LabTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@map("lab_transaction_items")
+}
+
+model Message {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId   String?  @map("owner_id") @db.Uuid
+  phone     String?
+  body      String
+  status    String   @default("simulated")
+  channel   String   @default("sms")
+  subject   String?
+  email     String?
+  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner Owner? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("messages")
+}
