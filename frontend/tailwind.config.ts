@@ -18,6 +18,15 @@ export default {
         body: ['Inter', 'sans-serif'],
       },
       colors: {
+        brand: {
+          navy: "#1B3A5C",
+          teal: "#1FA8A8",
+          green: "#3CB043",
+          charcoal: "#2D3436",
+          "navy-light": "#E8EEF4",
+          "teal-light": "#E8F6F6",
+          "green-light": "#EDF7ED",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

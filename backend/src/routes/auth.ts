@@ -13,7 +13,7 @@ import {
   getUserProfile,
   updateUserProfile,
 } from "../services/data.js";
-import { getPool, prisma } from "../lib/db.js";
+import { getPool } from "../lib/db.js";
 import {
   createOAuthState,
   exchangeGoogleCode,

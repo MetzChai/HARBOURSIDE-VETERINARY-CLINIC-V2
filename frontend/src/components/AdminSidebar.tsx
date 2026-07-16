@@ -2,6 +2,7 @@
 
 import { PawPrint, Users, Calendar, Heart, Package, FileText, LogOut, LayoutDashboard, Bug, Receipt, MessageSquare } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -44,17 +45,13 @@ export function AdminSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
-            <PawPrint className="h-5 w-5 text-sidebar-primary-foreground" />
-          </div>
-          {!collapsed && (
-            <div>
-              <h2 className="text-sm font-bold font-heading text-sidebar-accent-foreground">Harbourside</h2>
-              <p className="text-xs text-sidebar-foreground/60">Veterinary Clinic</p>
-            </div>
-          )}
-        </div>
+        <BrandLogo
+          size="sm"
+          showText
+          subtitle="Veterinary Clinic"
+          variant="sidebar"
+          collapsed={collapsed}
+        />
       </SidebarHeader>
 
       <SidebarContent>

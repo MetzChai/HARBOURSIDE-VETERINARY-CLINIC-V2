@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, PawPrint } from "lucide-react";
+import Image from "next/image";
+import { MessageCircle, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -88,15 +89,15 @@ export default function ChatbotWidget() {
 
       {open && (
         <div className="w-[360px] h-[500px] rounded-2xl border bg-card shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
+          <div className="flex items-center justify-between px-4 py-3 bg-brand-navy text-white">
             <div className="flex items-center gap-2">
-              <PawPrint className="h-5 w-5" />
+              <Image src="/logo.png" alt="" width={24} height={24} className="object-contain" />
               <span className="font-heading font-semibold text-sm">PawBot</span>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+              className="h-8 w-8 text-white hover:bg-white/20"
               onClick={() => setOpen(false)}
             >
               <X className="h-4 w-4" />

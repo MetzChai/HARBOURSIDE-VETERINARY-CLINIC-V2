@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, Mail, Lock, PawPrint, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { authClient, db } from "@/lib/db-client";
 import { useAuth } from "@/hooks/useAuth";
+import { AuthShell } from "@/components/AuthShell";
 
 function GoogleIcon() {
   return (
@@ -72,17 +73,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-sm animate-fade-in">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-primary/10 p-3 rounded-xl mb-4">
-            <PawPrint className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Harbourside Veterinary</h1>
-          <p className="text-muted-foreground text-sm mt-1">Sign in to your account</p>
-        </div>
-
-        <Card className="border border-border shadow-sm">
+    <AuthShell title="Harbourside Veterinary" subtitle="Sign in to your account">
+      <Card className="border border-border shadow-sm">
           <CardContent className="p-6">
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
@@ -167,7 +159,6 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -50,9 +50,9 @@ export default function Reports() {
     }
 
     w.document.write(`<html><head><title>${title}</title>
-    <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#ff2400}
+    <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
     table{width:100%;border-collapse:collapse;margin-top:16px}
-    th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#fff0ee;color:#ff2400}</style></head>
+    th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}</style></head>
     <body>${content}<br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time)</p></body></html>`);
     w.document.close();
     w.print();

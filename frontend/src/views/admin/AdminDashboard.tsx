@@ -29,7 +29,7 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: "Total Pets", value: pets.length, icon: PawPrint, color: "text-primary" },
-    { label: "Total Owners", value: owners.length, icon: Users, color: "text-blue-500" },
+    { label: "Total Owners", value: owners.length, icon: Users, color: "text-brand-teal" },
     { label: "Recoveries (Cured)", value: cureCount, icon: HeartPulse, color: "text-success" },
     { label: "Deceased", value: deceasedCount, icon: Skull, color: "text-destructive" },
   ];

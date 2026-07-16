@@ -115,9 +115,9 @@ export default function Inventory() {
     const w = window.open("", "_blank"); if (!w) return;
     w.document.write(`
       <html><head><title>${title}</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#ff2400}
+      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
       table{width:100%;border-collapse:collapse;margin-top:16px}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#fff0ee;color:#ff2400}</style></head>
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}</style></head>
       <body><h1>Harbourside Veterinary Clinic</h1><h2>${title}</h2>
       <table><tr><th>Item</th><th>Brand</th><th>Dosage</th><th>Category</th><th>Quantity</th><th>Expiration</th><th>Status</th></tr>
       ${list.map((i) => `<tr><td>${i.name}</td><td>${i.brand ?? "—"}</td><td>${i.dosage ?? "—"}</td><td>${i.category}</td><td>${i.quantity} ${i.unit ?? ""}</td><td>${i.expiration_date ? formatDate(i.expiration_date) : "—"}</td><td>${itemStatus(i.quantity, i.expiration_date)}</td></tr>`).join("")}

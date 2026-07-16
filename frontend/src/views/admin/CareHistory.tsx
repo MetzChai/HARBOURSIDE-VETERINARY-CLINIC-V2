@@ -244,9 +244,9 @@ export default function CareHistory() {
     if (!w) return;
     w.document.write(`
       <html><head><title>Vaccination Certificate</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#ff2400}
-      .cert{border:3px solid #ff2400;padding:30px;margin-top:20px;border-radius:12px}
-      .header{text-align:center;border-bottom:2px solid #ff2400;padding-bottom:12px}</style></head>
+      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
+      .cert{border:3px solid #1B3A5C;padding:30px;margin-top:20px;border-radius:12px}
+      .header{text-align:center;border-bottom:2px solid #1B3A5C;padding-bottom:12px}</style></head>
       <body><div class="cert"><div class="header"><h1>Harbourside Veterinary Clinic</h1>
       <h2>Vaccination Certificate</h2></div>
       <p><strong>Pet:</strong> ${pet?.name ?? "—"}</p>
@@ -281,9 +281,9 @@ export default function CareHistory() {
     }
 
     w.document.write(`<html><head><title>Care History - ${pet?.name}</title>
-    <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#ff2400}
+    <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
     table{width:100%;border-collapse:collapse;margin:16px 0}
-    th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#fff0ee;color:#ff2400}</style></head>
+    th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}</style></head>
     <body>${content}<br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time)</p></body></html>`);
     w.document.close();
     w.print();

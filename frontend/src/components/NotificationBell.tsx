@@ -22,7 +22,7 @@ const iconMap = {
 const colorMap = {
   vaccine: "text-destructive bg-destructive/10",
   appointment: "text-amber-500 bg-amber-500/10",
-  inventory: "text-blue-500 bg-blue-500/10",
+  inventory: "text-brand-teal bg-brand-teal/10",
   alert: "text-warning bg-warning/10",
 };
 

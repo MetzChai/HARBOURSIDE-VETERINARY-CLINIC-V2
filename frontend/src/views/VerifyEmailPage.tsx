@@ -4,7 +4,8 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PawPrint, Mail, ArrowLeft } from "lucide-react";
+import { Mail, ArrowLeft } from "lucide-react";
+import { AuthShell } from "@/components/AuthShell";
 
 function GoogleIcon() {
   return (
@@ -22,28 +23,17 @@ export default function VerifyEmailPage() {
   const email = searchParams.get("email");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-md animate-fade-in">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-primary/10 p-3 rounded-xl mb-4">
-            <PawPrint className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Verify your Gmail</h1>
-          <p className="text-muted-foreground text-sm mt-1 text-center">
-            One more step before you can sign in
-          </p>
-        </div>
+    <AuthShell title="Verify your Gmail" subtitle="One more step before you can sign in">
+      <div className="mb-4">
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to login
+        </Link>
+      </div>
 
-        <div className="mb-4">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to login
-          </Link>
-        </div>
-
-        <Card className="border border-border shadow-sm">
+      <Card className="border border-border shadow-sm">
           <CardContent className="p-6 space-y-5">
             {email && (
               <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
@@ -79,7 +69,6 @@ export default function VerifyEmailPage() {
             </p>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

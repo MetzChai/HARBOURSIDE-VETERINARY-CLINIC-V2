@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { PawPrint } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function ProtectedRoute({
   role,
@@ -28,16 +28,16 @@ export default function ProtectedRoute({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <PawPrint className="h-8 w-8 text-primary animate-pulse" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+        <BrandLogo size="lg" className="animate-pulse" />
       </div>
     );
   }
 
   if (!session || (userRole && userRole !== role)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <PawPrint className="h-8 w-8 text-primary animate-pulse" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+        <BrandLogo size="lg" className="animate-pulse" />
       </div>
     );
   }

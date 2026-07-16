@@ -168,8 +168,8 @@ export default function ManagePets() {
     w.document.write(`
       <html><head><title>Pet Profile - ${pet.name}</title>
       <style>body{font-family:Arial,sans-serif;padding:40px;color:#1a1a1a}
-      h1{color:#dc2626;margin-bottom:4px}
-      .header{border-bottom:2px solid #dc2626;padding-bottom:12px;margin-bottom:20px}</style></head>
+      h1{color:#1B3A5C;margin-bottom:4px}
+      .header{border-bottom:2px solid #1B3A5C;padding-bottom:12px;margin-bottom:20px}</style></head>
       <body><div class="header"><h1>Harbourside Veterinary Clinic</h1><p>Pet Profile Report</p></div>
       <h2>${pet.name}</h2>
       <p><strong>Species:</strong> ${pet.species ?? "-"} | <strong>Breed:</strong> ${pet.breed ?? "-"} |

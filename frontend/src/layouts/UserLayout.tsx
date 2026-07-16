@@ -36,7 +36,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       <div className="min-h-screen flex w-full">
         <UserSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b bg-card px-4 no-print">
+          <header className="h-14 flex items-center justify-between border-b border-brand-teal/20 bg-card px-4 no-print">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
               <span className="text-sm text-muted-foreground font-medium">Pet Owner Portal</span>
