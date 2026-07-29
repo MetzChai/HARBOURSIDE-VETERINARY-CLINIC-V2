@@ -1,6 +1,6 @@
 "use client";
 
-import { PawPrint, Calendar, Syringe, LogOut, LayoutDashboard } from "lucide-react";
+import { PawPrint, Calendar, Syringe, LogOut, LayoutDashboard, Heart, DollarSign, MessageSquare } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRouter } from "next/navigation";
@@ -22,8 +22,11 @@ import {
 const mainItems = [
   { title: "Dashboard", url: "/user", icon: LayoutDashboard },
   { title: "My Pets", url: "/user/pets", icon: PawPrint },
+  { title: "Care History", url: "/user/care-history", icon: Heart },
   { title: "Appointments", url: "/user/appointments", icon: Calendar },
   { title: "Vaccinations", url: "/user/vaccinations", icon: Syringe },
+  { title: "Transactions", url: "/user/transactions", icon: DollarSign },
+  { title: "Messages", url: "/user/messages", icon: MessageSquare },
 ];
 
 export function UserSidebar() {

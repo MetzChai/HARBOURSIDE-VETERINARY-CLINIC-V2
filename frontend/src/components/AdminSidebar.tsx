@@ -1,10 +1,11 @@
 "use client";
 
-import { PawPrint, Users, Calendar, Heart, Package, FileText, LogOut, LayoutDashboard, Bug, Receipt, MessageSquare } from "lucide-react";
+import { PawPrint, Users, Calendar, Heart, Package, FileText, LogOut, LayoutDashboard, Bug, Receipt, MessageSquare, UserCog } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import type { AppRole } from "@/lib/roles";
 import {
   Sidebar,
   SidebarContent,
@@ -19,24 +20,26 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const mainItems = [
-  { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
-  { title: "Manage Pets", url: "/admin/pets", icon: PawPrint },
-  { title: "Manage Owners", url: "/admin/owners", icon: Users },
-  { title: "Deworming", url: "/admin/dewormings", icon: Bug },
-  { title: "Schedule", url: "/admin/schedule", icon: Calendar },
-  { title: "Care History", url: "/admin/care-history", icon: Heart },
-  { title: "Inventory", url: "/admin/inventory", icon: Package },
-  { title: "Lab & Transactions", url: "/admin/transactions", icon: Receipt },
-  { title: "Communications", url: "/admin/messages", icon: MessageSquare },
-  { title: "Reports", url: "/admin/reports", icon: FileText },
+const mainItems: { title: string; url: string; icon: typeof LayoutDashboard; roles: AppRole[] }[] = [
+  { title: "Dashboard", url: "/admin", icon: LayoutDashboard, roles: ["admin", "staff"] },
+  { title: "Manage Pets", url: "/admin/pets", icon: PawPrint, roles: ["admin", "staff"] },
+  { title: "Manage Owners", url: "/admin/owners", icon: Users, roles: ["admin", "staff"] },
+  { title: "Schedule", url: "/admin/schedule", icon: Calendar, roles: ["admin", "staff"] },
+  { title: "Care History", url: "/admin/care-history", icon: Heart, roles: ["admin", "staff"] },
+  { title: "Inventory", url: "/admin/inventory", icon: Package, roles: ["admin", "staff"] },
+  { title: "Lab & Transactions", url: "/admin/transactions", icon: Receipt, roles: ["admin", "staff"] },
+  { title: "Communications", url: "/admin/messages", icon: MessageSquare, roles: ["admin", "staff"] },
+  { title: "Reports", url: "/admin/reports", icon: FileText, roles: ["admin"] },
+  { title: "Accounts", url: "/admin/staff", icon: UserCog, roles: ["admin"] },
 ];
 
 export function AdminSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
+  const visibleItems = mainItems.filter((item) => role && item.roles.includes(role));
+
   const handleLogout = async () => {
     await signOut();
     router.push("/login");
@@ -61,7 +64,7 @@ export function AdminSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

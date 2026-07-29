@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ===== Enums =====
 DO $$ BEGIN
-  CREATE TYPE app_role AS ENUM ('admin','owner');
+  CREATE TYPE app_role AS ENUM ('admin','staff','owner');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
@@ -91,6 +91,18 @@ CREATE TABLE IF NOT EXISTS owners (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS owner_code text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS first_name text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS middle_name text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS last_name text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS gender text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS birth_date date;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS emergency_contact_name text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS emergency_contact_number text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS google_account text;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS account_status text NOT NULL DEFAULT 'Active';
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS is_walk_in boolean NOT NULL DEFAULT false;
+
 DROP TRIGGER IF EXISTS trg_owners_updated ON owners;
 CREATE TRIGGER trg_owners_updated BEFORE UPDATE ON owners FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -110,6 +122,16 @@ CREATE TABLE IF NOT EXISTS pets (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS pet_code text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS estimated_age text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS color text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS weight text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS microchip_number text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS blood_type text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS allergies text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS existing_conditions text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS notes text;
 
 DROP TRIGGER IF EXISTS trg_pets_updated ON pets;
 CREATE TRIGGER trg_pets_updated BEFORE UPDATE ON pets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -132,6 +154,8 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS care_type text NOT NULL DEFAULT 'checkup';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS appointment_number text;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by text;
 
 DROP TRIGGER IF EXISTS trg_appts_updated ON appointments;
 CREATE TRIGGER trg_appts_updated BEFORE UPDATE ON appointments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -191,6 +215,14 @@ CREATE TABLE IF NOT EXISTS care_records (
 );
 
 ALTER TABLE care_records ADD COLUMN IF NOT EXISTS appointment_id uuid UNIQUE REFERENCES appointments(id) ON DELETE SET NULL;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS chief_complaint text;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS symptoms text;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS findings text;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS medication_qty integer DEFAULT 1;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS vaccine_used text;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS next_vax_due date;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS dewormer_used text;
+ALTER TABLE care_records ADD COLUMN IF NOT EXISTS next_deworming_due date;
 
 DROP TRIGGER IF EXISTS trg_care_updated ON care_records;
 CREATE TRIGGER trg_care_updated BEFORE UPDATE ON care_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -239,8 +271,35 @@ CREATE TABLE IF NOT EXISTS lab_transactions (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS transaction_number text;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS care_record_id uuid REFERENCES care_records(id) ON DELETE SET NULL;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_method text NOT NULL DEFAULT 'Cash';
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT 'Pending';
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS services_rendered text;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS total_amount numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS notes text;
+
 DROP TRIGGER IF EXISTS trg_lab_updated ON lab_transactions;
 CREATE TRIGGER trg_lab_updated BEFORE UPDATE ON lab_transactions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ===== lab_records =====
+CREATE TABLE IF NOT EXISTS lab_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lab_record_number text UNIQUE,
+  appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
+  pet_id uuid REFERENCES pets(id) ON DELETE CASCADE,
+  owner_id uuid REFERENCES owners(id) ON DELETE CASCADE,
+  test_type text NOT NULL,
+  result text,
+  remarks text,
+  date_conducted date NOT NULL DEFAULT CURRENT_DATE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_lab_records_updated ON lab_records;
+CREATE TRIGGER trg_lab_records_updated BEFORE UPDATE ON lab_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ===== lab_transaction_items =====
 CREATE TABLE IF NOT EXISTS lab_transaction_items (
@@ -265,6 +324,11 @@ CREATE TABLE IF NOT EXISTS messages (
   sent_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS pet_id uuid REFERENCES pets(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type text NOT NULL DEFAULT 'Custom Message';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sent_by text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS scheduled_at timestamptz;
 
 -- ===== inventory transaction trigger =====
 CREATE OR REPLACE FUNCTION apply_inventory_transaction()
@@ -295,7 +359,12 @@ INSERT INTO owners (id, name, email)
 VALUES ('00000000-0000-0000-0000-0000000000aa', 'Walk-in Clients', null)
 ON CONFLICT (id) DO NOTHING;
 
+-- Migration for existing databases: add staff role value
+DO $$ BEGIN
+  ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'staff';
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- Backfill verification for existing accounts
 UPDATE users SET email_verified = true, must_verify_gmail = false WHERE google_id IS NOT NULL;
 UPDATE users SET email_verified = true, must_verify_gmail = false
-WHERE id IN (SELECT user_id FROM user_roles WHERE role = 'admin');
+WHERE id IN (SELECT user_id FROM user_roles WHERE role::text IN ('admin', 'staff'));

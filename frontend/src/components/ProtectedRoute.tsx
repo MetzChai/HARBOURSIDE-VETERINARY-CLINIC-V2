@@ -4,12 +4,17 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandLogo";
+import { isClinicUser, type AppRole } from "@/lib/roles";
+
+function portalPath(role: AppRole): string {
+  return role === "owner" ? "/user" : "/admin";
+}
 
 export default function ProtectedRoute({
-  role,
+  allowedRoles,
   children,
 }: {
-  role: "admin" | "owner";
+  allowedRoles: AppRole[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -21,10 +26,10 @@ export default function ProtectedRoute({
       router.replace("/login");
       return;
     }
-    if (userRole && userRole !== role) {
-      router.replace(userRole === "admin" ? "/admin" : "/user");
+    if (userRole && !allowedRoles.includes(userRole)) {
+      router.replace(portalPath(userRole));
     }
-  }, [loading, session, userRole, role, router]);
+  }, [loading, session, userRole, allowedRoles, router]);
 
   if (loading) {
     return (
@@ -34,7 +39,7 @@ export default function ProtectedRoute({
     );
   }
 
-  if (!session || (userRole && userRole !== role)) {
+  if (!session || (userRole && !allowedRoles.includes(userRole))) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <BrandLogo size="lg" className="animate-pulse" />
@@ -44,3 +49,5 @@ export default function ProtectedRoute({
 
   return <>{children}</>;
 }
+
+export { isClinicUser, portalPath };

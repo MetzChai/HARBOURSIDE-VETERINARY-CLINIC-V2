@@ -1,9 +1,10 @@
 import type { SessionUser } from "./auth.js";
+import { isClinicUser } from "./auth.js";
 import { getPool } from "../lib/db.js";
 import { todayPH, formatDatePH, daysFromTodayPH } from "../lib/datetime.js";
 
 export type ChatContext = {
-  role: "admin" | "owner";
+  role: "admin" | "staff" | "owner";
   userName: string;
   pets: { name: string; species: string | null; breed: string | null }[];
   appointments: {
@@ -28,7 +29,7 @@ export async function getChatContext(user: SessionUser): Promise<ChatContext> {
   const userName = user.fullName ?? user.email;
   const today = todayPH();
 
-  if (user.role === "admin") {
+  if (isClinicUser(user.role)) {
     const { rows: appointments } = await pool.query(
       `SELECT a.date, a.time, a.status, a.reason, p.name AS pet_name
        FROM appointments a
@@ -58,7 +59,7 @@ export async function getChatContext(user: SessionUser): Promise<ChatContext> {
     );
 
     return {
-      role: "admin",
+      role: user.role === "staff" ? "staff" : "admin",
       userName,
       pets: [],
       appointments: appointments as ChatContext["appointments"],
@@ -146,7 +147,7 @@ export function buildContextPrompt(ctx: ChatContext): string {
     lines.push("Vaccinations: all up to date within the next 30 days.");
   }
 
-  if (ctx.role === "admin") {
+  if (isClinicUser(ctx.role)) {
     lines.push(`Pending appointment requests: ${ctx.requestedCount ?? 0}`);
     if (ctx.lowStock?.length) {
       lines.push("Low stock:", ...ctx.lowStock.map((i) => `- ${i.name}: ${i.quantity} left`));
@@ -218,11 +219,11 @@ export function generateLocalChatReply(message: string, ctx: ChatContext): strin
     return `If this is an emergency, please call the clinic hotline **0917-VET-HELP** right away or bring your pet in during clinic hours (Mon–Sat 8AM–6PM PH time).\n\n${CLINIC_INFO}`;
   }
 
-  if (ctx.role === "admin" && /request|pending|approve/.test(q)) {
+  if (isClinicUser(ctx.role) && /request|pending|approve/.test(q)) {
     return `There ${ctx.requestedCount === 1 ? "is" : "are"} **${ctx.requestedCount ?? 0}** pending appointment request(s). Open **Schedule** to review and approve them.`;
   }
 
-  if (ctx.role === "admin" && /stock|inventory|low/.test(q)) {
+  if (isClinicUser(ctx.role) && /stock|inventory|low/.test(q)) {
     if (!ctx.lowStock?.length) return "Inventory levels look healthy — no critical low-stock items right now.";
     return `Low stock items:\n${ctx.lowStock.map((i) => `• ${i.name}: ${i.quantity} left`).join("\n")}\n\nCheck **Inventory** to restock.`;
   }

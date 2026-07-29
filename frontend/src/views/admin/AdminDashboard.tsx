@@ -1,144 +1,607 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PawPrint, Users, Calendar, Activity, HeartPulse, Skull } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { useRows } from "@/hooks/useRows";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  PawPrint,
+  Users,
+  Calendar,
+  Activity,
+  HeartPulse,
+  Skull,
+  Package,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  UserPlus,
+  PlusCircle,
+  FileText,
+  PackagePlus,
+  Bell,
+  Eye,
+  TrendingUp,
+  TrendingDown,
+  Syringe,
+  Pill,
+  ShieldAlert,
+} from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts";
+import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { todayPH, phMonthBuckets } from "@/lib/datetime";
+import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH } from "@/lib/datetime";
+import { getStatusBadgeClass, CARE_TYPE_LABELS, normalizeCareType } from "@/lib/appointment-slots";
+import { useAdminNotifications } from "@/hooks/useNotifications";
+import { type NotificationItem } from "@/lib/notifications";
+import { useAuth } from "@/hooks/useAuth";
+import { db } from "@/lib/db-client";
+import { toast } from "sonner";
 
-const isCure = (outcome?: string | null) =>
-  !!outcome && /(cur|recover|healthy|healed|resolved)/i.test(outcome);
+const COLORS = ["#1B3A5C", "#1FA8A8", "#2E7D32", "#C62828", "#8E24AA", "#F57C00"];
 
 export default function AdminDashboard() {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
+  const invalidate = useInvalidate();
+
   const { data: pets = [] } = useRows<any>("pets");
   const { data: owners = [] } = useRows<any>("owners");
+  const { data: staffAccounts = [] } = useRows<any>("profiles");
   const { data: appointments = [] } = useRows<any>("appointments", { orderBy: "date", ascending: false });
-  const { data: care = [] } = useRows<any>("care_records");
+  const { data: care = [] } = useRows<any>("care_records", { orderBy: "date", ascending: false });
+  const { data: inventory = [] } = useRows<any>("inventory_items");
+  const { data: vaccinations = [] } = useRows<any>("vaccinations");
+  const { data: dewormings = [] } = useRows<any>("dewormings");
+
+  const { notifications = [] } = useAdminNotifications();
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
 
   const today = todayPH();
-  const todayAppointments = appointments.filter((a) => a.date === today);
-  const petName = (id: string) => pets.find((p) => p.id === id)?.name ?? "—";
-  const ownerName = (id: string) => owners.find((o) => o.id === id)?.name ?? "—";
 
-  const deceasedCount = pets.filter((p) => p.status === "deceased").length;
-  const cureCount = care.filter((c) => isCure(c.outcome)).length;
+  // Metrics computation
+  const todayAppointments = useMemo(
+    () => appointments.filter((a) => a.date === today),
+    [appointments, today]
+  );
 
-  const stats = [
-    { label: "Total Pets", value: pets.length, icon: PawPrint, color: "text-primary" },
-    { label: "Total Owners", value: owners.length, icon: Users, color: "text-brand-teal" },
-    { label: "Recoveries (Cured)", value: cureCount, icon: HeartPulse, color: "text-success" },
-    { label: "Deceased", value: deceasedCount, icon: Skull, color: "text-destructive" },
+  const pendingRequests = useMemo(
+    () => appointments.filter((a) => a.status === "Pending" || a.status === "Requested"),
+    [appointments]
+  );
+
+  const completedToday = useMemo(
+    () => appointments.filter((a) => a.date === today && a.status === "Completed"),
+    [appointments, today]
+  );
+
+  // Pet Health Statuses
+  const healthyPetsCount = useMemo(
+    () => pets.filter((p) => !p.status || p.status === "healthy" || p.status === "Healthy").length,
+    [pets]
+  );
+  const underTreatmentCount = useMemo(
+    () => pets.filter((p) => p.status === "under_treatment" || p.status === "Under Treatment").length,
+    [pets]
+  );
+  const recoveredPetsCount = useMemo(
+    () => pets.filter((p) => p.status === "recovered" || p.status === "Recovered").length,
+    [pets]
+  );
+  const deceasedPetsCount = useMemo(
+    () => pets.filter((p) => p.status === "deceased" || p.status === "Deceased").length,
+    [pets]
+  );
+
+  // Recovery & Death Rates
+  const totalCases = useMemo(() => pets.length || 1, [pets.length]);
+  const recoveryRate = useMemo(
+    () => Math.round((recoveredPetsCount / totalCases) * 100),
+    [recoveredPetsCount, totalCases]
+  );
+  const deathRate = useMemo(
+    () => Math.round((deceasedPetsCount / totalCases) * 100),
+    [deceasedPetsCount, totalCases]
+  );
+
+  // Inventory stats
+  const lowStockItems = useMemo(
+    () => inventory.filter((i) => (i.quantity ?? 0) <= (i.reorder_level ?? 5)),
+    [inventory]
+  );
+
+  const expiringItems = useMemo(
+    () => inventory.filter((i) => i.expiration_date && isWithinDaysFromTodayPH(i.expiration_date, 30)),
+    [inventory]
+  );
+
+  const petName = (id?: string) => pets.find((p) => p.id === id)?.name ?? "—";
+  const ownerName = (id?: string) => owners.find((o) => o.id === id)?.name ?? "—";
+
+  // Summary Stat Cards Data
+  const summaryCards = [
+    { label: "Total Pets", value: pets.length, icon: PawPrint, color: "text-primary bg-primary/10" },
+    { label: "Pet Owners", value: owners.length, icon: Users, color: "text-teal-600 bg-teal-50" },
+    { label: "Today's Appointments", value: todayAppointments.length, icon: Calendar, color: "text-blue-600 bg-blue-50" },
+    { label: "Pending Requests", value: pendingRequests.length, icon: Clock, color: "text-amber-600 bg-amber-50" },
+    { label: "Completed Today", value: completedToday.length, icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Active Care Records", value: care.length, icon: FileText, color: "text-indigo-600 bg-indigo-50" },
+    { label: "Healthy Pets", value: healthyPetsCount, icon: HeartPulse, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Under Treatment", value: underTreatmentCount, icon: Activity, color: "text-amber-600 bg-amber-50" },
+    { label: "Recovered Pets", value: recoveredPetsCount, icon: TrendingUp, color: "text-blue-600 bg-blue-50" },
+    { label: "Deceased Pets", value: deceasedPetsCount, icon: Skull, color: "text-rose-600 bg-rose-50" },
+    { label: "Low Stock Items", value: lowStockItems.length, icon: AlertTriangle, color: "text-rose-600 bg-rose-50" },
+    { label: "Expiring Items", value: expiringItems.length, icon: ShieldAlert, color: "text-amber-600 bg-amber-50" },
+    { label: "Total Inventory Items", value: inventory.length, icon: Package, color: "text-purple-600 bg-purple-50" },
+    ...(isAdmin ? [{ label: "Clinic Staff", value: staffAccounts.length, icon: UserPlus, color: "text-sky-600 bg-sky-50" }] : []),
   ];
 
-  // Monthly deaths vs cures for the last 6 months
-  const chartData = useMemo(() => {
-    const months = phMonthBuckets(6).map((m) => ({ ...m, Deaths: 0, Cures: 0 }));
-    const bucket = (dateStr?: string | null) => (dateStr ? months.find((m) => m.key === String(dateStr).slice(0, 7)) : undefined);
-    pets.forEach((p) => { if (p.status === "deceased") { const b = bucket(p.deceased_date); if (b) b.Deaths++; } });
-    care.forEach((c) => { if (isCure(c.outcome)) { const b = bucket(c.date); if (b) b.Cures++; } });
-    return months;
-  }, [pets, care]);
+  // Analytics Chart Data
+  const monthBuckets = useMemo(() => phMonthBuckets(6), []);
+
+  // 1. Appointments Monthly Analytics
+  const appointmentMonthlyData = useMemo(() => {
+    return monthBuckets.map((m) => {
+      const count = appointments.filter((a) => String(a.date).slice(0, 7) === m.key).length;
+      const completed = appointments.filter((a) => String(a.date).slice(0, 7) === m.key && a.status === "Completed").length;
+      return { label: m.label, Total: count, Completed: completed };
+    });
+  }, [monthBuckets, appointments]);
+
+  // 2. Care History Breakdown
+  const careTypeDistribution = useMemo(() => {
+    const counts: Record<string, number> = { Checkup: 0, Vaccination: 0, Treatment: 0, Deworming: 0 };
+    care.forEach((c) => {
+      const t = normalizeCareType(c.care_type);
+      if (t === "vaccination" || t === "vaccine") counts.Vaccination++;
+      else if (t === "treatment") counts.Treatment++;
+      else if (t === "deworming") counts.Deworming++;
+      else counts.Checkup++;
+    });
+    return [
+      { name: "Check-ups", value: counts.Checkup },
+      { name: "Vaccinations", value: counts.Vaccination },
+      { name: "Treatments", value: counts.Treatment },
+      { name: "Dewormings", value: counts.Deworming },
+    ];
+  }, [care]);
+
+  // 3. Pet Health & Outcome Analytics
+  const petHealthDistribution = useMemo(() => {
+    return [
+      { name: "Healthy", value: healthyPetsCount },
+      { name: "Under Treatment", value: underTreatmentCount },
+      { name: "Recovered", value: recoveredPetsCount },
+      { name: "Deceased", value: deceasedPetsCount },
+    ];
+  }, [healthyPetsCount, underTreatmentCount, recoveredPetsCount, deceasedPetsCount]);
+
+  // Monthly Recoveries vs Deaths
+  const healthTrendsData = useMemo(() => {
+    return monthBuckets.map((m) => {
+      const deaths = pets.filter((p) => p.status === "deceased" && String(p.deceased_date || "").slice(0, 7) === m.key).length;
+      const cures = care.filter((c) => /(cur|recover|healed|resolved)/i.test(c.outcome || "") && String(c.date || "").slice(0, 7) === m.key).length;
+      return { label: m.label, Recoveries: cures, Deaths: deaths };
+    });
+  }, [monthBuckets, pets, care]);
+
+  // 4. Inventory Stock & Categories Analytics
+  const inventoryCategoryData = useMemo(() => {
+    const counts: Record<string, number> = { Medicine: 0, Vaccine: 0, Dewormer: 0, Supply: 0 };
+    inventory.forEach((i) => {
+      const cat = String(i.category || "").toLowerCase();
+      if (cat.includes("vaccin")) counts.Vaccine++;
+      else if (cat.includes("deworm")) counts.Dewormer++;
+      else if (cat.includes("suppl")) counts.Supply++;
+      else counts.Medicine++;
+    });
+    return [
+      { name: "Medicines", value: counts.Medicine },
+      { name: "Vaccines", value: counts.Vaccine },
+      { name: "Dewormers", value: counts.Dewormer },
+      { name: "Medical Supplies", value: counts.Supply },
+    ];
+  }, [inventory]);
+
+  // Upcoming Reminders computation
+  const upcomingVaccines = useMemo(
+    () => vaccinations.filter((v) => v.next_due && isWithinDaysFromTodayPH(v.next_due, 30)),
+    [vaccinations]
+  );
+  const upcomingDewormings = useMemo(
+    () => dewormings.filter((d) => d.next_due && isWithinDaysFromTodayPH(d.next_due, 30)),
+    [dewormings]
+  );
+  const upcomingAppointmentsList = useMemo(
+    () => appointments.filter((a) => (daysFromTodayPH(a.date) ?? -1) >= 0 && a.status !== "Cancelled"),
+    [appointments]
+  );
+
+  const updateAppointmentStatus = async (id: string, status: string) => {
+    const { error } = await db.from("appointments").update({ status } as any).eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Appointment marked as ${status}`);
+    invalidate("appointments");
+    if (status === "Completed") invalidate("care_records");
+  };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Clinic overview & health outcomes</p>
+    <div className="space-y-6 animate-fade-in pb-10">
+      {/* Header & Quick Action Buttons */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold">Clinic Dashboard & Operations</h1>
+          <p className="text-muted-foreground text-sm">Real-time clinic metrics, analytics, and shortcuts</p>
+        </div>
+
+        {/* Quick Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/pets">
+            <Button size="sm" variant="outline" className="h-9">
+              <PawPrint className="h-4 w-4 mr-1.5 text-primary" /> Register Pet
+            </Button>
+          </Link>
+          <Link href="/admin/owners">
+            <Button size="sm" variant="outline" className="h-9">
+              <UserPlus className="h-4 w-4 mr-1.5 text-teal-600" /> Register Owner
+            </Button>
+          </Link>
+          <Link href="/admin/schedule">
+            <Button size="sm" variant="outline" className="h-9">
+              <PlusCircle className="h-4 w-4 mr-1.5 text-blue-600" /> Book Appointment
+            </Button>
+          </Link>
+          <Link href="/admin/care-history">
+            <Button size="sm" variant="outline" className="h-9">
+              <FileText className="h-4 w-4 mr-1.5 text-indigo-600" /> Record Care History
+            </Button>
+          </Link>
+          <Link href="/admin/inventory">
+            <Button size="sm" variant="outline" className="h-9">
+              <PackagePlus className="h-4 w-4 mr-1.5 text-purple-600" /> Add Inventory Item
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-0 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
+      {/* Summary Statistic Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+        {summaryCards.map((card) => (
+          <Card key={card.label} className="border-0 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className={`p-2 rounded-lg shrink-0 ${card.color}`}>
+                <card.icon className="h-5 w-5" />
               </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <div className="min-w-0">
+                <p className="text-xl font-bold font-heading truncate">{card.value}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{card.label}</p>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Analytics chart */}
-        <Card className="lg:col-span-2 border-0 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="font-heading text-base flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              Health Outcomes — Deaths vs Cures (last 6 months)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="label" className="text-xs" />
-                  <YAxis allowDecimals={false} className="text-xs" />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Cures" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Deaths" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Today's appointments */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="font-heading text-base flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary" />
-              Today's Appointments
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {todayAppointments.length === 0 && <p className="text-sm text-muted-foreground">No appointments today.</p>}
-            {todayAppointments.map((apt) => (
-              <div key={apt.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                <div>
-                  <p className="text-sm font-medium">{petName(apt.pet_id)}</p>
-                  <p className="text-xs text-muted-foreground">{ownerName(apt.owner_id)} • {apt.time}</p>
-                </div>
-                <Badge variant={apt.status === "Completed" ? "default" : apt.status === "Missed" ? "destructive" : "secondary"}>{apt.status}</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent deceased */}
+      {/* Analytics Tabs Section */}
       <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="font-heading text-base">Recorded Deaths (cause of death)</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-bold font-heading flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" /> Interactive Analytics & Health Outcomes
+          </CardTitle>
         </CardHeader>
         <CardContent>
+          <Tabs defaultValue="appointments" className="space-y-4">
+            <TabsList className="bg-muted/60 p-1">
+              <TabsTrigger value="appointments" className="text-xs">Appointments</TabsTrigger>
+              <TabsTrigger value="care" className="text-xs">Care History</TabsTrigger>
+              <TabsTrigger value="health" className="text-xs">Pet Health & Recovery</TabsTrigger>
+              <TabsTrigger value="inventory" className="text-xs">Inventory Breakdown</TabsTrigger>
+            </TabsList>
+
+            {/* 1. Appointments Analytics */}
+            <TabsContent value="appointments" className="space-y-4">
+              <div className="h-72 w-full pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={appointmentMonthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="label" className="text-xs" />
+                    <YAxis allowDecimals={false} className="text-xs" />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Total" fill="#1B3A5C" radius={[4, 4, 0, 0]} name="Total Appointments" />
+                    <Bar dataKey="Completed" fill="#2E7D32" radius={[4, 4, 0, 0]} name="Completed Appointments" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </TabsContent>
+
+            {/* 2. Care History Analytics */}
+            <TabsContent value="care" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={careTypeDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                      {careTypeDistribution.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm">Care Services Distribution</h4>
+                {careTypeDistribution.map((item, idx) => (
+                  <div key={item.name} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>{item.name}</span>
+                      <span>{item.value} records</span>
+                    </div>
+                    <Progress value={care.length ? (item.value / care.length) * 100 : 0} className="h-2" />
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            {/* 3. Pet Health & Recovery/Death Analytics */}
+            <TabsContent value="health" className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border bg-emerald-50/50 space-y-1">
+                  <span className="text-xs text-muted-foreground font-medium uppercase">Recovery Rate</span>
+                  <p className="text-3xl font-bold font-heading text-emerald-700">{recoveryRate}%</p>
+                  <p className="text-xs text-emerald-800">{recoveredPetsCount} total pets marked as Recovered</p>
+                </div>
+                <div className="p-4 rounded-xl border bg-rose-50/50 space-y-1">
+                  <span className="text-xs text-muted-foreground font-medium uppercase">Death Rate</span>
+                  <p className="text-3xl font-bold font-heading text-rose-700">{deathRate}%</p>
+                  <p className="text-xs text-rose-800">{deceasedPetsCount} total deceased records</p>
+                </div>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={healthTrendsData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="label" className="text-xs" />
+                    <YAxis allowDecimals={false} className="text-xs" />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="Recoveries" stroke="#2E7D32" strokeWidth={2} />
+                    <Line type="monotone" dataKey="Deaths" stroke="#C62828" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </TabsContent>
+
+            {/* 4. Inventory Analytics */}
+            <TabsContent value="inventory" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={inventoryCategoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                      {inventoryCategoryData.map((_, index) => (
+                        <Cell key={`cell-inv-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg border bg-amber-50 text-amber-900">
+                    <span className="text-xs font-semibold block">Low Stock Items</span>
+                    <span className="text-xl font-bold">{lowStockItems.length}</span>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-rose-50 text-rose-900">
+                    <span className="text-xs font-semibold block">Expiring Items</span>
+                    <span className="text-xl font-bold">{expiringItems.length}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h5 className="text-xs font-bold uppercase text-muted-foreground">Inventory Items Overview</h5>
+                  <p className="text-xs text-muted-foreground">
+                    Monitoring medicines, vaccines, dewormers, and medical supplies reorder thresholds.
+                  </p>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Recent Appointments Table */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" /> Recent Appointments
+          </CardTitle>
+          <Link href="/admin/schedule">
+            <Button variant="ghost" size="sm" className="text-xs">
+              View All Schedule →
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead>Pet</TableHead><TableHead>Date</TableHead><TableHead>Cause of Death</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Apt #</TableHead>
+                <TableHead>Pet</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Date & Time</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right pr-4">Quick Action</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {pets.filter((p) => p.status === "deceased").map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>{p.deceased_date ? formatDate(p.deceased_date) : "—"}</TableCell>
-                  <TableCell>{p.cause_of_death ?? "—"}</TableCell>
+              {appointments.slice(0, 5).map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="font-mono text-xs font-bold text-primary">
+                    {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
+                  </TableCell>
+                  <TableCell className="font-semibold">{petName(a.pet_id)}</TableCell>
+                  <TableCell>{ownerName(a.owner_id)}</TableCell>
+                  <TableCell className="text-xs">
+                    {formatDate(a.date)} at {a.time}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
+                      {a.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right pr-4">
+                    <div className="flex items-center justify-end gap-1">
+                      {(a.status === "Pending" || a.status === "Requested") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs bg-blue-50 text-blue-700"
+                          onClick={() => updateAppointmentStatus(a.id, "Approved")}
+                        >
+                          Approve
+                        </Button>
+                      )}
+                      {a.status !== "Completed" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-50 text-emerald-700"
+                          onClick={() => updateAppointmentStatus(a.id, "Completed")}
+                        >
+                          Complete
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
-              {pets.filter((p) => p.status === "deceased").length === 0 && (
-                <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-6">No deceased records</TableCell></TableRow>
+              {appointments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    No appointments recorded yet.
+                  </TableCell>
+                </TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Grid Section: Reminders & Low Inventory */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Upcoming Reminders Widget */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-500" /> Upcoming Reminders & Due Dates
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <h5 className="text-xs font-bold uppercase text-muted-foreground">Vaccinations Due (Next 30 Days)</h5>
+              {upcomingVaccines.slice(0, 3).map((v) => (
+                <div key={v.id} className="flex justify-between items-center text-xs p-2 rounded border bg-card">
+                  <span>
+                    <strong>{v.pets?.name || petName(v.pet_id)}</strong> — {v.vaccine_type}
+                  </span>
+                  <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200">
+                    Due {formatDate(v.next_due)}
+                  </Badge>
+                </div>
+              ))}
+              {upcomingVaccines.length === 0 && (
+                <p className="text-xs text-muted-foreground">No upcoming vaccination reminders.</p>
+              )}
+            </div>
+
+            <div className="space-y-2 pt-2 border-t">
+              <h5 className="text-xs font-bold uppercase text-muted-foreground">Dewormings Due (Next 30 Days)</h5>
+              {upcomingDewormings.slice(0, 3).map((d) => (
+                <div key={d.id} className="flex justify-between items-center text-xs p-2 rounded border bg-card">
+                  <span>
+                    <strong>{d.pets?.name || petName(d.pet_id)}</strong> — {d.product || "Deworming"}
+                  </span>
+                  <Badge variant="outline" className="text-purple-700 bg-purple-50 border-purple-200">
+                    Due {formatDate(d.next_due)}
+                  </Badge>
+                </div>
+              ))}
+              {upcomingDewormings.length === 0 && (
+                <p className="text-xs text-muted-foreground">No upcoming deworming reminders.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Low Inventory Alert Widget */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-rose-500" /> Low & Expiring Inventory Alerts
+            </CardTitle>
+            <Link href="/admin/inventory">
+              <Button variant="ghost" size="sm" className="text-xs">
+                Manage Inventory →
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item Name</TableHead>
+                  <TableHead>Qty</TableHead>
+                  <TableHead>Reorder Level</TableHead>
+                  <TableHead>Expiration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lowStockItems.concat(expiringItems).slice(0, 5).map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-semibold text-xs">{item.name}</TableCell>
+                    <TableCell className="font-bold text-rose-600">{item.quantity ?? 0}</TableCell>
+                    <TableCell className="text-xs">{item.reorder_level ?? 5}</TableCell>
+                    <TableCell className="text-xs">{item.expiration_date ? formatDate(item.expiration_date) : "—"}</TableCell>
+                  </TableRow>
+                ))}
+                {lowStockItems.length === 0 && expiringItems.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+                      All inventory stock levels are healthy.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-

@@ -5,13 +5,14 @@ import { AdminSidebar } from "@/components/AdminSidebar";
 import NotificationBell from "@/components/NotificationBell";
 import HeaderProfileLink from "@/components/HeaderProfileLink";
 import { useAuth } from "@/hooks/useAuth";
+import { roleLabel } from "@/lib/roles";
 import { useQuery } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 import { useAdminNotifications } from "@/hooks/useNotifications";
 import ChatbotWidget from "@/components/ChatbotWidget";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { notifications, isLoading } = useAdminNotifications();
 
   const { data: profile } = useQuery({
@@ -37,7 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <header className="h-14 flex items-center justify-between border-b border-brand-teal/20 bg-card px-4 no-print">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
-              <span className="text-sm text-muted-foreground font-medium">Admin Panel</span>
+              <span className="text-sm text-muted-foreground font-medium">
+                {role === "admin" ? "Admin Panel" : "Staff Portal"}
+              </span>
             </div>
             <div className="flex items-center gap-3">
               <NotificationBell
@@ -48,7 +51,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <HeaderProfileLink
                 href="/admin/profile"
                 displayName={displayName}
-                subtitle="Veterinary Staff"
+                subtitle={role ? roleLabel(role) : "Veterinary Staff"}
                 avatarUrl={profile?.avatar_url}
               />
             </div>

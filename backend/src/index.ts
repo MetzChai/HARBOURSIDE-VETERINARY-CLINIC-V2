@@ -8,6 +8,7 @@ import dataRoutes from "./routes/data.js";
 import chatRoutes from "./routes/chat.js";
 import uploadRoutes from "./routes/upload.js";
 import appointmentRoutes from "./routes/appointments.js";
+import staffRoutes from "./routes/staff.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -32,6 +33,7 @@ app.use("/api/data", dataRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/staff", staffRoutes);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

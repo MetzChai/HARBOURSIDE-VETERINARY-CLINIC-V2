@@ -120,6 +120,10 @@ class SelectBuilder {
     return new UpdateBuilder(this.table, data);
   }
 
+  delete() {
+    return new DeleteBuilder(this.table);
+  }
+
   async execute(): Promise<{ data: unknown; error: { message: string } | null }> {
     const res = await fetch("/api/data", {
       method: "POST",
@@ -148,6 +152,40 @@ class SelectBuilder {
   }
 }
 
+class DeleteBuilder {
+  private filters: Filter[] = [];
+
+  constructor(private table: string) {}
+
+  eq(column: string, value: unknown) {
+    this.filters.push({ column, value });
+    return this;
+  }
+
+  async execute(): Promise<{ data: null; error: { message: string } | null; meta?: Record<string, unknown> }> {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        action: "delete",
+        table: this.table,
+        filters: this.filters,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { data: null, error: { message: json.error ?? "Request failed" } };
+    return { data: null, error: null, meta: json.meta };
+  }
+
+  then<TResult1 = { data: null; error: { message: string } | null; meta?: Record<string, unknown> }, TResult2 = never>(
+    onfulfilled?: ((value: { data: null; error: { message: string } | null; meta?: Record<string, unknown> }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+}
+
 export const db = {
   from(table: string) {
     return new SelectBuilder(table);
@@ -169,7 +207,7 @@ export const authClient = {
         error: { message: json.error ?? "Login failed", code: json.code as string | undefined },
       };
     }
-    return { data: { user: json.user }, error: null };
+    return { data: { user: json.user, role: json.role as string | undefined }, error: null };
   },
 
   async signUp(opts: {

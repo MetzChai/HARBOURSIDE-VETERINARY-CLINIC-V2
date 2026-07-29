@@ -98,6 +98,22 @@ export function formatNowPH(): string {
   });
 }
 
+/** Format any date or timestamp string/object into Philippine Time (PH) */
+export function formatDateTimePH(value?: string | Date | null): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleString("en-PH", {
+    timeZone: PH_TIMEZONE,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /** ISO timestamp anchored to noon UTC on today's PH date */
 export function nowPHIso(): string {
   return `${todayPH()}T12:00:00.000Z`;

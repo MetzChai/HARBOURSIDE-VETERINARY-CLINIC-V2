@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { queryInsert, querySelect, queryUpdate } from "../services/data.js";
+import { queryDelete, queryInsert, querySelect, queryUpdate } from "../services/data.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -42,6 +42,16 @@ router.post("/", requireAuth, async (req: AuthedRequest, res) => {
         user: req.user!,
         table,
         data: req.body.data,
+        filters: req.body.filters ?? [],
+      });
+      res.json({ data: null, meta });
+      return;
+    }
+
+    if (action === "delete") {
+      const meta = await queryDelete({
+        user: req.user!,
+        table,
         filters: req.body.filters ?? [],
       });
       res.json({ data: null, meta });

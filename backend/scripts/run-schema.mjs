@@ -21,8 +21,15 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = readFileSync(schemaPath, "utf-8");
   const pool = new Pool({ connectionString: url });
+
+  try {
+    await pool.query("ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'staff'");
+  } catch (_e) {
+    // Ignore if app_role type does not exist yet (it will be created by schema.sql)
+  }
+
+  const sql = readFileSync(schemaPath, "utf-8");
   await pool.query(sql);
   await pool.end();
   console.log("Schema applied successfully.");

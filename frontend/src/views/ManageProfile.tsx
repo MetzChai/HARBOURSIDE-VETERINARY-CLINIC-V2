@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/age";
 import { nowPHIso } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
+import { roleLabel, type AppRole } from "@/lib/roles";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 import { useMyOwner } from "@/hooks/useOwnerData";
@@ -20,7 +21,7 @@ type Profile = {
   id: string;
   email: string;
   fullName: string | null;
-  role: "admin" | "owner";
+  role: AppRole;
   authMethod: "google" | "password";
   createdAt: string;
   contact: string | null;
@@ -65,7 +66,7 @@ export default function ManageProfile({ portal }: Props) {
       id: user.id,
       email: user.email,
       fullName: profileRow?.full_name ?? user.user_metadata?.full_name ?? owner?.name ?? null,
-      role: (role ?? (portal === "admin" ? "admin" : "owner")) as "admin" | "owner",
+      role: (role ?? (portal === "admin" ? "staff" : "owner")) as AppRole,
       authMethod: "password",
       createdAt: profileRow?.created_at ?? nowPHIso(),
       contact: owner?.contact ?? null,
@@ -201,7 +202,7 @@ export default function ManageProfile({ portal }: Props) {
     );
   }
 
-  const roleLabel = profile.role === "admin" ? "Admin / Staff" : "Pet Owner";
+  const roleLabelText = profile.role ? roleLabel(profile.role) : "User";
   const authLabel = profile.authMethod === "google" ? "Google (Gmail)" : "Email & Password";
 
   return (
@@ -238,7 +239,7 @@ export default function ManageProfile({ portal }: Props) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Badge>{roleLabel}</Badge>
+            <Badge>{roleLabelText}</Badge>
             <Badge variant="secondary">{authLabel}</Badge>
           </div>
 

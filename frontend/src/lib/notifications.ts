@@ -130,7 +130,7 @@ function dewormingNotifications(dewormings: any[]): NotificationItem[] {
         type: "alert" as const,
         time: formatDate(d.next_due),
         sortKey: days,
-        link: "/admin/dewormings",
+        link: "/admin/care-history",
       };
     });
 }

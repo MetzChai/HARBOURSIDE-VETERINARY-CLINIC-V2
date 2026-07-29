@@ -11,6 +11,7 @@ import { Eye, Printer } from "lucide-react";
 import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords } from "@/hooks/useOwnerData";
 import { formatAge } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
+import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
 
 export default function UserPets() {
   const { data: owner } = useMyOwner();
@@ -140,12 +141,16 @@ export default function UserPets() {
                   <p className="text-sm text-muted-foreground">Owner: {owner?.name}</p>
                 </div>
               </div>
-              <Tabs defaultValue="vaccines">
+              <Tabs defaultValue="timeline">
                 <TabsList className="w-full">
+                  <TabsTrigger value="timeline" className="flex-1 text-xs font-semibold">Care History Timeline</TabsTrigger>
                   <TabsTrigger value="vaccines" className="flex-1 text-xs">Vaccines</TabsTrigger>
                   <TabsTrigger value="checkups" className="flex-1 text-xs">Check-ups</TabsTrigger>
                   <TabsTrigger value="treatments" className="flex-1 text-xs">Treatments</TabsTrigger>
                 </TabsList>
+                <TabsContent value="timeline" className="mt-3">
+                  <PetCareHistoryTimeline petId={viewPet.id} />
+                </TabsContent>
                 <TabsContent value="vaccines" className="mt-3 space-y-1">
                   {vaccinesByPet(viewPet.id).length === 0 && <p className="text-sm text-muted-foreground">No records</p>}
                   {vaccinesByPet(viewPet.id).map((v: any) => (

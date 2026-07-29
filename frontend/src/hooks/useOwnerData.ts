@@ -75,3 +75,19 @@ export function useMyCareRecords() {
     },
   });
 }
+
+export function useMyDewormings() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["my-dewormings", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await db
+        .from("dewormings")
+        .select("*, pets(name)")
+        .order("next_due", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown[];
+    },
+  });
+}

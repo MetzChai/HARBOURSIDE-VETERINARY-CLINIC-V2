@@ -1,6 +1,4 @@
-// Pet age computation helpers
-
-import { formatDatePH, todayPH, toDateOnly } from "./datetime";
+import { formatDatePH, formatDateTimePH, todayPH, toDateOnly } from "./datetime";
 
 export function getAge(dob?: string | null): { years: number; months: number } | null {
   if (!dob) return null;
@@ -33,4 +31,8 @@ export function formatAge(dob?: string | null): string {
 
 export function formatDate(d?: string | null): string {
   return formatDatePH(d);
+}
+
+export function formatDateTime(d?: string | Date | null): string {
+  return formatDateTimePH(d);
 }

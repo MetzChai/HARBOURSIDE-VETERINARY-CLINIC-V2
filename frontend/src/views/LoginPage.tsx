@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
-import { authClient, db } from "@/lib/db-client";
+import { authClient } from "@/lib/db-client";
+import { isClinicUser, type AppRole } from "@/lib/roles";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthShell } from "@/components/AuthShell";
 
@@ -66,14 +67,13 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const { data: roles } = await db.from("user_roles").select("role").eq("user_id", data.user.id);
-    const isAdmin = ((roles as { role: string }[]) ?? []).some((r) => r.role === "admin");
+    const loginRole = (data.role ?? "owner") as AppRole;
     await refreshSession();
-    router.push(isAdmin ? "/admin" : "/user");
+    router.push(isClinicUser(loginRole) ? "/admin" : "/user");
   };
 
   return (
-    <AuthShell title="Harbourside Veterinary" subtitle="Sign in to your account">
+    <AuthShell title="Harbourside Veterinary Clinic" subtitle="Sign in to your account">
       <Card className="border border-border shadow-sm">
           <CardContent className="p-6">
             <form onSubmit={handleLogin} className="space-y-5">

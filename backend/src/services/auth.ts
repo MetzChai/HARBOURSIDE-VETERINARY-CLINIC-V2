@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import type { Response, Request } from "express";
 
-export type AppRole = "admin" | "owner";
+export type AppRole = "admin" | "staff" | "owner";
 
 export interface SessionUser {
   id: string;
@@ -12,6 +12,32 @@ export interface SessionUser {
 }
 
 export const COOKIE_NAME = "harbourside_session";
+
+export function isClinicUser(role: AppRole): boolean {
+  return role === "admin" || role === "staff";
+}
+
+export function isAdmin(role: AppRole): boolean {
+  return role === "admin";
+}
+
+export function canManageStaff(role: AppRole): boolean {
+  return role === "admin";
+}
+
+export function canViewReports(role: AppRole): boolean {
+  return role === "admin";
+}
+
+export function canManageInventoryItems(role: AppRole): boolean {
+  return role === "admin";
+}
+
+export function resolvePrimaryRole(roles: string[]): AppRole {
+  if (roles.includes("admin")) return "admin";
+  if (roles.includes("staff")) return "staff";
+  return "owner";
+}
 
 function getSecret() {
   const secret = process.env.AUTH_SECRET;

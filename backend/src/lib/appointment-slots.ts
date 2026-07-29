@@ -17,18 +17,21 @@ export const APPOINTMENT_SLOTS = [
 
 export const VET_OPTIONS = ["Dr. Rivera", "Dr. Tan"] as const;
 
-export const CARE_TYPES = ["checkup", "treatment", "vaccine"] as const;
+export const CARE_TYPES = ["checkup", "treatment", "vaccine", "vaccination", "deworming"] as const;
 export type CareType = (typeof CARE_TYPES)[number];
 
-export const CARE_TYPE_LABELS: Record<CareType, string> = {
+export const CARE_TYPE_LABELS: Record<string, string> = {
   checkup: "Check-up",
   treatment: "Treatment",
-  vaccine: "Vaccine",
+  vaccine: "Vaccination",
+  vaccination: "Vaccination",
+  deworming: "Deworming",
 };
 
-export function normalizeCareType(value: unknown): CareType {
+export function normalizeCareType(value: unknown): string {
   const v = String(value ?? "checkup").toLowerCase();
-  return (CARE_TYPES as readonly string[]).includes(v) ? (v as CareType) : "checkup";
+  if (v === "vaccine") return "vaccination";
+  return (CARE_TYPES as readonly string[]).includes(v) ? v : "checkup";
 }
 
 export function isSlotBlockingStatus(status?: string | null) {

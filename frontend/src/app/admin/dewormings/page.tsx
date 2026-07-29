@@ -1,3 +1,5 @@
-import Dewormings from "@/views/admin/Dewormings";
-export default function Page() { return <Dewormings />; }
+import { redirect } from "next/navigation";
 
+export default function Page() {
+  redirect("/admin/care-history");
+}

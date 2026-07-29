@@ -30,7 +30,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
         </div>
         <div className="relative z-10 flex flex-col items-center text-center">
           <BrandLogo size="xl" />
-          <h1 className="font-heading text-3xl font-bold text-white mt-8">Harbourside Veterinary</h1>
+          <h1 className="font-heading text-3xl font-bold text-white mt-8">Harbourside Veterinary Clinic</h1>
           <p className="text-white/75 mt-3 max-w-sm text-sm leading-relaxed">
             Compassionate, professional care for your beloved companions
           </p>

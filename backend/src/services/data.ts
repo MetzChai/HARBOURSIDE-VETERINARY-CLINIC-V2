@@ -1,7 +1,9 @@
 import type { SessionUser } from "./auth.js";
+import { isClinicUser, resolvePrimaryRole } from "./auth.js";
 import { getPool, isTableName, parseSelect, quoteIdent, type TableName } from "../lib/db.js";
 import { APPOINTMENT_SLOTS, isSlotBlockingStatus, normalizeCareType } from "../lib/appointment-slots.js";
 import { toDateOnly, nowPHIso } from "../lib/datetime.js";
+import { buildInventoryDeductionPlan, validateInventoryDeductionPlan } from "./inventory-integration.js";
 
 type Filter = { column: string; value: unknown };
 
@@ -12,7 +14,27 @@ type CareSyncResult = { recorded: boolean; skipReason?: string };
 const ADMIN_ONLY_TABLES: TableName[] = [
   "inventory_items",
   "inventory_transactions",
+  "inventory_suppliers",
   "messages",
+];
+
+const STAFF_FORBIDDEN_TABLES: TableName[] = ["user_roles"];
+
+const STAFF_READ_ONLY_TABLES: TableName[] = ["inventory_items"];
+
+const STAFF_NO_DELETE_TABLES: TableName[] = [
+  "owners",
+  "pets",
+  "appointments",
+  "care_records",
+  "vaccinations",
+  "dewormings",
+  "lab_transactions",
+  "lab_transaction_items",
+  "inventory_transactions",
+  "inventory_suppliers",
+  "messages",
+  "profiles",
 ];
 
 async function getOwnerIds(userId: string): Promise<string[]> {
@@ -42,6 +64,22 @@ export async function authorizeTableAccess(
 ) {
   if (user.role === "admin") return;
 
+  if (user.role === "staff") {
+    if (STAFF_FORBIDDEN_TABLES.includes(table)) {
+      throw new Error("Forbidden");
+    }
+    if (STAFF_READ_ONLY_TABLES.includes(table) && action !== "select") {
+      throw new Error("Forbidden");
+    }
+    if (action === "delete" && STAFF_NO_DELETE_TABLES.includes(table)) {
+      throw new Error("Forbidden");
+    }
+    if (table === "profiles" && action !== "select") {
+      throw new Error("Forbidden");
+    }
+    return;
+  }
+
   if (ADMIN_ONLY_TABLES.includes(table)) {
     throw new Error("Forbidden");
   }
@@ -57,7 +95,7 @@ export async function buildOwnerScope(
   user: SessionUser,
   table: TableName
 ): Promise<{ clause: string; params: unknown[] } | null> {
-  if (user.role === "admin") return null;
+  if (isClinicUser(user.role)) return null;
 
   const ownerIds = await getOwnerIds(user.id);
   const petIds = await getPetIds(user.id);
@@ -273,6 +311,72 @@ async function sanitizeOwnerAppointmentInsert(user: SessionUser, row: Record<str
   };
 }
 
+async function ensureInventorySchema(poolOrClient: any) {
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS item_code text`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS description text`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS supplier text`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS reorder_level integer DEFAULT 5`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS purchase_price numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS storage_location text`);
+  await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS manufacture_date date`);
+  await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS transaction_no text`);
+  await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS unit_cost numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS notes text`);
+  await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS staff_name text`);
+  await poolOrClient.query(`CREATE TABLE IF NOT EXISTS inventory_suppliers (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    contact_person text,
+    phone_number text,
+    email text,
+    address text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
+}
+
+async function applyCareInventoryAdjustment(
+  poolOrClient: any,
+  table: string,
+  payload: Record<string, unknown>,
+  recordId?: string,
+  petId?: string | null
+) {
+  if (!["care_records", "vaccinations", "dewormings"].includes(table)) return;
+  await ensureInventorySchema(poolOrClient);
+
+  const { rows: itemRows } = await poolOrClient.query(
+    "SELECT id, name, category, quantity FROM inventory_items"
+  );
+  const inventoryItems = itemRows as Array<{
+    id: string;
+    name: string;
+    category: string;
+    quantity: number;
+  }>;
+  const plan = buildInventoryDeductionPlan(table, payload, inventoryItems);
+  const validation = validateInventoryDeductionPlan(plan.plan, inventoryItems);
+  if (plan.plan.length && validation.error) {
+    throw new Error(validation.error);
+  }
+
+  for (const step of plan.plan) {
+    await poolOrClient.query(
+      `INSERT INTO inventory_transactions (item_id, type, quantity, reason, pet_id, date, transaction_no, unit_cost, notes, staff_name)
+       VALUES ($1, 'out', $2, $3, $4, CURRENT_DATE, $5, 0, $6, $7)`,
+      [
+        step.itemId,
+        step.quantity,
+        step.reason,
+        petId ?? null,
+        `CARE-${recordId?.slice(0, 8) ?? "AUTO"}`,
+        `Care history record ${recordId ?? "pending"}`,
+        null,
+      ]
+    );
+  }
+}
+
 export async function queryInsert(opts: {
   user: SessionUser;
   table: string;
@@ -285,27 +389,83 @@ export async function queryInsert(opts: {
   const pool = getPool();
   const rows = Array.isArray(opts.data) ? opts.data : [opts.data];
   const results: Record<string, unknown>[] = [];
+  const useTransaction = ["care_records", "vaccinations", "dewormings"].includes(table);
+  const client = useTransaction ? await pool.connect() : null;
 
-  for (const row of rows) {
-    let payload = row;
-    if (table === "appointments" && opts.user.role === "owner") {
-      payload = await sanitizeOwnerAppointmentInsert(opts.user, row);
+  try {
+    if (client) await client.query("BEGIN");
+
+    for (const row of rows) {
+      let payload = row;
+      if (table === "appointments" && opts.user.role === "owner") {
+        payload = await sanitizeOwnerAppointmentInsert(opts.user, row);
+      }
+
+      if (table === "inventory_items") {
+        await ensureInventorySchema(client ?? pool);
+        const itemCode = String((payload as Record<string, unknown>).item_code ?? (payload as Record<string, unknown>).itemCode ?? "");
+        payload = {
+          ...(payload as Record<string, unknown>),
+          item_code: itemCode || `INV-${Date.now().toString().slice(-6)}`,
+          quantity: Number((payload as Record<string, unknown>).quantity ?? 0),
+        };
+      }
+
+      if (table === "inventory_suppliers") {
+        await ensureInventorySchema(client ?? pool);
+      }
+
+      const keys = Object.keys(payload).map(quoteIdent);
+      const values = Object.values(payload);
+      const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+      const query = `INSERT INTO ${quoteIdent(table)} (${keys.join(", ")}) VALUES (${placeholders})${
+        opts.returning ? " RETURNING *" : ""
+      }`;
+      const { rows: inserted } = await (client ?? pool).query(query, values);
+      if (opts.returning && inserted.length) results.push(inserted[0] as Record<string, unknown>);
+
+      if (table === "care_records" || table === "vaccinations" || table === "dewormings") {
+        const insertedId = inserted[0]?.id ? String(inserted[0].id) : undefined;
+        const petId = payload.pet_id ? String(payload.pet_id) : payload.petId ? String(payload.petId) : undefined;
+        await applyCareInventoryAdjustment(client ?? pool, table, payload, insertedId, petId);
+      }
     }
 
-    const keys = Object.keys(payload).map(quoteIdent);
-    const values = Object.values(payload);
-    const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
-    const query = `INSERT INTO ${quoteIdent(table)} (${keys.join(", ")}) VALUES (${placeholders})${
-      opts.returning ? " RETURNING *" : ""
-    }`;
-    const { rows: inserted } = await pool.query(query, values);
-    if (opts.returning && inserted.length) results.push(inserted[0] as Record<string, unknown>);
+    if (client) await client.query("COMMIT");
+  } catch (err) {
+    if (client) await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    if (client) client.release();
   }
 
   if (opts.returning) {
     return Array.isArray(opts.data) ? results : results[0] ?? null;
   }
   return null;
+}
+
+export async function queryDelete(opts: {
+  user: SessionUser;
+  table: string;
+  filters: Filter[];
+}) {
+  const table = assertTable(opts.table);
+  await authorizeTableAccess(opts.user, table, "delete");
+
+  const pool = getPool();
+  let paramIdx = 1;
+  const values: unknown[] = [];
+  const whereParts = opts.filters.map((f) => {
+    const part = `${quoteIdent(f.column)} = $${paramIdx}`;
+    paramIdx++;
+    values.push(f.value);
+    return part;
+  });
+
+  const query = `DELETE FROM ${quoteIdent(table)}${whereParts.length ? ` WHERE ${whereParts.join(" AND ")}` : ""}`;
+  await pool.query(query, values);
+  return { deleted: true };
 }
 
 export async function queryUpdate(opts: {
@@ -321,7 +481,7 @@ export async function queryUpdate(opts: {
   const keys = Object.keys(opts.data).map(quoteIdent);
   let values = Object.values(opts.data);
 
-  if (table === "appointments" && opts.user.role === "admin") {
+  if (table === "appointments" && isClinicUser(opts.user.role)) {
     const idFilter = opts.filters.find((f) => f.column === "id");
     const appointmentId = idFilter?.value ? String(idFilter.value) : undefined;
 
@@ -438,56 +598,90 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
     await pool.query(`UPDATE appointments SET pet_id = $1 WHERE id = $2`, [petId, appointmentId]);
   }
 
-  const careType = normalizeCareType(apt.care_type);
-  const reason = apt.reason?.trim() || (careType === "vaccine" ? "Vaccination" : "Routine visit");
+  const rawCareType = normalizeCareType(apt.care_type);
+  const careType = rawCareType === "vaccine" ? "vaccination" : rawCareType;
+  const reason = apt.reason?.trim() || (careType === "vaccination" ? "Vaccination" : careType === "deworming" ? "Deworming" : "Routine visit");
   const autoNote = "Auto-recorded from completed appointment.";
   const recordDate = toDateOnly(apt.date);
 
-  if (careType === "vaccine") {
-    const existing = await pool.query(`SELECT id FROM vaccinations WHERE appointment_id = $1`, [appointmentId]);
-    if (existing.rows.length) return { recorded: true };
-
-    try {
-      await pool.query(
-        `INSERT INTO vaccinations (pet_id, appointment_id, vaccine_type, date_given, vet, notes)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [petId, appointmentId, reason, recordDate, apt.vet, autoNote]
-      );
-      return { recorded: true };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("appointment_id")) throw err;
-
-      const marker = `appointment:${appointmentId}`;
-      const dup = await pool.query(`SELECT id FROM vaccinations WHERE notes LIKE $1`, [`%${marker}%`]);
-      if (dup.rows.length) return { recorded: true };
-
-      await pool.query(
-        `INSERT INTO vaccinations (pet_id, vaccine_type, date_given, vet, notes)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [petId, reason, recordDate, apt.vet, `${autoNote} ${marker}`]
-      );
-      return { recorded: true };
-    }
-  }
+  const existing = await pool.query(`SELECT id FROM care_records WHERE appointment_id = $1`, [appointmentId]);
+  if (existing.rows.length) return { recorded: true };
 
   try {
-    const existing = await pool.query(`SELECT id FROM care_records WHERE appointment_id = $1`, [appointmentId]);
-    if (existing.rows.length) return { recorded: true };
+    const insertResult = await pool.query(
+      `INSERT INTO care_records (
+        pet_id, appointment_id, record_type, date, vet, chief_complaint, diagnosis, treatment,
+        vaccine_used, dewormer_used, outcome, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+      [
+        petId,
+        appointmentId,
+        careType,
+        recordDate,
+        apt.vet,
+        reason,
+        careType === "checkup" ? reason : null,
+        careType === "treatment" ? reason : null,
+        careType === "vaccination" ? reason : null,
+        careType === "deworming" ? reason : null,
+        "Completed",
+        autoNote,
+      ]
+    );
+    const insertedId = insertResult.rows[0]?.id ? String(insertResult.rows[0].id) : undefined;
+    await applyCareInventoryAdjustment(
+      pool,
+      "care_records",
+      {
+        pet_id: petId,
+        record_type: careType,
+        vaccine_used: careType === "vaccination" ? reason : null,
+        dewormer_used: careType === "deworming" ? reason : null,
+        treatment: careType === "treatment" ? reason : null,
+        medication: reason,
+        notes: autoNote,
+      },
+      insertedId,
+      petId
+    );
 
-    if (careType === "treatment") {
+    // Auto-create Clinic Transaction
+    const petRes = await pool.query(`SELECT owner_id FROM pets WHERE id = $1`, [petId]);
+    const ownerId = petRes.rows[0]?.owner_id ?? null;
+
+    const txnExisting = await pool.query(`SELECT id FROM lab_transactions WHERE appointment_id = $1`, [appointmentId]);
+    if (!txnExisting.rows.length) {
+      const txnNumber = `TXN-${Date.now().toString().slice(-6)}`;
+      const serviceName =
+        careType === "vaccination"
+          ? "Vaccination Service"
+          : careType === "deworming"
+          ? "Deworming Service"
+          : careType === "treatment"
+          ? "Medical Treatment Service"
+          : "General Veterinary Check-up";
+
       await pool.query(
-        `INSERT INTO care_records (pet_id, appointment_id, record_type, date, vet, treatment, notes)
-         VALUES ($1, $2, 'treatment', $3, $4, $5, $6)`,
-        [petId, appointmentId, recordDate, apt.vet, reason, autoNote]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO care_records (pet_id, appointment_id, record_type, date, vet, diagnosis, outcome, notes)
-         VALUES ($1, $2, 'checkup', $3, $4, $5, $6, $7)`,
-        [petId, appointmentId, recordDate, apt.vet, reason, "Completed", autoNote]
+        `INSERT INTO lab_transactions (
+          transaction_number, appointment_id, pet_id, owner_id, care_record_id, date,
+          services_rendered, total_amount, payment_method, payment_status, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          txnNumber,
+          appointmentId,
+          petId,
+          ownerId,
+          insertedId,
+          recordDate,
+          serviceName,
+          500.0,
+          "Cash",
+          "Pending",
+          "Auto-generated from completed appointment.",
+        ]
       );
     }
+
     return { recorded: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -497,19 +691,41 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
     const dup = await pool.query(`SELECT id FROM care_records WHERE notes LIKE $1`, [`%${marker}%`]);
     if (dup.rows.length) return { recorded: true };
 
-    if (careType === "treatment") {
-      await pool.query(
-        `INSERT INTO care_records (pet_id, record_type, date, vet, treatment, notes)
-         VALUES ($1, 'treatment', $2, $3, $4, $5)`,
-        [petId, recordDate, apt.vet, reason, `${autoNote} ${marker}`]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO care_records (pet_id, record_type, date, vet, diagnosis, outcome, notes)
-         VALUES ($1, 'checkup', $2, $3, $4, $5, $6)`,
-        [petId, recordDate, apt.vet, reason, "Completed", `${autoNote} ${marker}`]
-      );
-    }
+    const insertResult = await pool.query(
+      `INSERT INTO care_records (
+        pet_id, record_type, date, vet, chief_complaint, diagnosis, treatment,
+        vaccine_used, dewormer_used, outcome, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [
+        petId,
+        careType,
+        recordDate,
+        apt.vet,
+        reason,
+        careType === "checkup" ? reason : null,
+        careType === "treatment" ? reason : null,
+        careType === "vaccination" ? reason : null,
+        careType === "deworming" ? reason : null,
+        "Completed",
+        `${autoNote} ${marker}`,
+      ]
+    );
+    const insertedId = insertResult.rows[0]?.id ? String(insertResult.rows[0].id) : undefined;
+    await applyCareInventoryAdjustment(
+      pool,
+      "care_records",
+      {
+        pet_id: petId,
+        record_type: careType,
+        vaccine_used: careType === "vaccination" ? reason : null,
+        dewormer_used: careType === "deworming" ? reason : null,
+        treatment: careType === "treatment" ? reason : null,
+        medication: reason,
+        notes: `${autoNote} ${marker}`,
+      },
+      insertedId,
+      petId
+    );
     return { recorded: true };
   }
 }
@@ -666,9 +882,11 @@ async function getUserSession(userId: string) {
   const pool = getPool();
   const { rows } = await pool.query(
     `SELECT u.id, u.email, u.full_name,
-            CASE WHEN EXISTS (
-              SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'admin'
-            ) THEN 'admin' ELSE 'owner' END AS role
+            CASE
+              WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'admin') THEN 'admin'
+              WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'staff') THEN 'staff'
+              ELSE 'owner'
+            END AS role
      FROM users u
      WHERE u.id = $1`,
     [userId]
@@ -679,7 +897,7 @@ async function getUserSession(userId: string) {
     id: u.id,
     email: u.email,
     fullName: u.full_name,
-    role: u.role as "admin" | "owner",
+    role: u.role as "admin" | "staff" | "owner",
   };
 }
 
@@ -726,7 +944,7 @@ export async function getUserProfile(userId: string) {
     `SELECT role::text AS role FROM user_roles WHERE user_id = $1`,
     [userId]
   );
-  const role = roleRows.some((r: { role: string }) => r.role === "admin") ? "admin" : "owner";
+  const role = resolvePrimaryRole(roleRows.map((r: { role: string }) => r.role));
 
   let owner: { contact?: string; address?: string; name?: string } | null = null;
   if (role === "owner") {
@@ -761,7 +979,7 @@ export async function getUserProfile(userId: string) {
     id: String(u.id),
     email,
     fullName,
-    role: role as "admin" | "owner",
+    role: role as "admin" | "staff" | "owner",
     authMethod: u.google_id ? ("google" as const) : ("password" as const),
     createdAt: String(u.created_at ?? nowPHIso()),
     contact: owner?.contact ?? null,
@@ -836,7 +1054,7 @@ export async function updateUserProfile(
 }
 
 export type LoginUserResult =
-  | { id: string; email: string; fullName: string; role: "admin" | "owner" }
+  | { id: string; email: string; fullName: string; role: "admin" | "staff" | "owner" }
   | { error: "EMAIL_NOT_VERIFIED"; email: string }
   | { error: "GOOGLE_ONLY"; email: string };
 
@@ -878,7 +1096,7 @@ export async function loginUser(email: string, password: string): Promise<LoginU
     google_id?: string | null;
     email_verified?: boolean;
     must_verify_gmail?: boolean;
-    role: "admin" | "owner" | null;
+    role: "admin" | "staff" | "owner" | null;
   };
 
   if (!user.password_hash) {
@@ -891,7 +1109,9 @@ export async function loginUser(email: string, password: string): Promise<LoginU
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return null;
 
-  const role = rows.some((r) => r.role === "admin") ? "admin" : (user.role ?? "owner");
+  const role = resolvePrimaryRole(
+    rows.map((r) => r.role as string | null | undefined).filter(Boolean) as string[]
+  );
 
   const needsVerification =
     role === "owner" &&
@@ -906,6 +1126,6 @@ export async function loginUser(email: string, password: string): Promise<LoginU
     id: user.id,
     email: user.email,
     fullName: user.full_name,
-    role: role as "admin" | "owner",
+    role: role as "admin" | "staff" | "owner",
   };
 }

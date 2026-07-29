@@ -4,6 +4,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
   getSession,
+  isClinicUser,
 } from "../services/auth.js";
 import {
   loginUser,
@@ -255,7 +256,7 @@ router.get("/google/callback", async (req, res) => {
     const token = await createSessionToken(result.user);
     setSessionCookie(res, token);
 
-    const dest = result.user.role === "admin" ? "/admin" : "/user";
+    const dest = isClinicUser(result.user.role) ? "/admin" : "/user";
     res.redirect(frontendUrl(dest));
   } catch (e) {
     console.error("Google callback error:", e);

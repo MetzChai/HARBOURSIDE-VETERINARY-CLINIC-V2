@@ -12,6 +12,7 @@ export const TABLES = [
   "care_records",
   "inventory_items",
   "inventory_transactions",
+  "inventory_suppliers",
   "lab_transactions",
   "lab_transaction_items",
   "messages",

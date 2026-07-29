@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { authClient, db } from "@/lib/db-client";
+import { resolvePrimaryRole, type AppRole } from "@/lib/roles";
 
-type Role = "admin" | "owner" | null;
+type Role = AppRole | null;
 
 interface AuthUser {
   id: string;
@@ -47,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const roles = ((data as { role: string }[]) ?? []).map((r) => r.role);
-    setRole(roles.includes("admin") ? "admin" : roles.includes("owner") ? "owner" : null);
+    setRole(resolvePrimaryRole(roles));
   }, []);
 
   const loadSession = useCallback(async () => {
