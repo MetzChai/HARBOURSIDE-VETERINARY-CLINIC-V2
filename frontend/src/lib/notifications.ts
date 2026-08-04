@@ -85,28 +85,81 @@ function inventoryNotifications(items: any[]): NotificationItem[] {
   const alerts: NotificationItem[] = [];
 
   for (const item of items) {
-    const qty = item.quantity ?? 0;
+    const qty = Number(item.quantity ?? 0);
+    const reorderLevel = Number(item.reorder_level ?? 5);
+    const expDate = item.expiration_date;
 
-    if (item.expiration_date && isBeforeTodayPH(item.expiration_date)) {
+    // 1. Out of Stock
+    if (qty <= 0) {
       alerts.push({
-        id: `inv-exp-${item.id}`,
-        title: `${item.name} expired`,
-        description: `Expired ${formatDate(item.expiration_date)} — ${qty} ${item.unit ?? "units"} left`,
+        id: `inv-oos-${item.id}`,
+        title: `Out of Stock: ${item.name}`,
+        description: `Current quantity is 0 ${item.unit ?? "units"}. Please reorder immediately.`,
         type: "alert",
-        time: formatDate(item.expiration_date),
-        sortKey: -1000 + (daysFromTodayPH(item.expiration_date) ?? 0),
-        link: "/admin/inventory",
+        time: "Stock Alert",
+        sortKey: -2000,
+        link: `/admin/inventory?item=${item.id}`,
       });
-    } else if (qty <= 5) {
+    }
+    // 2. Low Stock
+    else if (qty <= reorderLevel) {
       alerts.push({
         id: `inv-low-${item.id}`,
-        title: `${item.name}: low stock`,
-        description: `${qty} ${item.unit ?? "units"} remaining`,
+        title: `Low Stock: ${item.name}`,
+        description: `Current stock: ${qty} ${item.unit ?? "units"} (Reorder level: ${reorderLevel})`,
         type: "inventory",
-        time: formatDate(item.expiration_date) !== "—" ? `Expires ${formatDate(item.expiration_date)}` : "Check inventory",
-        sortKey: qty,
-        link: "/admin/inventory",
+        time: "Stock Alert",
+        sortKey: -1000 + qty,
+        link: `/admin/inventory?item=${item.id}`,
       });
+    }
+
+    // 3. Expiration checks (30, 15, 7 days & expired)
+    if (expDate) {
+      const days = daysFromTodayPH(expDate);
+      if (days !== null) {
+        if (isBeforeTodayPH(expDate) || days < 0) {
+          alerts.push({
+            id: `inv-exp-past-${item.id}`,
+            title: `EXPIRED: ${item.name}`,
+            description: `Expired on ${formatDate(expDate)} (${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago). Do not use!`,
+            type: "alert",
+            time: formatDate(expDate),
+            sortKey: -3000,
+            link: `/admin/inventory?item=${item.id}`,
+          });
+        } else if (days <= 7) {
+          alerts.push({
+            id: `inv-exp-7d-${item.id}`,
+            title: `Expiring in ${days} day${days === 1 ? "" : "s"}: ${item.name}`,
+            description: `Expiration date: ${formatDate(expDate)} — ${qty} ${item.unit ?? "units"} remaining`,
+            type: "alert",
+            time: formatDate(expDate),
+            sortKey: -1500 + days,
+            link: `/admin/inventory?item=${item.id}`,
+          });
+        } else if (days <= 15) {
+          alerts.push({
+            id: `inv-exp-15d-${item.id}`,
+            title: `Expiring in 15 days: ${item.name}`,
+            description: `Expires on ${formatDate(expDate)} (${days} days remaining)`,
+            type: "inventory",
+            time: formatDate(expDate),
+            sortKey: -800 + days,
+            link: `/admin/inventory?item=${item.id}`,
+          });
+        } else if (days <= 30) {
+          alerts.push({
+            id: `inv-exp-30d-${item.id}`,
+            title: `Expiring in 30 days: ${item.name}`,
+            description: `Expires on ${formatDate(expDate)} (${days} days remaining)`,
+            type: "inventory",
+            time: formatDate(expDate),
+            sortKey: -500 + days,
+            link: `/admin/inventory?item=${item.id}`,
+          });
+        }
+      }
     }
   }
 

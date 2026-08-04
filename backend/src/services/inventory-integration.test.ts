@@ -10,7 +10,7 @@ test("deducts a matching vaccine from inventory", () => {
   );
 
   assert.equal(result.error, undefined);
-  assert.deepEqual(result.plan, [{ itemId: "1", quantity: 1, reason: "Care History — Vaccination" }]);
+  assert.deepEqual(result.plan, [{ itemId: "1", quantity: 1, reason: "Care History" }]);
 });
 
 test("rejects treatment inventory if stock is insufficient", () => {
@@ -20,10 +20,7 @@ test("rejects treatment inventory if stock is insufficient", () => {
     [{ id: "2", name: "Amoxicillin", category: "medication", quantity: 0 }]
   );
 
-  assert.equal(
-    result.error,
-    'Insufficient inventory for item "Amoxicillin". Available: 0, Required: 1.'
-  );
+  assert.equal(result.error, "Insufficient inventory.");
   assert.deepEqual(result.plan, []);
 });
 
@@ -35,5 +32,5 @@ test("deducts matching dewormer inventory", () => {
   );
 
   assert.equal(result.error, undefined);
-  assert.deepEqual(result.plan, [{ itemId: "3", quantity: 1, reason: "Care History — Deworming" }]);
+  assert.deepEqual(result.plan, [{ itemId: "3", quantity: 1, reason: "Care History" }]);
 });

@@ -12,6 +12,7 @@ datasource db {
 
 enum AppRole {
   admin
+  staff
   owner
 
   @@map("app_role")
@@ -59,19 +60,34 @@ enum ItemCategory {
 }
 
 model User {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email            String   @unique
-  passwordHash     String?  @map("password_hash")
-  fullName         String?  @map("full_name")
-  googleId         String?  @unique @map("google_id")
-  emailVerified    Boolean  @default(false) @map("email_verified")
-  mustVerifyGmail  Boolean  @default(false) @map("must_verify_gmail")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                     String    @unique
+  passwordHash              String?   @map("password_hash")
+  firstName                 String?   @map("first_name")
+  middleName                String?   @map("middle_name")
+  lastName                  String?   @map("last_name")
+  fullName                  String?   @map("full_name")
+  googleId                  String?   @unique @map("google_id")
+  profileImage              String?   @map("profile_image")
+  phone                     String?
+  address                   String?
+  emailVerified             Boolean   @default(false) @map("email_verified")
+  mustVerifyGmail           Boolean   @default(false) @map("must_verify_gmail")
+  accountStatus             String    @default("Active") @map("account_status")
+  failedLoginAttempts       Int       @default(0) @map("failed_login_attempts")
+  accountLockedUntil        DateTime? @map("account_locked_until") @db.Timestamptz(6)
+  lastLogin                 DateTime? @map("last_login") @db.Timestamptz(6)
+  verificationToken         String?   @map("verification_token")
+  verificationTokenExpires  DateTime? @map("verification_token_expires") @db.Timestamptz(6)
+  resetPasswordToken        String?   @map("reset_password_token")
+  resetPasswordTokenExpires DateTime? @map("reset_password_token_expires") @db.Timestamptz(6)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  profile  Profile?
-  roles    UserRole[]
-  owners   Owner[]
+  profile      Profile?
+  roles        UserRole[]
+  owners       Owner[]
+  loginHistory LoginHistory[]
 
   @@map("users")
 }
@@ -99,6 +115,19 @@ model UserRole {
 
   @@unique([userId, role])
   @@map("user_roles")
+}
+
+model LoginHistory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  loginMethod String   @map("login_method")
+  loginTime   DateTime @default(now()) @map("login_time") @db.Timestamptz(6)
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_history")
 }
 
 model Owner {
@@ -223,13 +252,17 @@ model CareRecord {
 
 model InventoryItem {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemCode       String?      @map("item_code")
   name           String
+  description    String?
   brand          String?
   dosage         String?
   category       ItemCategory @default(supply)
   quantity       Int          @default(0)
   unit           String?      @default("unit")
+  reorderLevel   Int          @default(5) @map("reorder_level")
   expirationDate DateTime?    @map("expiration_date") @db.Date
+  status         String?      @default("Available")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -239,16 +272,18 @@ model InventoryItem {
 }
 
 model InventoryTransaction {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  itemId         String   @map("item_id") @db.Uuid
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId         String    @map("item_id") @db.Uuid
   type           TxnType
   quantity       Int
-  batchNo        String?  @map("batch_no")
+  batchNo        String?   @map("batch_no")
   expirationDate DateTime? @map("expiration_date") @db.Date
   reason         String?
-  petId          String?  @map("pet_id") @db.Uuid
-  date           DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  notes          String?
+  recordedBy     String?   @map("recorded_by")
+  petId          String?   @map("pet_id") @db.Uuid
+  date           DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 

@@ -52,7 +52,7 @@ export default function NotificationBell({ notifications, userId, isLoading }: P
       }
     }
     switch (type) {
-      case "vaccine": return "/user/vaccinations";
+      case "vaccine": return "/user/care-history";
       case "appointment": return "/user/appointments";
       default: return "/user";
     }

@@ -42,6 +42,7 @@ import AppointmentDashboardCards from "@/components/AppointmentDashboardCards";
 import AppointmentCalendar from "@/components/AppointmentCalendar";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function Schedule() {
   const { role, user } = useAuth();
@@ -274,32 +275,48 @@ export default function Schedule() {
     invalidate("appointments");
   };
 
+  const router = useRouter();
+
   // Status Change Handler with automatic Care History creation
   const updateAppointmentStatus = async (id: string, status: string) => {
     const targetApt = appointments.find((a) => a.id === id);
     if (!targetApt) return;
 
-    const { error, meta } = await db.from("appointments").update({ status } as any).eq("id", id);
+    if (status === "Completed") {
+      const petId = targetApt.pet_id;
+      const ownerId = targetApt.owner_id || (petId ? petMap.get(petId)?.owner_id : null);
+      const apptType = targetApt.care_type || targetApt.appointment_type || targetApt.type;
+      const reason = targetApt.reason?.trim();
+
+      const missing: string[] = [];
+      if (!petId) missing.push("Pet");
+      if (!ownerId) missing.push("Owner");
+      if (!apptType) missing.push("Appointment Type");
+      if (!reason) missing.push("Reason for Visit");
+
+      if (missing.length > 0) {
+        toast.error(`Cannot complete appointment: ${missing.join(", ")} missing.`);
+        return;
+      }
+    }
+
+    const nextStatus = status === "Approved" ? "Scheduled" : status;
+    const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
 
     if (status === "Completed") {
-      if (meta?.careRecorded) {
-        toast.success("Appointment marked as Completed — Care History record automatically created.");
-        invalidate("care_records");
-        invalidate("pets");
-      } else if (meta?.careSkipReason) {
-        toast.warning(`Marked as Completed, but Care History skipped: ${meta.careSkipReason}`);
-      } else {
-        toast.success("Appointment marked as Completed.");
-      }
+      toast.success("Appointment marked as Completed.");
+      invalidate("appointments");
+      invalidate("care_records");
+      invalidate("pets");
+      router.push(`/admin/care-history?aptId=${id}`);
     } else {
-      toast.success(`Appointment status updated to ${status}.`);
+      toast.success(`Appointment status updated to ${nextStatus}.`);
+      invalidate("appointments");
     }
-
-    invalidate("appointments");
   };
 
   const handlePrintSchedule = () => {
@@ -607,7 +624,7 @@ export default function Schedule() {
                                 variant="outline"
                                 size="sm"
                                 className="h-7 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                onClick={() => updateAppointmentStatus(a.id, "Approved")}
+                                onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
                               >
                                 <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
                               </Button>

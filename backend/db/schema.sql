@@ -6,6 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$ BEGIN
   CREATE TYPE app_role AS ENUM ('admin','staff','owner');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'staff';
 
 DO $$ BEGIN
   CREATE TYPE pet_status AS ENUM ('available','deceased');
@@ -37,10 +38,24 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text UNIQUE NOT NULL,
   password_hash text,
+  first_name text,
+  middle_name text,
+  last_name text,
   full_name text,
   google_id text UNIQUE,
+  profile_image text,
+  phone text,
+  address text,
   email_verified boolean NOT NULL DEFAULT false,
   must_verify_gmail boolean NOT NULL DEFAULT false,
+  account_status text NOT NULL DEFAULT 'Active',
+  failed_login_attempts int NOT NULL DEFAULT 0,
+  account_locked_until timestamptz,
+  last_login timestamptz,
+  verification_token text,
+  verification_token_expires timestamptz,
+  reset_password_token text,
+  reset_password_token_expires timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -48,11 +63,35 @@ CREATE TABLE IF NOT EXISTS users (
 -- Migration for existing databases
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id text UNIQUE;
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_verify_gmail boolean NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status text NOT NULL DEFAULT 'Active';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts int NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_locked_until timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_token text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_token_expires timestamptz;
 
 DROP TRIGGER IF EXISTS trg_users_updated ON users;
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ===== login_history =====
+CREATE TABLE IF NOT EXISTS login_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  login_method text NOT NULL,
+  login_time timestamptz NOT NULL DEFAULT now(),
+  ip_address text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
 -- ===== profiles =====
 CREATE TABLE IF NOT EXISTS profiles (
@@ -230,16 +269,25 @@ CREATE TRIGGER trg_care_updated BEFORE UPDATE ON care_records FOR EACH ROW EXECU
 -- ===== inventory_items =====
 CREATE TABLE IF NOT EXISTS inventory_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_code text,
   name text NOT NULL,
+  description text,
   brand text,
   dosage text,
   category item_category NOT NULL DEFAULT 'supply',
   quantity integer NOT NULL DEFAULT 0,
   unit text DEFAULT 'unit',
+  reorder_level integer NOT NULL DEFAULT 5,
   expiration_date date,
+  status text NOT NULL DEFAULT 'Available',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS item_code text;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS reorder_level integer NOT NULL DEFAULT 5;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Available';
 
 DROP TRIGGER IF EXISTS trg_inv_updated ON inventory_items;
 CREATE TRIGGER trg_inv_updated BEFORE UPDATE ON inventory_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -253,10 +301,16 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
   batch_no text,
   expiration_date date,
   reason text,
+  notes text,
+  recorded_by text,
   pet_id uuid REFERENCES pets(id) ON DELETE SET NULL,
   date date NOT NULL DEFAULT CURRENT_DATE,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS recorded_by text;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS transaction_no text;
 
 -- ===== lab_transactions =====
 CREATE TABLE IF NOT EXISTS lab_transactions (

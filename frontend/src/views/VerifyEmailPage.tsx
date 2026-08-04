@@ -1,29 +1,79 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mail, ArrowLeft } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { AuthShell } from "@/components/AuthShell";
+import { toast } from "sonner";
 
-function GoogleIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </svg>
-  );
-}
-
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
-  const email = searchParams.get("email");
+  const router = useRouter();
+  const token = searchParams.get("token");
+  const emailParam = searchParams.get("email");
+
+  const [verifying, setVerifying] = useState(Boolean(token));
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const [resending, setResending] = useState(false);
+  const [emailInput, setEmailInput] = useState(emailParam || "");
+
+  useEffect(() => {
+    if (!token) return;
+
+    const verify = async () => {
+      try {
+        const res = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+
+        if (res.ok) {
+          setSuccess(true);
+          toast.success("Your email has been verified successfully.");
+        } else {
+          setError(data.error || "Failed to verify email.");
+          if (data.email) setEmailInput(data.email);
+        }
+      } catch {
+        setError("An unexpected error occurred during verification.");
+      } finally {
+        setVerifying(false);
+      }
+    };
+
+    verify();
+  }, [token]);
+
+  const handleResend = async () => {
+    if (!emailInput) {
+      toast.error("Please provide your email address.");
+      return;
+    }
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Please check your Gmail to verify your account.");
+        setError("");
+      } else {
+        toast.error(data.error || "Failed to resend verification email.");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   return (
-    <AuthShell title="Verify your Gmail" subtitle="One more step before you can sign in">
+    <AuthShell title="Email Verification" subtitle="Harbourside Veterinary Clinic">
       <div className="mb-4">
         <Link
           href="/login"
@@ -34,41 +84,90 @@ export default function VerifyEmailPage() {
       </div>
 
       <Card className="border border-border shadow-sm">
-          <CardContent className="p-6 space-y-5">
-            {email && (
-              <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
-                <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="break-all">{email}</span>
-              </div>
-            )}
-
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                Your account was created, but you need to verify ownership of your Gmail address
-                before signing in with email and password.
-              </p>
-              <p>
-                Click below and sign in with the <strong className="text-foreground">same Gmail account</strong> you
-                used to register. Google will confirm your email is verified.
-              </p>
+        <CardContent className="p-6 text-center space-y-6">
+          {verifying && (
+            <div className="py-8 space-y-4">
+              <Loader2 className="w-12 h-12 text-teal-600 animate-spin mx-auto" />
+              <p className="text-sm font-medium text-muted-foreground">Verifying your email address...</p>
             </div>
+          )}
 
-            <Button
-              type="button"
-              className="w-full h-11 text-sm font-semibold"
-              onClick={() => {
-                window.location.href = "/api/auth/google";
-              }}
-            >
-              <GoogleIcon />
-              <span className="ml-2">Verify with Google</span>
-            </Button>
+          {!verifying && success && (
+            <div className="py-6 space-y-4">
+              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                Your email has been verified successfully.
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                You can now log in to your account to manage your pet records and appointments.
+              </p>
+              <Button
+                onClick={() => router.push("/login")}
+                className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+              >
+                Proceed to Login
+              </Button>
+            </div>
+          )}
 
-            <p className="text-xs text-center text-muted-foreground">
-              After verification you can sign in with your email and password, or continue using Google.
-            </p>
-          </CardContent>
-        </Card>
+          {!verifying && !success && token && error && (
+            <div className="py-6 space-y-4">
+              <XCircle className="w-16 h-16 text-destructive mx-auto" />
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Verification Link Expired</h3>
+              <p className="text-sm text-muted-foreground">{error}</p>
+
+              <Button
+                onClick={handleResend}
+                disabled={resending}
+                className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+              >
+                {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Request New Verification Link"}
+              </Button>
+            </div>
+          )}
+
+          {!verifying && !token && (
+            <div className="space-y-4 text-left">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-200 text-sm">
+                <Mail className="h-5 w-5 text-teal-600 shrink-0" />
+                <span>Please check your Gmail inbox for the verification link.</span>
+              </div>
+
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>
+                  A verification email was sent to your registered Gmail address. Please click the verification button inside the email within <strong>24 hours</strong>.
+                </p>
+              </div>
+
+              <div className="pt-2 space-y-3">
+                <Button
+                  onClick={handleResend}
+                  disabled={resending}
+                  variant="outline"
+                  className="w-full h-11 font-medium border-teal-600 text-teal-700 hover:bg-teal-50"
+                >
+                  {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Resend Verification Email"}
+                </Button>
+
+                <Button
+                  onClick={() => router.push("/login")}
+                  className="w-full h-11 bg-slate-800 hover:bg-slate-900 text-white font-medium"
+                >
+                  Return to Login
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </AuthShell>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

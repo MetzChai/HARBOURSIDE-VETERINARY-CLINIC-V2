@@ -1,3 +1,5 @@
-import UserVaccinations from "@/views/user/UserVaccinations";
-export default function Page() { return <UserVaccinations />; }
+import { redirect } from "next/navigation";
+export default function Page() {
+  redirect("/user/care-history");
+}
 

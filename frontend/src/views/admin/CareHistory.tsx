@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -65,6 +66,7 @@ export default function CareHistory() {
     orderBy: "date",
     ascending: false,
   });
+  const { data: inventoryItems = [] } = useRows<any>("inventory_items", { orderBy: "name" });
   const invalidate = useInvalidate();
 
   // Filter & Search states
@@ -107,6 +109,51 @@ export default function CareHistory() {
 
   const ownerMap = new Map(owners.map((o) => [o.id, o.name]));
   const petMap = new Map(pets.map((p) => [p.id, p]));
+
+  const searchParams = useSearchParams();
+  const aptId = searchParams?.get("aptId");
+  const [autoOpenedAptId, setAutoOpenedAptId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aptId || autoOpenedAptId === aptId) return;
+
+    const existingRecord = careRecords.find((r: any) => r.appointment_id === aptId);
+    if (existingRecord) {
+      openEditModal(existingRecord);
+      setAutoOpenedAptId(aptId);
+      return;
+    }
+
+    const targetApt = appointments.find((a: any) => a.id === aptId);
+    if (targetApt) {
+      const rawCare = targetApt.care_type || targetApt.appointment_type || targetApt.type || "checkup";
+      const normCare = String(rawCare).toLowerCase() === "vaccine" ? "vaccination" : String(rawCare).toLowerCase();
+
+      setEditingId(null);
+      setForm({
+        appointment_id: targetApt.id,
+        pet_id: targetApt.pet_id || "",
+        vet: targetApt.vet || VET_OPTIONS[0] || "",
+        date: toInputDate(targetApt.date),
+        record_type: normCare,
+        chief_complaint: targetApt.reason || "",
+        symptoms: "",
+        diagnosis: "",
+        findings: "",
+        treatment: "",
+        medication: "",
+        medication_qty: 1,
+        vaccine_used: "",
+        next_vax_due: "",
+        dewormer_used: "",
+        next_deworming_due: "",
+        outcome: "Completed",
+        notes: targetApt.notes || "",
+      });
+      setShowEditModal(true);
+      setAutoOpenedAptId(aptId);
+    }
+  }, [aptId, appointments, careRecords, autoOpenedAptId]);
 
   // Filter logic
   const filteredRecords = careRecords.filter((record) => {

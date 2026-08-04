@@ -1,5 +1,6 @@
 import { Pool } from "@neondatabase/serverless";
 import { PrismaClient } from "@prisma/client";
+import { withDatabaseTimezone } from "./timezone.js";
 
 export const TABLES = [
   "profiles",
@@ -74,7 +75,7 @@ export function getPool() {
   if (!pool) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
-    pool = new Pool({ connectionString: url });
+    pool = new Pool({ connectionString: withDatabaseTimezone(url) });
   }
   return pool;
 }

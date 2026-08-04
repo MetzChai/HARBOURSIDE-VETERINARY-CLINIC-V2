@@ -1,4 +1,7 @@
 import "dotenv/config";
+import { ensurePhilippineTimezone } from "./lib/timezone.js";
+
+ensurePhilippineTimezone();
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";

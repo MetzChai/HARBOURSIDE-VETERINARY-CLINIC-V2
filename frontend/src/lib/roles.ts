@@ -17,6 +17,18 @@ export function canViewReports(role: AppRole | null | undefined): boolean {
 }
 
 export function canManageInventoryItems(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "staff";
+}
+
+export function canAddEditInventory(role: AppRole | null | undefined): boolean {
+  return role === "admin" || role === "staff";
+}
+
+export function canDeleteInventoryItem(role: AppRole | null | undefined): boolean {
+  return role === "admin";
+}
+
+export function canExportInventoryReports(role: AppRole | null | undefined): boolean {
   return role === "admin";
 }
 

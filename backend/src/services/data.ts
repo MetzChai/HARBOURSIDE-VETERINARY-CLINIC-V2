@@ -12,6 +12,11 @@ const WALK_IN_OWNER_ID = "00000000-0000-0000-0000-0000000000aa";
 type CareSyncResult = { recorded: boolean; skipReason?: string };
 
 const ADMIN_ONLY_TABLES: TableName[] = [
+  "inventory_suppliers",
+  "messages",
+];
+
+const CLINIC_ONLY_TABLES: TableName[] = [
   "inventory_items",
   "inventory_transactions",
   "inventory_suppliers",
@@ -20,7 +25,7 @@ const ADMIN_ONLY_TABLES: TableName[] = [
 
 const STAFF_FORBIDDEN_TABLES: TableName[] = ["user_roles"];
 
-const STAFF_READ_ONLY_TABLES: TableName[] = ["inventory_items"];
+const STAFF_READ_ONLY_TABLES: TableName[] = [];
 
 const STAFF_NO_DELETE_TABLES: TableName[] = [
   "owners",
@@ -31,6 +36,7 @@ const STAFF_NO_DELETE_TABLES: TableName[] = [
   "dewormings",
   "lab_transactions",
   "lab_transaction_items",
+  "inventory_items",
   "inventory_transactions",
   "inventory_suppliers",
   "messages",
@@ -346,13 +352,15 @@ async function applyCareInventoryAdjustment(
   await ensureInventorySchema(poolOrClient);
 
   const { rows: itemRows } = await poolOrClient.query(
-    "SELECT id, name, category, quantity FROM inventory_items"
+    "SELECT id, name, category, quantity, expiration_date, status FROM inventory_items"
   );
   const inventoryItems = itemRows as Array<{
     id: string;
     name: string;
     category: string;
     quantity: number;
+    expiration_date?: string | Date | null;
+    status?: string | null;
   }>;
   const plan = buildInventoryDeductionPlan(table, payload, inventoryItems);
   const validation = validateInventoryDeductionPlan(plan.plan, inventoryItems);
@@ -521,8 +529,14 @@ export async function queryUpdate(opts: {
   await pool.query(query, values);
 
   if (shouldSyncCare && appointmentIdForSync) {
-    const result = await syncCareRecordFromCompletedAppointment(appointmentIdForSync);
-    return { careRecorded: result.recorded, careSkipReason: result.skipReason };
+    try {
+      const result = await syncCareRecordFromCompletedAppointment(appointmentIdForSync);
+      return { careRecorded: result.recorded, careSkipReason: result.skipReason };
+    } catch (err) {
+      console.error("[care-sync] Failed after appointment completed:", err);
+      const message = err instanceof Error ? err.message : "Care record sync failed";
+      return { careRecorded: false, careSkipReason: message };
+    }
   }
 
   return {};
@@ -612,7 +626,9 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
       `INSERT INTO care_records (
         pet_id, appointment_id, record_type, date, vet, chief_complaint, diagnosis, treatment,
         vaccine_used, dewormer_used, outcome, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ON CONFLICT (appointment_id) DO NOTHING
+      RETURNING id`,
       [
         petId,
         appointmentId,
@@ -620,15 +636,19 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
         recordDate,
         apt.vet,
         reason,
-        careType === "checkup" ? reason : null,
-        careType === "treatment" ? reason : null,
-        careType === "vaccination" ? reason : null,
-        careType === "deworming" ? reason : null,
-        "Completed",
-        autoNote,
+        null,
+        null,
+        null,
+        null,
+        null,
+        apt.notes || autoNote,
       ]
     );
-    const insertedId = insertResult.rows[0]?.id ? String(insertResult.rows[0].id) : undefined;
+    let insertedId = insertResult.rows[0]?.id ? String(insertResult.rows[0].id) : undefined;
+    if (!insertedId) {
+      const dup = await pool.query(`SELECT id FROM care_records WHERE appointment_id = $1`, [appointmentId]);
+      if (dup.rows.length) return { recorded: true };
+    }
     await applyCareInventoryAdjustment(
       pool,
       "care_records",
@@ -685,6 +705,9 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
     return { recorded: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("care_records_appointment_id_key") || msg.includes("duplicate key")) {
+      return { recorded: true };
+    }
     if (!msg.includes("appointment_id")) throw err;
 
     const marker = `appointment:${appointmentId}`;
@@ -702,12 +725,12 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
         recordDate,
         apt.vet,
         reason,
-        careType === "checkup" ? reason : null,
-        careType === "treatment" ? reason : null,
-        careType === "vaccination" ? reason : null,
-        careType === "deworming" ? reason : null,
-        "Completed",
-        `${autoNote} ${marker}`,
+        null,
+        null,
+        null,
+        null,
+        null,
+        apt.notes || `${autoNote} ${marker}`,
       ]
     );
     const insertedId = insertResult.rows[0]?.id ? String(insertResult.rows[0].id) : undefined;
@@ -730,68 +753,235 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
   }
 }
 
+export async function recordLoginHistory(userId: string, loginMethod: "Email" | "Google", ipAddress?: string | null) {
+  const pool = getPool();
+  try {
+    await pool.query(
+      `INSERT INTO login_history (user_id, login_method, ip_address) VALUES ($1, $2, $3)`,
+      [userId, loginMethod, ipAddress || null]
+    );
+    await pool.query(`UPDATE users SET last_login = now() WHERE id = $1`, [userId]);
+  } catch (e) {
+    console.error("Failed to record login history:", e);
+  }
+}
+
+export async function getUserLoginHistory(userId: string, limit = 10) {
+  const pool = getPool();
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, login_method, login_time, ip_address FROM login_history WHERE user_id = $1 ORDER BY login_time DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return rows.map((r: { id: string; login_method: string; login_time: Date; ip_address: string | null }) => ({
+      id: r.id,
+      loginMethod: r.login_method,
+      loginTime: r.login_time ? new Date(r.login_time).toISOString() : null,
+      ipAddress: r.ip_address,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function registerUser(opts: {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
   password: string;
-  fullName: string;
-  contact?: string;
+  phone?: string;
+  address?: string;
 }) {
   const pool = getPool();
-  const { hashPassword } = await import("./auth.js");
-  const passwordHash = await hashPassword(opts.password);
+  const { hashPassword, validatePasswordPolicy } = await import("./auth.js");
+  const { sendVerificationEmail } = await import("./email.js");
+  const { isGmailAddress } = await import("./google.js");
+  const crypto = await import("crypto");
+
   const email = opts.email.toLowerCase().trim();
+  if (!isGmailAddress(email)) {
+    throw new Error("Registration requires a valid @gmail.com email address.");
+  }
+
+  const passValidation = validatePasswordPolicy(opts.password);
+  if (!passValidation.valid) {
+    throw new Error(passValidation.error || "Password does not meet complexity requirements.");
+  }
+
+  const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [email]);
+  if (existing.rows.length) {
+    throw new Error("An account with this email address already exists.");
+  }
+
+  const passwordHash = await hashPassword(opts.password);
+  const firstName = opts.firstName.trim();
+  const middleName = opts.middleName?.trim() || null;
+  const lastName = opts.lastName.trim();
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+  
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    let user: { id: string; email: string; full_name: string };
-    try {
-      const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, email_verified, must_verify_gmail)
-         VALUES ($1, $2, $3, false, true)
-         RETURNING id, email, full_name`,
-        [email, passwordHash, opts.fullName]
-      );
-      user = rows[0] as { id: string; email: string; full_name: string };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("must_verify_gmail") && !msg.includes("email_verified")) {
-        throw err;
-      }
-      const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, full_name)
-         VALUES ($1, $2, $3)
-         RETURNING id, email, full_name`,
-        [email, passwordHash, opts.fullName]
-      );
-      user = rows[0] as { id: string; email: string; full_name: string };
-    }
+    const { rows } = await client.query(
+      `INSERT INTO users (
+        email, password_hash, first_name, middle_name, last_name, full_name,
+        phone, address, email_verified, must_verify_gmail, verification_token, verification_token_expires
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, true, $9, $10)
+       RETURNING id, email, full_name`,
+      [email, passwordHash, firstName, middleName, lastName, fullName, opts.phone || null, opts.address || null, token, expiresAt]
+    );
+    const user = rows[0] as { id: string; email: string; full_name: string };
 
     await client.query(`INSERT INTO profiles (id, full_name, email) VALUES ($1, $2, $3)`, [
       user.id,
-      opts.fullName,
+      fullName,
       email,
     ]);
 
     await client.query(`INSERT INTO user_roles (user_id, role) VALUES ($1, 'owner'::app_role)`, [user.id]);
 
-    await client.query(`INSERT INTO owners (user_id, name, email, contact) VALUES ($1, $2, $3, $4)`, [
-      user.id,
-      opts.fullName,
-      email,
-      opts.contact ?? null,
-    ]);
+    try {
+      await client.query(
+        `INSERT INTO owners (user_id, name, first_name, middle_name, last_name, email, contact, address)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [user.id, fullName, firstName, middleName, lastName, email, opts.phone ?? null, opts.address ?? null]
+      );
+    } catch (_err) {
+      await client.query(
+        `INSERT INTO owners (user_id, name, email, contact, address)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [user.id, fullName, email, opts.phone ?? null, opts.address ?? null]
+      );
+    }
 
     await client.query("COMMIT");
 
-    return { id: user.id, email: user.email, fullName: user.full_name, role: "owner" as const };
+    await sendVerificationEmail(email, fullName, token);
+
+    return { id: user.id, email: user.email, fullName, role: "owner" as const, needsVerification: true };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+export async function verifyEmailToken(token: string) {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `SELECT id, email, full_name, verification_token_expires FROM users WHERE verification_token = $1`,
+    [token]
+  );
+  if (!rows.length) {
+    return { success: false, error: "INVALID_TOKEN", message: "Invalid email verification token." };
+  }
+
+  const user = rows[0] as { id: string; email: string; full_name: string; verification_token_expires: Date | null };
+  if (user.verification_token_expires && new Date(user.verification_token_expires) < new Date()) {
+    return { success: false, error: "EXPIRED_TOKEN", email: user.email, message: "Verification link has expired. Please request a new one." };
+  }
+
+  await pool.query(
+    `UPDATE users SET email_verified = true, must_verify_gmail = false, verification_token = NULL, verification_token_expires = NULL WHERE id = $1`,
+    [user.id]
+  );
+
+  return { success: true, message: "Your email has been verified successfully.", email: user.email };
+}
+
+export async function resendEmailVerification(email: string) {
+  const pool = getPool();
+  const crypto = await import("crypto");
+  const { sendVerificationEmail } = await import("./email.js");
+  const normalized = email.toLowerCase().trim();
+
+  const { rows } = await pool.query(
+    `SELECT id, email, full_name, email_verified FROM users WHERE LOWER(email) = $1`,
+    [normalized]
+  );
+  if (!rows.length) {
+    return { success: false, error: "USER_NOT_FOUND", message: "User not found." };
+  }
+  const user = rows[0] as { id: string; email: string; full_name: string; email_verified: boolean };
+  if (user.email_verified) {
+    return { success: true, message: "Email is already verified." };
+  }
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  await pool.query(
+    `UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3`,
+    [token, expiresAt, user.id]
+  );
+
+  await sendVerificationEmail(user.email, user.full_name || user.email, token);
+  return { success: true, message: "Verification email has been resent." };
+}
+
+export async function forgotPasswordRequest(email: string) {
+  const pool = getPool();
+  const crypto = await import("crypto");
+  const { sendPasswordResetEmail } = await import("./email.js");
+  const normalized = email.toLowerCase().trim();
+
+  const { rows } = await pool.query(
+    `SELECT id, email, full_name FROM users WHERE LOWER(email) = $1`,
+    [normalized]
+  );
+
+  if (rows.length) {
+    const user = rows[0] as { id: string; email: string; full_name: string };
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await pool.query(
+      `UPDATE users SET reset_password_token = $1, reset_password_token_expires = $2 WHERE id = $3`,
+      [token, expiresAt, user.id]
+    );
+
+    await sendPasswordResetEmail(user.email, user.full_name || user.email, token);
+  }
+
+  return { success: true, message: "A password reset link has been sent to your Gmail." };
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string) {
+  const pool = getPool();
+  const { hashPassword, validatePasswordPolicy } = await import("./auth.js");
+
+  const passValidation = validatePasswordPolicy(newPassword);
+  if (!passValidation.valid) {
+    throw new Error(passValidation.error || "Password does not meet requirements.");
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, email, reset_password_token_expires FROM users WHERE reset_password_token = $1`,
+    [token]
+  );
+
+  if (!rows.length) {
+    throw new Error("Invalid or expired password reset token.");
+  }
+
+  const user = rows[0] as { id: string; email: string; reset_password_token_expires: Date | null };
+  if (user.reset_password_token_expires && new Date(user.reset_password_token_expires) < new Date()) {
+    throw new Error("Password reset link has expired. Please request a new one.");
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await pool.query(
+    `UPDATE users SET password_hash = $1, reset_password_token = NULL, reset_password_token_expires = NULL, failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2`,
+    [newHash, user.id]
+  );
+
+  return { success: true, message: "Password changed successfully." };
 }
 
 async function setUserVerifiedWithAvatar(userId: string, picture?: string) {
@@ -802,25 +992,30 @@ async function setUserVerifiedWithAvatar(userId: string, picture?: string) {
   );
   if (picture) {
     await pool.query(`UPDATE profiles SET avatar_url = $1 WHERE id = $2`, [picture, userId]);
+    await pool.query(`UPDATE users SET profile_image = $1 WHERE id = $2`, [picture, userId]);
   }
 }
 
-export async function loginOrRegisterGoogleUser(googleUser: {
-  googleId: string;
-  email: string;
-  fullName: string;
-  emailVerified: boolean;
-  picture?: string;
-}): Promise<
+export async function loginOrRegisterGoogleUser(
+  googleUser: {
+    googleId: string;
+    email: string;
+    fullName: string;
+    emailVerified: boolean;
+    picture?: string;
+  },
+  ipAddress?: string
+): Promise<
   | { user: NonNullable<Awaited<ReturnType<typeof getUserSession>>> }
   | { error: "NOT_GMAIL" }
+  | { error: "ACCOUNT_DEACTIVATED" }
 > {
   const pool = getPool();
   const { isGmailAddress } = await import("./google.js");
-  const email = googleUser.email.toLowerCase();
+  const email = googleUser.email.toLowerCase().trim();
 
   const { rows: byGoogle } = await pool.query(
-    `SELECT u.id, u.email, u.full_name
+    `SELECT u.id, u.email, u.full_name, u.account_status
      FROM users u
      WHERE u.google_id = $1`,
     [googleUser.googleId]
@@ -828,12 +1023,16 @@ export async function loginOrRegisterGoogleUser(googleUser: {
 
   if (byGoogle.length) {
     const id = byGoogle[0].id as string;
+    if (byGoogle[0].account_status === "Deactivated") {
+      return { error: "ACCOUNT_DEACTIVATED" as const };
+    }
     await setUserVerifiedWithAvatar(id, googleUser.picture);
+    await recordLoginHistory(id, "Google", ipAddress);
     return { user: await getUserSession(id) };
   }
 
   const { rows: byEmail } = await pool.query(
-    `SELECT u.id, u.email, u.full_name
+    `SELECT u.id, u.email, u.full_name, u.account_status
      FROM users u
      WHERE LOWER(u.email) = $1`,
     [email]
@@ -841,12 +1040,16 @@ export async function loginOrRegisterGoogleUser(googleUser: {
 
   if (byEmail.length) {
     const id = byEmail[0].id as string;
+    if (byEmail[0].account_status === "Deactivated") {
+      return { error: "ACCOUNT_DEACTIVATED" as const };
+    }
     await pool.query(`UPDATE users SET google_id = $1, full_name = COALESCE(full_name, $2) WHERE id = $3`, [
       googleUser.googleId,
       googleUser.fullName,
       id,
     ]);
     await setUserVerifiedWithAvatar(id, googleUser.picture);
+    await recordLoginHistory(id, "Google", ipAddress);
     return { user: await getUserSession(id) };
   }
 
@@ -854,11 +1057,15 @@ export async function loginOrRegisterGoogleUser(googleUser: {
     return { error: "NOT_GMAIL" as const };
   }
 
+  const nameParts = googleUser.fullName.trim().split(" ");
+  const firstName = nameParts[0] || googleUser.fullName;
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
   const { rows: users } = await pool.query(
-    `INSERT INTO users (email, password_hash, full_name, google_id, email_verified)
-     VALUES ($1, NULL, $2, $3, true)
+    `INSERT INTO users (email, password_hash, first_name, last_name, full_name, google_id, profile_image, email_verified, account_status)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, true, 'Active')
      RETURNING id, email, full_name`,
-    [email, googleUser.fullName, googleUser.googleId]
+    [email, firstName, lastName, googleUser.fullName, googleUser.googleId, googleUser.picture || null]
   );
   const user = users[0] as { id: string; email: string; full_name: string };
 
@@ -868,12 +1075,27 @@ export async function loginOrRegisterGoogleUser(googleUser: {
     email,
     googleUser.picture ?? null,
   ]);
+  // Default role assigned MUST be Pet Owner (owner)
   await pool.query(`INSERT INTO user_roles (user_id, role) VALUES ($1, 'owner'::app_role)`, [user.id]);
-  await pool.query(`INSERT INTO owners (user_id, name, email) VALUES ($1, $2, $3)`, [
-    user.id,
-    googleUser.fullName,
-    email,
-  ]);
+  try {
+    await pool.query(`INSERT INTO owners (user_id, name, first_name, last_name, email, image_url) VALUES ($1, $2, $3, $4, $5, $6)`, [
+      user.id,
+      googleUser.fullName,
+      firstName,
+      lastName,
+      email,
+      googleUser.picture || null,
+    ]);
+  } catch (_err) {
+    await pool.query(`INSERT INTO owners (user_id, name, email, image_url) VALUES ($1, $2, $3, $4)`, [
+      user.id,
+      googleUser.fullName,
+      email,
+      googleUser.picture || null,
+    ]);
+  }
+
+  await recordLoginHistory(user.id, "Google", ipAddress);
 
   return { user: await getUserSession(user.id) };
 }
@@ -917,7 +1139,7 @@ async function fetchUserRow(userId: string) {
   const pool = getPool();
   try {
     const { rows } = await pool.query(
-      `SELECT id, email, full_name, google_id, email_verified, created_at FROM users WHERE id = $1`,
+      `SELECT id, email, first_name, middle_name, last_name, full_name, google_id, profile_image, phone, address, account_status, email_verified, last_login, created_at FROM users WHERE id = $1`,
       [userId]
     );
     return (rows[0] as Record<string, unknown>) ?? null;
@@ -967,32 +1189,45 @@ export async function getUserProfile(userId: string) {
     }
   }
 
-  let avatarUrl: string | null = null;
-  try {
-    const { rows: profileRows } = await pool.query(`SELECT avatar_url FROM profiles WHERE id = $1`, [userId]);
-    avatarUrl = (profileRows[0]?.avatar_url as string | null) ?? null;
-  } catch {
-    avatarUrl = null;
+  let avatarUrl: string | null = (u.profile_image as string | null) ?? null;
+  if (!avatarUrl) {
+    try {
+      const { rows: profileRows } = await pool.query(`SELECT avatar_url FROM profiles WHERE id = $1`, [userId]);
+      avatarUrl = (profileRows[0]?.avatar_url as string | null) ?? null;
+    } catch {
+      avatarUrl = null;
+    }
   }
+
+  const loginHistory = await getUserLoginHistory(userId, 5);
 
   return {
     id: String(u.id),
     email,
+    firstName: (u.first_name as string | null) ?? null,
+    middleName: (u.middle_name as string | null) ?? null,
+    lastName: (u.last_name as string | null) ?? null,
     fullName,
     role: role as "admin" | "staff" | "owner",
     authMethod: u.google_id ? ("google" as const) : ("password" as const),
     createdAt: String(u.created_at ?? nowPHIso()),
-    contact: owner?.contact ?? null,
-    address: owner?.address ?? null,
+    lastLogin: u.last_login ? new Date(u.last_login as Date).toISOString() : null,
+    accountStatus: String(u.account_status ?? "Active"),
+    contact: (u.phone as string | null) ?? owner?.contact ?? null,
+    address: (u.address as string | null) ?? owner?.address ?? null,
     ownerName: owner?.name ?? null,
     avatarUrl,
     emailVerified: Boolean(u.email_verified ?? true),
+    loginHistory,
   };
 }
 
 export async function updateUserProfile(
   userId: string,
   opts: {
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
     fullName?: string;
     contact?: string;
     address?: string;
@@ -1002,10 +1237,12 @@ export async function updateUserProfile(
   }
 ) {
   const pool = getPool();
-  const { verifyPassword, hashPassword } = await import("./auth.js");
+  const { verifyPassword, hashPassword, validatePasswordPolicy } = await import("./auth.js");
 
   if (opts.newPassword) {
-    if (opts.newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
+    const passVal = validatePasswordPolicy(opts.newPassword);
+    if (!passVal.valid) throw new Error(passVal.error || "Password does not meet requirements.");
+
     const { rows } = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
     const hash = rows[0]?.password_hash as string | null;
     if (!hash) throw new Error("Google accounts cannot set a password here. Use Google sign-in.");
@@ -1016,16 +1253,37 @@ export async function updateUserProfile(
     await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, userId]);
   }
 
-  if (opts.fullName?.trim()) {
-    await pool.query(`UPDATE users SET full_name = $1 WHERE id = $2`, [opts.fullName.trim(), userId]);
-    await pool.query(`UPDATE profiles SET full_name = $1 WHERE id = $2`, [opts.fullName.trim(), userId]);
+  const computedName = opts.fullName || [opts.firstName, opts.middleName, opts.lastName].filter(Boolean).join(" ");
+  if (computedName.trim()) {
+    await pool.query(`UPDATE users SET full_name = $1, first_name = $2, middle_name = $3, last_name = $4 WHERE id = $5`, [
+      computedName.trim(),
+      opts.firstName?.trim() || null,
+      opts.middleName?.trim() || null,
+      opts.lastName?.trim() || null,
+      userId,
+    ]);
+    await pool.query(`UPDATE profiles SET full_name = $1 WHERE id = $2`, [computedName.trim(), userId]);
     const { rows: roles } = await pool.query(
       `SELECT role FROM user_roles WHERE user_id = $1 AND role = 'owner'`,
       [userId]
     );
     if (roles.length) {
-      await pool.query(`UPDATE owners SET name = $1 WHERE user_id = $2`, [opts.fullName.trim(), userId]);
+      await pool.query(`UPDATE owners SET name = $1, first_name = $2, middle_name = $3, last_name = $4 WHERE user_id = $5`, [
+        computedName.trim(),
+        opts.firstName?.trim() || null,
+        opts.middleName?.trim() || null,
+        opts.lastName?.trim() || null,
+        userId,
+      ]);
     }
+  }
+
+  if (opts.contact !== undefined || opts.address !== undefined) {
+    await pool.query(`UPDATE users SET phone = COALESCE($1, phone), address = COALESCE($2, address) WHERE id = $3`, [
+      opts.contact || null,
+      opts.address || null,
+      userId,
+    ]);
   }
 
   const { rows: roleCheck } = await pool.query(
@@ -1048,6 +1306,7 @@ export async function updateUserProfile(
       await ensureUserProfile(userId, u.email, u.full_name);
     }
     await pool.query(`UPDATE profiles SET avatar_url = $1 WHERE id = $2`, [opts.avatarUrl || null, userId]);
+    await pool.query(`UPDATE users SET profile_image = $1 WHERE id = $2`, [opts.avatarUrl || null, userId]);
   }
 
   return getUserProfile(userId);
@@ -1056,38 +1315,36 @@ export async function updateUserProfile(
 export type LoginUserResult =
   | { id: string; email: string; fullName: string; role: "admin" | "staff" | "owner" }
   | { error: "EMAIL_NOT_VERIFIED"; email: string }
-  | { error: "GOOGLE_ONLY"; email: string };
+  | { error: "GOOGLE_ONLY"; email: string }
+  | { error: "ACCOUNT_DEACTIVATED"; message: string }
+  | { error: "ACCOUNT_LOCKED"; message: string }
+  | { error: "INVALID_CREDENTIALS"; message: string };
 
-export async function loginUser(email: string, password: string): Promise<LoginUserResult | null> {
+export async function loginUser(
+  email: string,
+  password: string,
+  ipAddress?: string
+): Promise<LoginUserResult> {
   const pool = getPool();
-  const { verifyPassword } = await import("./auth.js");
+  const { verifyPassword, MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MS } = await import("./auth.js");
   const normalized = email.toLowerCase().trim();
 
-  let rows: Record<string, unknown>[];
-  try {
-    const result = await pool.query(
-      `SELECT u.id, u.email, u.full_name, u.password_hash, u.google_id,
-              u.email_verified, u.must_verify_gmail, ur.role
-       FROM users u
-       LEFT JOIN user_roles ur ON ur.user_id = u.id
-       WHERE LOWER(u.email) = $1
-       ORDER BY ur.role ASC`,
-      [normalized]
-    );
-    rows = result.rows as Record<string, unknown>[];
-  } catch {
-    const result = await pool.query(
-      `SELECT u.id, u.email, u.full_name, u.password_hash, u.google_id, ur.role
-       FROM users u
-       LEFT JOIN user_roles ur ON ur.user_id = u.id
-       WHERE LOWER(u.email) = $1
-       ORDER BY ur.role ASC`,
-      [normalized]
-    );
-    rows = result.rows as Record<string, unknown>[];
+  const result = await pool.query(
+    `SELECT u.id, u.email, u.full_name, u.password_hash, u.google_id,
+            u.email_verified, u.account_status, u.failed_login_attempts,
+            u.account_locked_until, ur.role
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     WHERE LOWER(u.email) = $1
+     ORDER BY ur.role ASC`,
+    [normalized]
+  );
+  const rows = result.rows as Record<string, unknown>[];
+
+  if (!rows.length) {
+    return { error: "INVALID_CREDENTIALS", message: "Invalid email or password." };
   }
 
-  if (!rows.length) return null;
   const user = rows[0] as {
     id: string;
     email: string;
@@ -1095,19 +1352,48 @@ export async function loginUser(email: string, password: string): Promise<LoginU
     password_hash: string | null;
     google_id?: string | null;
     email_verified?: boolean;
-    must_verify_gmail?: boolean;
+    account_status?: string;
+    failed_login_attempts?: number;
+    account_locked_until?: Date | null;
     role: "admin" | "staff" | "owner" | null;
   };
+
+  if (user.account_status === "Deactivated") {
+    return { error: "ACCOUNT_DEACTIVATED", message: "Account is deactivated. Please contact an administrator." };
+  }
+
+  if (user.account_locked_until) {
+    const lockedUntil = new Date(user.account_locked_until);
+    if (lockedUntil > new Date()) {
+      return { error: "ACCOUNT_LOCKED", message: "Too many failed login attempts. Please try again later." };
+    } else {
+      // Lock duration expired, reset attempts
+      await pool.query(`UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1`, [user.id]);
+    }
+  }
 
   if (!user.password_hash) {
     if (user.google_id) {
       return { error: "GOOGLE_ONLY", email: user.email };
     }
-    return null;
+    return { error: "INVALID_CREDENTIALS", message: "Invalid email or password." };
   }
 
   const valid = await verifyPassword(password, user.password_hash);
-  if (!valid) return null;
+  if (!valid) {
+    const newAttempts = (user.failed_login_attempts || 0) + 1;
+    if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+      const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+      await pool.query(
+        `UPDATE users SET failed_login_attempts = $1, account_locked_until = $2 WHERE id = $3`,
+        [newAttempts, lockUntil, user.id]
+      );
+      return { error: "ACCOUNT_LOCKED", message: "Too many failed login attempts. Please try again later." };
+    } else {
+      await pool.query(`UPDATE users SET failed_login_attempts = $1 WHERE id = $2`, [newAttempts, user.id]);
+      return { error: "INVALID_CREDENTIALS", message: "Invalid email or password." };
+    }
+  }
 
   const role = resolvePrimaryRole(
     rows.map((r) => r.role as string | null | undefined).filter(Boolean) as string[]
@@ -1115,12 +1401,19 @@ export async function loginUser(email: string, password: string): Promise<LoginU
 
   const needsVerification =
     role === "owner" &&
-    user.must_verify_gmail === true &&
     user.email_verified !== true;
 
   if (needsVerification) {
     return { error: "EMAIL_NOT_VERIFIED", email: user.email };
   }
+
+  // Clear failed attempts and lockout on success
+  await pool.query(
+    `UPDATE users SET failed_login_attempts = 0, account_locked_until = NULL WHERE id = $1`,
+    [user.id]
+  );
+
+  await recordLoginHistory(user.id, "Email", ipAddress);
 
   return {
     id: user.id,
@@ -1128,4 +1421,119 @@ export async function loginUser(email: string, password: string): Promise<LoginU
     fullName: user.full_name,
     role: role as "admin" | "staff" | "owner",
   };
+}
+
+export async function createStaffAccount(adminUserId: string, opts: {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone?: string;
+}) {
+  const pool = getPool();
+  const { hashPassword, validatePasswordPolicy } = await import("./auth.js");
+  const email = opts.email.toLowerCase().trim();
+
+  const passVal = validatePasswordPolicy(opts.password);
+  if (!passVal.valid) throw new Error(passVal.error || "Password does not meet requirements.");
+
+  const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [email]);
+  if (existing.rows.length) {
+    throw new Error("An account with this email address already exists.");
+  }
+
+  const passwordHash = await hashPassword(opts.password);
+  const firstName = opts.firstName.trim();
+  const middleName = opts.middleName?.trim() || null;
+  const lastName = opts.lastName.trim();
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO users (email, password_hash, first_name, middle_name, last_name, full_name, phone, email_verified, account_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'Active')
+       RETURNING id, email, full_name`,
+      [email, passwordHash, firstName, middleName, lastName, fullName, opts.phone || null]
+    );
+    const user = rows[0] as { id: string; email: string; full_name: string };
+
+    await client.query(`INSERT INTO profiles (id, full_name, email) VALUES ($1, $2, $3)`, [
+      user.id,
+      fullName,
+      email,
+    ]);
+
+    await client.query(`INSERT INTO user_roles (user_id, role) VALUES ($1, 'staff'::app_role)`, [user.id]);
+
+    await client.query("COMMIT");
+    return { id: user.id, email: user.email, fullName, role: "staff" as const };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function toggleAccountStatus(adminUserId: string, targetUserId: string, status: "Active" | "Deactivated") {
+  const pool = getPool();
+  if (adminUserId === targetUserId && status === "Deactivated") {
+    throw new Error("Administrators cannot deactivate their own account.");
+  }
+  await pool.query(`UPDATE users SET account_status = $1 WHERE id = $2`, [status, targetUserId]);
+  return { success: true, status };
+}
+
+export async function adminResetPassword(adminUserId: string, targetUserId: string, newPassword: string) {
+  const pool = getPool();
+  const { hashPassword, validatePasswordPolicy } = await import("./auth.js");
+
+  const passVal = validatePasswordPolicy(newPassword);
+  if (!passVal.valid) throw new Error(passVal.error || "Password does not meet complexity requirements.");
+
+  // Check if target is another administrator
+  const { rows: roles } = await pool.query(
+    `SELECT role FROM user_roles WHERE user_id = $1 AND role = 'admin'`,
+    [targetUserId]
+  );
+  if (roles.length && adminUserId !== targetUserId) {
+    throw new Error("Administrator cannot change another Administrator's password directly.");
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await pool.query(
+    `UPDATE users SET password_hash = $1, failed_login_attempts = 0, account_locked_until = NULL WHERE id = $2`,
+    [passwordHash, targetUserId]
+  );
+
+  return { success: true, message: "Password reset successfully." };
+}
+
+export async function getAllUsersForAdmin() {
+  const pool = getPool();
+  const { rows } = await pool.query(
+    `SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.full_name,
+            u.phone, u.account_status, u.email_verified, u.created_at, u.last_login,
+            ur.role::text AS role
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     ORDER BY u.created_at DESC`
+  );
+  return rows.map((r: Record<string, unknown>) => ({
+    id: String(r.id),
+    email: String(r.email),
+    firstName: (r.first_name as string | null) ?? null,
+    middleName: (r.middle_name as string | null) ?? null,
+    lastName: (r.last_name as string | null) ?? null,
+    fullName: String(r.full_name || r.email),
+    phone: (r.phone as string | null) ?? null,
+    role: (r.role as "admin" | "staff" | "owner") ?? "owner",
+    accountStatus: String(r.account_status || "Active"),
+    emailVerified: Boolean(r.email_verified),
+    createdAt: r.created_at ? new Date(r.created_at as Date).toISOString() : null,
+    lastLogin: r.last_login ? new Date(r.last_login as Date).toISOString() : null,
+  }));
 }

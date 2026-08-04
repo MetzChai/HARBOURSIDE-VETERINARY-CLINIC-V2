@@ -24,7 +24,6 @@ const mainItems = [
   { title: "My Pets", url: "/user/pets", icon: PawPrint },
   { title: "Care History", url: "/user/care-history", icon: Heart },
   { title: "Appointments", url: "/user/appointments", icon: Calendar },
-  { title: "Vaccinations", url: "/user/vaccinations", icon: Syringe },
   { title: "Transactions", url: "/user/transactions", icon: DollarSign },
   { title: "Messages", url: "/user/messages", icon: MessageSquare },
 ];

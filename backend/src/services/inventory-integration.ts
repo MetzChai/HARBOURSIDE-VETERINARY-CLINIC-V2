@@ -3,6 +3,10 @@ export type InventoryItemLike = {
   name: string;
   category: string;
   quantity: number;
+  reorder_level?: number | null;
+  expiration_date?: string | Date | null;
+  expirationDate?: string | Date | null;
+  status?: string | null;
 };
 
 export type InventoryDeductionPlan = Array<{
@@ -24,7 +28,22 @@ function normalizeCategory(value: unknown) {
 
 function isCategoryMatch(itemCategory: string, expectedCategories: string[]) {
   const normalized = normalizeCategory(itemCategory);
-  return expectedCategories.includes(normalized);
+  return expectedCategories.some(
+    (exp) => normalized.includes(exp) || exp.includes(normalized)
+  );
+}
+
+export function isExpired(item: InventoryItemLike): boolean {
+  if (item.status === "Expired" || item.status === "EXPIRED") return true;
+  const exp = item.expiration_date ?? item.expirationDate;
+  if (!exp) return false;
+  const expDate = new Date(exp);
+  if (isNaN(expDate.getTime())) return false;
+  
+  // Set to midnight comparison
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return expDate.getTime() < today.getTime();
 }
 
 function findMatches(items: InventoryItemLike[], categoryAliases: string[], label: string) {
@@ -45,6 +64,28 @@ export function buildInventoryDeductionPlan(
 ): { plan: InventoryDeductionPlan; error?: string } {
   const plan: InventoryDeductionPlan = [];
   const reqQty = Math.max(1, Number(row.medication_qty ?? 1));
+
+  // Check for direct explicit item ID passed in row payload
+  const directItemId = String(
+    row.inventory_item_id ??
+    row.item_id ??
+    row.vaccine_item_id ??
+    row.dewormer_item_id ??
+    row.medication_item_id ??
+    ""
+  ).trim();
+
+  if (directItemId) {
+    const directItem = items.find((candidate) => candidate.id === directItemId);
+    if (directItem) {
+      plan.push({
+        itemId: directItem.id,
+        quantity: reqQty,
+        reason: `Care History — ${String(row.record_type ?? table).toUpperCase()}`,
+      });
+      return validateInventoryDeductionPlan(plan, items);
+    }
+  }
 
   if (table === "vaccinations") {
     const label = String(row.vaccine_type ?? row.product ?? row.name ?? "").trim();
@@ -93,7 +134,11 @@ export function buildInventoryDeductionPlan(
       const matches = findMatches(items, ["medication", "medicine", "supply"], labelSources);
       for (const item of matches) {
         if (!plan.some((candidate) => candidate.itemId === item.id)) {
-          plan.push({ itemId: item.id, quantity: reqQty, reason: `Care History — ${recordType === "treatment" ? "Treatment" : "Check-up"}` });
+          plan.push({
+            itemId: item.id,
+            quantity: reqQty,
+            reason: `Care History — ${recordType === "treatment" ? "Treatment" : "Check-up"}`,
+          });
         }
       }
       return validateInventoryDeductionPlan(plan, items);
@@ -110,10 +155,16 @@ export function validateInventoryDeductionPlan(
   for (const step of plan) {
     const item = items.find((candidate) => candidate.id === step.itemId);
     if (!item) continue;
+    if (isExpired(item)) {
+      return {
+        plan: [],
+        error: `Insufficient inventory. Selected item "${item.name}" is expired.`,
+      };
+    }
     if (Number(item.quantity ?? 0) < step.quantity) {
       return {
         plan: [],
-        error: `Insufficient inventory for item "${item.name}". Available: ${item.quantity ?? 0}, Required: ${step.quantity}.`,
+        error: `Insufficient inventory. Selected item "${item.name}" has insufficient stock (Available: ${item.quantity ?? 0}, Required: ${step.quantity}).`,
       };
     }
   }

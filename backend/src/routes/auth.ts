@@ -13,13 +13,15 @@ import {
   loginOrRegisterGoogleUser,
   getUserProfile,
   updateUserProfile,
+  verifyEmailToken,
+  resendEmailVerification,
+  forgotPasswordRequest,
+  resetPasswordWithToken,
 } from "../services/data.js";
-import { getPool } from "../lib/db.js";
 import {
   createOAuthState,
   exchangeGoogleCode,
   getGoogleRedirectUri,
-  isGmailAddress,
   verifyGoogleIdToken,
   verifyOAuthState,
 } from "../services/google.js";
@@ -32,6 +34,12 @@ function frontendUrl(path: string) {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+function getIpAddress(req: any): string {
+  const forwarded = req.headers?.["x-forwarded-for"];
+  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  return req.ip || req.socket?.remoteAddress || "127.0.0.1";
+}
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
@@ -40,28 +48,44 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const result = await loginUser(email, password);
-    if (!result) {
-      res.status(401).json({ error: "Invalid email or password." });
-      return;
-    }
-    if ("error" in result && result.error === "EMAIL_NOT_VERIFIED") {
-      res.status(403).json({
-        error: "Please verify your Gmail address with Google before signing in.",
-        code: "EMAIL_NOT_VERIFIED",
-        email: result.email,
-      });
-      return;
-    }
-    if ("error" in result && result.error === "GOOGLE_ONLY") {
-      res.status(403).json({
-        error: "This account uses Google sign-in. Click Continue with Google below.",
-        code: "GOOGLE_ONLY",
-        email: result.email,
-      });
-      return;
-    }
+    const ipAddress = getIpAddress(req);
+    const result = await loginUser(email, password, ipAddress);
+
     if ("error" in result) {
+      if (result.error === "ACCOUNT_LOCKED") {
+        res.status(429).json({
+          error: "Too many failed login attempts. Please try again later.",
+          code: "ACCOUNT_LOCKED",
+        });
+        return;
+      }
+
+      if (result.error === "ACCOUNT_DEACTIVATED") {
+        res.status(403).json({
+          error: result.message || "Account is deactivated. Please contact an administrator.",
+          code: "ACCOUNT_DEACTIVATED",
+        });
+        return;
+      }
+
+      if (result.error === "EMAIL_NOT_VERIFIED") {
+        res.status(403).json({
+          error: "Please check your Gmail to verify your account before logging in.",
+          code: "EMAIL_NOT_VERIFIED",
+          email: result.email,
+        });
+        return;
+      }
+
+      if (result.error === "GOOGLE_ONLY") {
+        res.status(403).json({
+          error: "This account uses Google sign-in. Click Continue with Google below.",
+          code: "GOOGLE_ONLY",
+          email: result.email,
+        });
+        return;
+      }
+
       res.status(401).json({ error: "Invalid email or password." });
       return;
     }
@@ -74,6 +98,7 @@ router.post("/login", async (req, res) => {
     res.json({
       user: { id: user.id, email: user.email, user_metadata: { full_name: user.fullName } },
       role: user.role,
+      message: "Welcome back!",
     });
   } catch (e) {
     console.error("login error:", e);
@@ -107,40 +132,109 @@ router.get("/session", async (req, res) => {
 
 router.post("/signup", async (req, res) => {
   try {
-    const email = String(req.body?.email ?? "").toLowerCase().trim();
-    const password = req.body?.password;
-    const fullName = req.body?.fullName;
-    const contact = req.body?.contact;
+    const { firstName, middleName, lastName, email, password, confirmPassword, phone, address } = req.body ?? {};
 
-    if (!email || !password || !fullName) {
-      res.status(400).json({ error: "All required fields must be filled." });
-      return;
-    }
-    if (!isGmailAddress(email)) {
-      res.status(400).json({ error: "Pet owner registration requires a @gmail.com address." });
-      return;
-    }
-    if (password.length < 6) {
-      res.status(400).json({ error: "Password must be at least 6 characters." });
+    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+      res.status(400).json({ error: "First Name, Last Name, Email, Password, and Confirm Password are required." });
       return;
     }
 
-    const pool = getPool();
-    const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [email]);
-    if (existing.rows.length) {
-      res.status(409).json({ error: "An account with this email already exists." });
+    if (password !== confirmPassword) {
+      res.status(400).json({ error: "Password and Confirm Password do not match." });
       return;
     }
 
-    const user = await registerUser({ email, password, fullName, contact });
+    const user = await registerUser({
+      firstName,
+      middleName,
+      lastName,
+      email,
+      password,
+      phone,
+      address,
+    });
+
     res.json({
       needsVerification: true,
-      user: { id: user.id, email: user.email, user_metadata: { full_name: user.fullName } },
-      message: "Account created. Verify your Gmail with Google before signing in.",
+      user: { id: user.id, email: user.email, fullName: user.fullName },
+      message: "Please check your Gmail to verify your account.",
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("signup error:", e);
-    res.status(500).json({ error: "Signup failed. Please try again or use Continue with Google." });
+    const msg = e instanceof Error ? e.message : "Registration failed.";
+    res.status(400).json({ error: msg });
+  }
+});
+
+router.all("/verify-email", async (req, res) => {
+  try {
+    const token = String(req.query?.token || req.body?.token || "");
+    if (!token) {
+      res.status(400).json({ error: "Verification token is required." });
+      return;
+    }
+
+    const result = await verifyEmailToken(token);
+    if (!result.success) {
+      res.status(400).json({ error: result.message, code: result.error, email: result.email });
+      return;
+    }
+
+    res.json({ message: "Your email has been verified successfully.", email: result.email });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to verify email." });
+  }
+});
+
+router.post("/resend-verification", async (req, res) => {
+  try {
+    const { email } = req.body ?? {};
+    if (!email) {
+      res.status(400).json({ error: "Email is required." });
+      return;
+    }
+    const result = await resendEmailVerification(String(email));
+    if (!result.success) {
+      res.status(400).json({ error: result.message });
+      return;
+    }
+    res.json({ message: "Please check your Gmail to verify your account." });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to resend verification email." });
+  }
+});
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body ?? {};
+    if (!email) {
+      res.status(400).json({ error: "Email address is required." });
+      return;
+    }
+
+    const result = await forgotPasswordRequest(String(email));
+    res.json({ message: result.message });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to process request." });
+  }
+});
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword, confirmPassword } = req.body ?? {};
+    if (!token || !newPassword) {
+      res.status(400).json({ error: "Token and new password are required." });
+      return;
+    }
+    if (confirmPassword && newPassword !== confirmPassword) {
+      res.status(400).json({ error: "New password and Confirm password must match." });
+      return;
+    }
+
+    const result = await resetPasswordWithToken(String(token), String(newPassword));
+    res.json({ message: result.message });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to reset password." });
   }
 });
 
@@ -148,15 +242,21 @@ function profileFromSession(session: NonNullable<Awaited<ReturnType<typeof getSe
   return {
     id: session.id,
     email: session.email,
+    firstName: null,
+    middleName: null,
+    lastName: null,
     fullName: session.fullName,
     role: session.role,
     authMethod: "password" as const,
     createdAt: nowPHIso(),
+    lastLogin: null,
+    accountStatus: "Active",
     contact: null,
     address: null,
     ownerName: session.fullName,
     avatarUrl: null,
     emailVerified: true,
+    loginHistory: [],
   };
 }
 
@@ -184,6 +284,9 @@ router.patch("/profile", async (req, res) => {
   try {
     const body = req.body ?? {};
     const profile = await updateUserProfile(session.id, {
+      firstName: body.firstName,
+      middleName: body.middleName,
+      lastName: body.lastName,
       fullName: body.fullName,
       contact: body.contact,
       address: body.address,
@@ -247,8 +350,13 @@ router.get("/google/callback", async (req, res) => {
       return;
     }
 
-    const result = await loginOrRegisterGoogleUser(googleUser);
+    const ipAddress = getIpAddress(req);
+    const result = await loginOrRegisterGoogleUser(googleUser, ipAddress);
     if ("error" in result) {
+      if (result.error === "ACCOUNT_DEACTIVATED") {
+        res.redirect(frontendUrl("/login?error=account_deactivated"));
+        return;
+      }
       res.redirect(frontendUrl("/login?error=google_gmail_only"));
       return;
     }

@@ -6,28 +6,40 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, User, Mail, Shield, Calendar, Phone, MapPin, KeyRound } from "lucide-react";
+import { Loader2, User, Mail, Shield, Calendar, Phone, MapPin, KeyRound, Clock, History } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
 import { toast } from "sonner";
-import { formatDate } from "@/lib/age";
-import { nowPHIso } from "@/lib/datetime";
+import { formatDatePH, formatDateTimePH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { roleLabel, type AppRole } from "@/lib/roles";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 import { useMyOwner } from "@/hooks/useOwnerData";
 
+type LoginHistoryItem = {
+  id: string;
+  loginMethod: string;
+  loginTime: string | null;
+  ipAddress: string | null;
+};
+
 type Profile = {
   id: string;
   email: string;
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
   fullName: string | null;
   role: AppRole;
   authMethod: "google" | "password";
   createdAt: string;
+  lastLogin?: string | null;
   contact: string | null;
   address: string | null;
   ownerName: string | null;
   avatarUrl: string | null;
+  emailVerified: boolean;
+  loginHistory?: LoginHistoryItem[];
 };
 
 interface Props {
@@ -52,6 +64,9 @@ export default function ManageProfile({ portal }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
     fullName: "",
     contact: "",
     address: "",
@@ -68,11 +83,14 @@ export default function ManageProfile({ portal }: Props) {
       fullName: profileRow?.full_name ?? user.user_metadata?.full_name ?? owner?.name ?? null,
       role: (role ?? (portal === "admin" ? "staff" : "owner")) as AppRole,
       authMethod: "password",
-      createdAt: profileRow?.created_at ?? nowPHIso(),
+      createdAt: profileRow?.created_at ?? new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
       contact: owner?.contact ?? null,
       address: null,
       ownerName: owner?.name ?? null,
       avatarUrl: null,
+      emailVerified: true,
+      loginHistory: [],
     };
   }, [user, role, portal, profileRow, owner]);
 
@@ -86,6 +104,9 @@ export default function ManageProfile({ portal }: Props) {
         const p = data.profile as Profile;
         setProfile(p);
         setForm({
+          firstName: p.firstName ?? "",
+          middleName: p.middleName ?? "",
+          lastName: p.lastName ?? "",
           fullName: p.fullName ?? "",
           contact: p.contact ?? "",
           address: p.address ?? "",
@@ -98,6 +119,9 @@ export default function ManageProfile({ portal }: Props) {
         if (fallback) {
           setProfile(fallback);
           setForm({
+            firstName: "",
+            middleName: "",
+            lastName: "",
             fullName: fallback.fullName ?? "",
             contact: fallback.contact ?? "",
             address: fallback.address ?? "",
@@ -112,6 +136,9 @@ export default function ManageProfile({ portal }: Props) {
       if (fallback) {
         setProfile(fallback);
         setForm({
+          firstName: "",
+          middleName: "",
+          lastName: "",
           fullName: fallback.fullName ?? "",
           contact: fallback.contact ?? "",
           address: fallback.address ?? "",
@@ -132,7 +159,7 @@ export default function ManageProfile({ portal }: Props) {
 
   const save = async () => {
     if (form.newPassword && form.newPassword !== form.confirmPassword) {
-      toast.error("New passwords do not match");
+      toast.error("New passwords do not match.");
       return;
     }
     setSaving(true);
@@ -141,9 +168,12 @@ export default function ManageProfile({ portal }: Props) {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        fullName: form.fullName,
-        contact: portal === "owner" ? form.contact : undefined,
-        address: portal === "owner" ? form.address : undefined,
+        firstName: form.firstName || undefined,
+        middleName: form.middleName || undefined,
+        lastName: form.lastName || undefined,
+        fullName: form.fullName || undefined,
+        contact: form.contact || undefined,
+        address: form.address || undefined,
         currentPassword: form.currentPassword || undefined,
         newPassword: form.newPassword || undefined,
       }),
@@ -151,14 +181,14 @@ export default function ManageProfile({ portal }: Props) {
     setSaving(false);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Failed to update profile");
+      toast.error(err.error ?? "Failed to update profile.");
       return;
     }
     const data = await res.json();
     setProfile(data.profile);
     setForm((f) => ({ ...f, currentPassword: "", newPassword: "", confirmPassword: "" }));
     await refreshSession();
-    toast.success("Profile updated");
+    toast.success("Profile updated successfully.");
   };
 
   const saveAvatarUrl = async (url: string) => {
@@ -171,16 +201,16 @@ export default function ManageProfile({ portal }: Props) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        toast.error(err.error ?? "Failed to save profile picture");
-        throw new Error(err.error ?? "Failed to save profile picture");
+        toast.error(err.error ?? "Failed to save profile picture.");
+        throw new Error(err.error ?? "Failed to save profile picture.");
       }
       const data = await res.json();
       setProfile(data.profile);
       await queryClient.invalidateQueries({ queryKey: ["my-profile"] });
-      toast.success(url ? "Profile picture updated" : "Profile picture removed");
+      toast.success(url ? "Profile picture updated successfully." : "Profile picture removed.");
     } catch (err) {
       if (err instanceof Error && err.message.includes("Failed to save")) throw err;
-      toast.error("Failed to save profile picture");
+      toast.error("Failed to save profile picture.");
       throw err;
     }
   };
@@ -188,7 +218,7 @@ export default function ManageProfile({ portal }: Props) {
   if (authLoading || loading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
       </div>
     );
   }
@@ -206,10 +236,10 @@ export default function ManageProfile({ portal }: Props) {
   const authLabel = profile.authMethod === "google" ? "Google (Gmail)" : "Email & Password";
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
+    <div className="space-y-6 animate-fade-in max-w-3xl">
       <div>
-        <h1 className="font-heading text-2xl font-bold">My Profile</h1>
-        <p className="text-muted-foreground text-sm">Your personal account information</p>
+        <h1 className="font-heading text-2xl font-bold text-slate-800 dark:text-slate-100">My Profile</h1>
+        <p className="text-muted-foreground text-sm">Manage your personal account details and security settings</p>
       </div>
 
       <Card className="border-0 shadow-sm">
@@ -225,8 +255,8 @@ export default function ManageProfile({ portal }: Props) {
             showUploadToast={false}
             onImageUploaded={saveAvatarUrl}
           />
-          <p className="text-sm text-muted-foreground">
-            Click Upload or hover over the photo to change it. Google sign-in can also set your picture automatically.
+          <p className="text-xs text-muted-foreground">
+            Click Upload to upload a custom avatar or use your Google Profile picture.
           </p>
         </CardContent>
       </Card>
@@ -234,13 +264,14 @@ export default function ManageProfile({ portal }: Props) {
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-base flex items-center gap-2">
-            <User className="h-4 w-4 text-primary" /> Personal Information
+            <User className="h-4 w-4 text-teal-600" /> Account Overview
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Badge>{roleLabelText}</Badge>
+            <Badge className="bg-teal-600 text-white">{roleLabelText}</Badge>
             <Badge variant="secondary">{authLabel}</Badge>
+            {profile.emailVerified && <Badge variant="outline" className="border-emerald-500 text-emerald-600">Verified Gmail</Badge>}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -249,28 +280,24 @@ export default function ManageProfile({ portal }: Props) {
               <p className="text-sm font-medium">{profile.fullName || "—"}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Email</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Email Address</p>
               <p className="text-sm font-medium break-all">{profile.email}</p>
             </div>
-            {portal === "owner" && (
-              <>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> Contact</p>
-                  <p className="text-sm font-medium">{profile.contact || "—"}</p>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Address</p>
-                  <p className="text-sm font-medium">{profile.address || "—"}</p>
-                </div>
-              </>
-            )}
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Member since</p>
-              <p className="text-sm font-medium">{formatDate(profile.createdAt)}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> Contact Number</p>
+              <p className="text-sm font-medium">{profile.contact || "—"}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Account type</p>
-              <p className="text-sm font-medium">{portal === "admin" ? "Admin Panel" : "Pet Owner Portal"}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Address</p>
+              <p className="text-sm font-medium">{profile.address || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Account Created</p>
+              <p className="text-sm font-medium">{formatDatePH(profile.createdAt)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3 text-teal-600" /> Last Login (Asia/Manila)</p>
+              <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">{formatDateTimePH(profile.lastLogin)}</p>
             </div>
           </div>
         </CardContent>
@@ -278,44 +305,74 @@ export default function ManageProfile({ portal }: Props) {
 
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="font-heading text-base">Edit Information</CardTitle>
+          <CardTitle className="font-heading text-base">Edit Profile Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name</Label>
+              <Input
+                id="firstName"
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                placeholder="Juan"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="middleName">Middle Name</Label>
+              <Input
+                id="middleName"
+                value={form.middleName}
+                onChange={(e) => setForm({ ...form, middleName: e.target.value })}
+                placeholder="Santos"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name</Label>
+              <Input
+                id="lastName"
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                placeholder="Dela Cruz"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="contact">Contact Number</Label>
+              <Input
+                id="contact"
+                value={form.contact}
+                onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                placeholder="09171234567"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="emailReadonly">Email Address</Label>
+              <Input
+                id="emailReadonly"
+                value={profile.email}
+                disabled
+                className="bg-slate-100 dark:bg-slate-800 text-muted-foreground cursor-not-allowed"
+              />
+              <p className="text-[11px] text-muted-foreground">Email address cannot be changed directly. Email verification is required for email changes.</p>
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="fullName">Full Name</Label>
+            <Label htmlFor="address">Address</Label>
             <Input
-              id="fullName"
-              value={form.fullName}
-              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+              id="address"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="Full address"
             />
           </div>
 
-          {portal === "owner" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="contact">Contact Number</Label>
-                <Input
-                  id="contact"
-                  value={form.contact}
-                  onChange={(e) => setForm({ ...form, contact: e.target.value })}
-                  placeholder="+63 900 000 0000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  placeholder="Your address"
-                />
-              </div>
-            </>
-          )}
-
           {profile.authMethod === "password" && (
-            <div className="pt-2 border-t space-y-4">
-              <p className="text-sm font-medium flex items-center gap-1"><KeyRound className="h-4 w-4" /> Change Password</p>
+            <div className="pt-3 border-t space-y-4">
+              <p className="text-sm font-semibold flex items-center gap-1.5"><KeyRound className="h-4 w-4 text-teal-600" /> Change Password</p>
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">Current Password</Label>
                 <Input
@@ -323,6 +380,7 @@ export default function ManageProfile({ portal }: Props) {
                   type="password"
                   value={form.currentPassword}
                   onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
+                  placeholder="Enter current password"
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -333,15 +391,17 @@ export default function ManageProfile({ portal }: Props) {
                     type="password"
                     value={form.newPassword}
                     onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+                    placeholder="Minimum 8 characters"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
                   <Input
                     id="confirmPassword"
                     type="password"
                     value={form.confirmPassword}
                     onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                    placeholder="Re-enter new password"
                   />
                 </div>
               </div>
@@ -350,13 +410,46 @@ export default function ManageProfile({ portal }: Props) {
 
           {profile.authMethod === "google" && (
             <p className="text-xs text-muted-foreground border-t pt-3">
-              You sign in with Google. Password is managed through your Google account.
+              This account uses Google OAuth sign-in. Your password is managed securely via Google.
             </p>
           )}
 
-          <Button onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+          <Button onClick={save} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Save Changes"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Recent Login History */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="font-heading text-base flex items-center gap-2">
+            <History className="h-4 w-4 text-teal-600" /> Recent Login History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {profile.loginHistory && profile.loginHistory.length > 0 ? (
+            <div className="divide-y divide-border rounded-lg border border-border overflow-hidden text-xs">
+              <div className="bg-muted/50 p-2.5 grid grid-cols-3 font-semibold text-muted-foreground">
+                <span>Date & Time (Asia/Manila)</span>
+                <span>Login Method</span>
+                <span>IP Address</span>
+              </div>
+              {profile.loginHistory.map((item) => (
+                <div key={item.id} className="p-2.5 grid grid-cols-3 items-center">
+                  <span className="font-medium">{formatDateTimePH(item.loginTime)}</span>
+                  <span>
+                    <Badge variant={item.loginMethod === "Google" ? "secondary" : "outline"} className="text-[10px]">
+                      {item.loginMethod}
+                    </Badge>
+                  </span>
+                  <span className="text-muted-foreground font-mono">{item.ipAddress || "Local"}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No recent login activity recorded.</p>
+          )}
         </CardContent>
       </Card>
     </div>

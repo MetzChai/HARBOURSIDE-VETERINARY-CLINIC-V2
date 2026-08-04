@@ -56,6 +56,7 @@ import { type NotificationItem } from "@/lib/notifications";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/db-client";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 const COLORS = ["#1B3A5C", "#1FA8A8", "#2E7D32", "#C62828", "#8E24AA", "#F57C00"];
 
@@ -137,22 +138,16 @@ export default function AdminDashboard() {
   const petName = (id?: string) => pets.find((p) => p.id === id)?.name ?? "—";
   const ownerName = (id?: string) => owners.find((o) => o.id === id)?.name ?? "—";
 
-  // Summary Stat Cards Data
+  // Summary Stat Cards Data (8 simplified cards)
   const summaryCards = [
     { label: "Total Pets", value: pets.length, icon: PawPrint, color: "text-primary bg-primary/10" },
     { label: "Pet Owners", value: owners.length, icon: Users, color: "text-teal-600 bg-teal-50" },
     { label: "Today's Appointments", value: todayAppointments.length, icon: Calendar, color: "text-blue-600 bg-blue-50" },
-    { label: "Pending Requests", value: pendingRequests.length, icon: Clock, color: "text-amber-600 bg-amber-50" },
-    { label: "Completed Today", value: completedToday.length, icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Pending Appointments", value: pendingRequests.length, icon: Clock, color: "text-amber-600 bg-amber-50" },
     { label: "Active Care Records", value: care.length, icon: FileText, color: "text-indigo-600 bg-indigo-50" },
     { label: "Healthy Pets", value: healthyPetsCount, icon: HeartPulse, color: "text-emerald-600 bg-emerald-50" },
-    { label: "Under Treatment", value: underTreatmentCount, icon: Activity, color: "text-amber-600 bg-amber-50" },
-    { label: "Recovered Pets", value: recoveredPetsCount, icon: TrendingUp, color: "text-blue-600 bg-blue-50" },
-    { label: "Deceased Pets", value: deceasedPetsCount, icon: Skull, color: "text-rose-600 bg-rose-50" },
     { label: "Low Stock Items", value: lowStockItems.length, icon: AlertTriangle, color: "text-rose-600 bg-rose-50" },
-    { label: "Expiring Items", value: expiringItems.length, icon: ShieldAlert, color: "text-amber-600 bg-amber-50" },
     { label: "Total Inventory Items", value: inventory.length, icon: Package, color: "text-purple-600 bg-purple-50" },
-    ...(isAdmin ? [{ label: "Clinic Staff", value: staffAccounts.length, icon: UserPlus, color: "text-sky-600 bg-sky-50" }] : []),
   ];
 
   // Analytics Chart Data
@@ -236,15 +231,47 @@ export default function AdminDashboard() {
     [appointments]
   );
 
+  const router = useRouter();
+
   const updateAppointmentStatus = async (id: string, status: string) => {
-    const { error } = await db.from("appointments").update({ status } as any).eq("id", id);
+    const targetApt = appointments.find((a) => a.id === id);
+    if (!targetApt) return;
+
+    if (status === "Completed") {
+      const petId = targetApt.pet_id;
+      const pet = pets.find((p) => p.id === petId);
+      const ownerId = targetApt.owner_id || pet?.owner_id;
+      const apptType = targetApt.care_type || targetApt.appointment_type || targetApt.type;
+      const reason = targetApt.reason?.trim();
+
+      const missing: string[] = [];
+      if (!petId) missing.push("Pet");
+      if (!ownerId) missing.push("Owner");
+      if (!apptType) missing.push("Appointment Type");
+      if (!reason) missing.push("Reason for Visit");
+
+      if (missing.length > 0) {
+        toast.error(`Cannot complete appointment: ${missing.join(", ")} missing.`);
+        return;
+      }
+    }
+
+    const nextStatus = status === "Approved" ? "Scheduled" : status;
+    const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
-    toast.success(`Appointment marked as ${status}`);
-    invalidate("appointments");
-    if (status === "Completed") invalidate("care_records");
+
+    if (status === "Completed") {
+      toast.success("Appointment marked as Completed.");
+      invalidate("appointments");
+      invalidate("care_records");
+      router.push(`/admin/care-history?aptId=${id}`);
+    } else {
+      toast.success(`Appointment status updated to ${nextStatus}.`);
+      invalidate("appointments");
+    }
   };
 
   return (
@@ -263,11 +290,6 @@ export default function AdminDashboard() {
               <PawPrint className="h-4 w-4 mr-1.5 text-primary" /> Register Pet
             </Button>
           </Link>
-          <Link href="/admin/owners">
-            <Button size="sm" variant="outline" className="h-9">
-              <UserPlus className="h-4 w-4 mr-1.5 text-teal-600" /> Register Owner
-            </Button>
-          </Link>
           <Link href="/admin/schedule">
             <Button size="sm" variant="outline" className="h-9">
               <PlusCircle className="h-4 w-4 mr-1.5 text-blue-600" /> Book Appointment
@@ -278,25 +300,20 @@ export default function AdminDashboard() {
               <FileText className="h-4 w-4 mr-1.5 text-indigo-600" /> Record Care History
             </Button>
           </Link>
-          <Link href="/admin/inventory">
-            <Button size="sm" variant="outline" className="h-9">
-              <PackagePlus className="h-4 w-4 mr-1.5 text-purple-600" /> Add Inventory Item
-            </Button>
-          </Link>
         </div>
       </div>
 
-      {/* Summary Statistic Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+      {/* Summary Statistic Cards (8 Cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
           <Card key={card.label} className="border-0 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-            <CardContent className="p-3 flex items-center gap-3">
-              <div className={`p-2 rounded-lg shrink-0 ${card.color}`}>
+            <CardContent className="p-4 flex items-center gap-3.5">
+              <div className={`p-2.5 rounded-xl shrink-0 ${card.color}`}>
                 <card.icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl font-bold font-heading truncate">{card.value}</p>
-                <p className="text-[11px] text-muted-foreground truncate">{card.label}</p>
+                <p className="text-2xl font-bold font-heading truncate tracking-tight">{card.value}</p>
+                <p className="text-xs text-muted-foreground truncate">{card.label}</p>
               </div>
             </CardContent>
           </Card>
@@ -482,7 +499,7 @@ export default function AdminDashboard() {
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs bg-blue-50 text-blue-700"
-                          onClick={() => updateAppointmentStatus(a.id, "Approved")}
+                          onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
                         >
                           Approve
                         </Button>

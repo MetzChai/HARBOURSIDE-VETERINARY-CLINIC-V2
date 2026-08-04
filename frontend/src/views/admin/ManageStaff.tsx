@@ -8,74 +8,65 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Loader2, UserCog, Users } from "lucide-react";
+import { Plus, Trash2, Loader2, UserCog, Users, ShieldAlert, KeyRound, CheckCircle, Ban, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { formatDate } from "@/lib/age";
+import { formatDatePH, formatDateTimePH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { canManageStaff, roleLabel, type AppRole } from "@/lib/roles";
 
-type ClinicAccount = {
+type UserRecord = {
   id: string;
   email: string;
-  fullName: string | null;
-  role: AppRole;
-  createdAt: string;
-};
-
-type OwnerAccount = {
-  id: string;
-  email: string;
-  fullName: string | null;
-  role: "owner";
-  authMethod: "google" | "password";
-  createdAt: string;
-};
-
-type StaffForm = {
-  email: string;
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
   fullName: string;
-  password: string;
+  phone: string | null;
+  role: AppRole;
+  accountStatus: "Active" | "Deactivated";
+  emailVerified: boolean;
+  createdAt: string | null;
+  lastLogin: string | null;
 };
-
-const emptyForm: StaffForm = { email: "", fullName: "", password: "" };
 
 export default function ManageStaff() {
   const router = useRouter();
   const { user, role, loading: authLoading } = useAuth();
-  const [staffAccounts, setStaffAccounts] = useState<ClinicAccount[]>([]);
-  const [ownerAccounts, setOwnerAccounts] = useState<OwnerAccount[]>([]);
-  const [loadingStaff, setLoadingStaff] = useState(true);
-  const [loadingOwners, setLoadingOwners] = useState(true);
+  const [usersList, setUsersList] = useState<UserRecord[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<StaffForm>(emptyForm);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
 
-  const loadStaff = useCallback(async () => {
-    setLoadingStaff(true);
-    const res = await fetch("/api/staff", { credentials: "include" });
-    if (!res.ok) {
-      toast.error("Failed to load staff accounts");
-      setLoadingStaff(false);
-      return;
-    }
-    const data = await res.json();
-    setStaffAccounts(data.accounts ?? []);
-    setLoadingStaff(false);
-  }, []);
+  const [staffForm, setStaffForm] = useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
 
-  const loadOwners = useCallback(async () => {
-    setLoadingOwners(true);
-    const res = await fetch("/api/staff/owners", { credentials: "include" });
-    if (!res.ok) {
-      toast.error("Failed to load pet owner accounts");
-      setLoadingOwners(false);
-      return;
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("/api/staff/users", { credentials: "include" });
+      if (!res.ok) {
+        toast.error("Failed to load user accounts");
+        setLoadingUsers(false);
+        return;
+      }
+      const data = await res.json();
+      setUsersList(data.users ?? []);
+    } catch {
+      toast.error("Error connecting to server.");
+    } finally {
+      setLoadingUsers(false);
     }
-    const data = await res.json();
-    setOwnerAccounts(data.accounts ?? []);
-    setLoadingOwners(false);
   }, []);
 
   useEffect(() => {
@@ -86,281 +77,374 @@ export default function ManageStaff() {
 
   useEffect(() => {
     if (!authLoading && canManageStaff(role)) {
-      loadStaff();
-      loadOwners();
+      loadUsers();
     }
-  }, [authLoading, role, loadStaff, loadOwners]);
+  }, [authLoading, role, loadUsers]);
 
-  const openCreate = () => {
-    setForm(emptyForm);
-    setOpen(true);
-  };
-
-  const save = async () => {
-    if (!form.fullName.trim() || !form.email.trim()) {
-      toast.error("Name and email are required");
+  const handleCreateStaff = async () => {
+    const { firstName, lastName, email, password } = staffForm;
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      toast.error("First Name, Last Name, and Email are required.");
       return;
     }
-    if (!form.password || form.password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (!password || password.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
       return;
     }
+
     setSaving(true);
-    const res = await fetch("/api/staff", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: form.email.trim(),
-        fullName: form.fullName.trim(),
-        password: form.password,
-      }),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Failed to create staff account");
-      return;
+    try {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(staffForm),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to create staff account.");
+        setSaving(false);
+        return;
+      }
+
+      toast.success("Staff account created successfully.");
+      setCreateOpen(false);
+      setStaffForm({ firstName: "", middleName: "", lastName: "", email: "", phone: "", password: "" });
+      loadUsers();
+    } catch {
+      toast.error("Failed to create staff account.");
+    } finally {
+      setSaving(false);
     }
-    toast.success("Staff account created");
-    setOpen(false);
-    loadStaff();
   };
 
-  const removeStaff = async (account: ClinicAccount) => {
-    if (account.role === "admin") {
-      toast.error("Admin accounts cannot be deleted from this page");
+  const handleToggleStatus = async (account: UserRecord) => {
+    if (account.id === user?.id) {
+      toast.error("Administrators cannot deactivate their own account.");
       return;
     }
-    if (!confirm(`Delete staff account for ${account.fullName ?? account.email}? This cannot be undone.`)) {
+
+    const newStatus = account.accountStatus === "Active" ? "Deactivated" : "Active";
+    const actionLabel = newStatus === "Deactivated" ? "deactivate" : "reactivate";
+
+    if (!confirm(`Are you sure you want to ${actionLabel} account for ${account.fullName}?`)) {
       return;
     }
-    const res = await fetch(`/api/staff/${account.id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Failed to delete account");
-      return;
+
+    try {
+      const res = await fetch(`/api/staff/users/${account.id}/status`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || `Failed to ${actionLabel} account.`);
+        return;
+      }
+      toast.success(`Account ${account.fullName} is now ${newStatus}.`);
+      loadUsers();
+    } catch {
+      toast.error(`Failed to ${actionLabel} account.`);
     }
-    toast.success("Staff account deleted");
-    loadStaff();
   };
 
-  const removeOwner = async (account: OwnerAccount) => {
-    if (
-      !confirm(
-        `Delete pet owner account for ${account.fullName ?? account.email}? Their pets and records will also be removed. This cannot be undone.`
-      )
-    ) {
+  const handleAdminResetPassword = async () => {
+    if (!selectedUser || !resetPasswordValue) {
+      toast.error("Please enter a new password.");
       return;
     }
-    const res = await fetch(`/api/staff/owners/${account.id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Failed to delete account");
+
+    if (selectedUser.role === "admin" && selectedUser.id !== user?.id) {
+      toast.error("Administrator cannot change another Administrator's password directly.");
       return;
     }
-    toast.success("Pet owner account deleted");
-    loadOwners();
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/staff/users/${selectedUser.id}/reset-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: resetPasswordValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to reset password.");
+        setSaving(false);
+        return;
+      }
+
+      toast.success(`Password for ${selectedUser.fullName} reset successfully.`);
+      setResetOpen(false);
+      setSelectedUser(null);
+      setResetPasswordValue("");
+    } catch {
+      toast.error("Failed to reset password.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (authLoading || !canManageStaff(role)) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
       </div>
     );
   }
 
+  const staffUsers = usersList.filter((u) => u.role === "admin" || u.role === "staff");
+  const petOwners = usersList.filter((u) => u.role === "owner");
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-          <UserCog className="h-6 w-6 text-primary" /> Account Management
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Manage clinic staff sign-in accounts and registered pet owner accounts
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+            <UserCog className="h-6 w-6 text-teal-600" /> Admin Account Management
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Create staff accounts, toggle account statuses (Active/Deactivated), and reset passwords.
+          </p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold">
+          <Plus className="h-4 w-4 mr-1.5" /> Create Staff Account
+        </Button>
       </div>
 
-      <Tabs defaultValue="staff">
+      <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="staff">Clinic Staff</TabsTrigger>
-          <TabsTrigger value="owners">Pet Owners</TabsTrigger>
+          <TabsTrigger value="all">All Accounts ({usersList.length})</TabsTrigger>
+          <TabsTrigger value="staff">Clinic Staff ({staffUsers.length})</TabsTrigger>
+          <TabsTrigger value="owners">Pet Owners ({petOwners.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="staff" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-1" /> New Staff
-            </Button>
-          </div>
+        {["all", "staff", "owners"].map((tabKey) => {
+          const displayedUsers =
+            tabKey === "staff" ? staffUsers : tabKey === "owners" ? petOwners : usersList;
 
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-0">
-              {loadingStaff ? (
-                <div className="p-8 flex justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {staffAccounts.map((account) => (
-                      <TableRow key={account.id}>
-                        <TableCell className="font-medium">{account.fullName ?? "—"}</TableCell>
-                        <TableCell>{account.email}</TableCell>
-                        <TableCell>
-                          <Badge variant={account.role === "admin" ? "default" : "secondary"}>
-                            {roleLabel(account.role)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(account.createdAt)}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          {account.role === "staff" && account.id !== user?.id && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeStaff(account)}
-                              aria-label="Delete staff account"
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {staffAccounts.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                          No clinic accounts yet
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+          return (
+            <TabsContent key={tabKey} value={tabKey} className="space-y-4 pt-2">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="p-0">
+                  {loadingUsers ? (
+                    <div className="p-8 flex justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50 dark:bg-slate-900">
+                          <TableHead>User</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Last Login (PST)</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayedUsers.map((account) => (
+                          <TableRow key={account.id} className={account.accountStatus === "Deactivated" ? "opacity-60 bg-slate-50/50" : ""}>
+                            <TableCell>
+                              <div>
+                                <p className="font-semibold text-slate-900 dark:text-slate-100">{account.fullName}</p>
+                                {account.phone && <p className="text-xs text-muted-foreground">{account.phone}</p>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <span className="font-mono">{account.email}</span>
+                              {account.emailVerified ? (
+                                <Badge variant="outline" className="ml-2 text-[10px] border-emerald-500 text-emerald-600">Verified</Badge>
+                              ) : (
+                                <Badge variant="outline" className="ml-2 text-[10px] border-amber-500 text-amber-600">Unverified</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={account.role === "admin" ? "default" : account.role === "staff" ? "secondary" : "outline"} className="capitalize">
+                                {roleLabel(account.role)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {account.accountStatus === "Active" ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">Active</Badge>
+                              ) : (
+                                <Badge variant="destructive">Deactivated</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs font-medium text-muted-foreground">
+                              {account.lastLogin ? formatDateTimePH(account.lastLogin) : "Never"}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap space-x-1">
+                              {/* Toggle Active / Deactivated */}
+                              {account.id !== user?.id && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleToggleStatus(account)}
+                                  className={account.accountStatus === "Active" ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"}
+                                  title={account.accountStatus === "Active" ? "Deactivate Account" : "Reactivate Account"}
+                                >
+                                  {account.accountStatus === "Active" ? <Ban className="w-4 h-4 mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+                                  {account.accountStatus === "Active" ? "Deactivate" : "Reactivate"}
+                                </Button>
+                              )}
 
-         
-        </TabsContent>
-
-        <TabsContent value="owners" className="space-y-4">
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-0">
-              {loadingOwners ? (
-                <div className="p-8 flex justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Sign-in</TableHead>
-                      <TableHead>Registered</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ownerAccounts.map((account) => (
-                      <TableRow key={account.id}>
-                        <TableCell className="font-medium">{account.fullName ?? "—"}</TableCell>
-                        <TableCell>{account.email}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {account.authMethod === "google" ? "Google" : "Email & password"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(account.createdAt)}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeOwner(account)}
-                            aria-label="Delete pet owner account"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {ownerAccounts.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                          <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                          No pet owner accounts yet
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <p className="text-xs text-muted-foreground">
-            Pet owners register through the public <code className="text-xs">/signup</code> page or Google sign-in.
-            Deleting an account removes their linked pets and records.
-          </p>
-        </TabsContent>
+                              {/* Reset Password */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (account.role === "admin" && account.id !== user?.id) {
+                                    toast.error("Administrator cannot change another Administrator's password.");
+                                    return;
+                                  }
+                                  setSelectedUser(account);
+                                  setResetPasswordValue("");
+                                  setResetOpen(true);
+                                }}
+                                className="text-teal-600 hover:text-teal-700 hover:bg-teal-50"
+                                title="Reset User Password"
+                              >
+                                <KeyRound className="w-4 h-4 mr-1" /> Reset Pass
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {displayedUsers.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                              No user accounts found.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          );
+        })}
       </Tabs>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      {/* Create Staff Modal */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-heading">New Staff Account</DialogTitle>
+            <DialogTitle className="font-heading">Create New Staff Account</DialogTitle>
+            <DialogDescription>
+              Create a new clinic staff account. Staff accounts are automatically activated.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="staff-name">Full Name</Label>
-              <Input
-                id="staff-name"
-                value={form.fullName}
-                onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-              />
+          <div className="space-y-3 pt-2">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="staff-fn" className="text-xs">First Name *</Label>
+                <Input
+                  id="staff-fn"
+                  placeholder="Doc"
+                  value={staffForm.firstName}
+                  onChange={(e) => setStaffForm({ ...staffForm, firstName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="staff-mn" className="text-xs">Middle Name</Label>
+                <Input
+                  id="staff-mn"
+                  placeholder="A."
+                  value={staffForm.middleName}
+                  onChange={(e) => setStaffForm({ ...staffForm, middleName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="staff-ln" className="text-xs">Last Name *</Label>
+                <Input
+                  id="staff-ln"
+                  placeholder="Smith"
+                  value={staffForm.lastName}
+                  onChange={(e) => setStaffForm({ ...staffForm, lastName: e.target.value })}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="staff-email">Email</Label>
-              <Input
-                id="staff-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="staff-email" className="text-xs">Email Address *</Label>
+                <Input
+                  id="staff-email"
+                  type="email"
+                  placeholder="staff@harbourside.com"
+                  value={staffForm.email}
+                  onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="staff-phone" className="text-xs">Phone Number</Label>
+                <Input
+                  id="staff-phone"
+                  placeholder="09171234567"
+                  value={staffForm.phone}
+                  onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="staff-password">Password</Label>
+
+            <div className="space-y-1">
+              <Label htmlFor="staff-pass" className="text-xs">Temporary Password *</Label>
               <Input
-                id="staff-password"
+                id="staff-pass"
                 type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="At least 6 characters"
+                placeholder="Minimum 8 characters (Upper, lower, number, special char)"
+                value={staffForm.password}
+                onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
+            <Button onClick={handleCreateStaff} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Create Staff"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Reset Password Modal */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-heading">Reset User Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong className="text-foreground">{selectedUser?.fullName}</strong> ({selectedUser?.email}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="reset-new-pass" className="text-xs font-semibold">New Password *</Label>
+              <Input
+                id="reset-new-pass"
+                type="password"
+                placeholder="Enter new password (8+ chars, upper, lower, number, special)"
+                value={resetPasswordValue}
+                onChange={(e) => setResetPasswordValue(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setResetOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAdminResetPassword} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Reset Password"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -46,7 +46,7 @@ import {
 } from "recharts";
 import { useRows } from "@/hooks/useRows";
 import { formatDate, formatAge } from "@/lib/age";
-import { formatNowPH, todayPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, daysFromTodayPH, isBeforeTodayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { canViewReports } from "@/lib/roles";
 import { toast } from "sonner";
@@ -352,11 +352,24 @@ export default function Reports() {
     if (selectedReport !== "inventory") return [];
     return inventory.filter((i) => {
       const q = search.toLowerCase().trim();
-      const nameStr = i.name.toLowerCase();
+      const nameStr = (i.name || "").toLowerCase();
       const categoryStr = (i.category || "").toLowerCase();
+      const itemCodeStr = (i.item_code || "").toLowerCase();
 
-      if (q && !nameStr.includes(q) && !categoryStr.includes(q)) return false;
-      if (subFilter !== "all" && categoryStr !== subFilter.toLowerCase()) return false;
+      if (q && !nameStr.includes(q) && !categoryStr.includes(q) && !itemCodeStr.includes(q)) return false;
+
+      const qty = Number(i.quantity ?? 0);
+      const reorderLevel = Number(i.reorder_level ?? 5);
+
+      if (subFilter === "low_stock") return qty > 0 && qty <= reorderLevel;
+      if (subFilter === "out_of_stock") return qty <= 0;
+      if (subFilter === "expiring") {
+        const days = i.expiration_date ? daysFromTodayPH(i.expiration_date) : null;
+        return days !== null && (days <= 30 || isBeforeTodayPH(i.expiration_date));
+      }
+      if (["medicine", "medication", "vaccine", "dewormer", "supply"].includes(subFilter)) {
+        return categoryStr.includes(subFilter);
+      }
       return true;
     });
   }, [selectedReport, inventory, search, subFilter]);
@@ -605,6 +618,17 @@ export default function Reports() {
                           <SelectItem value="pending">Pending Only</SelectItem>
                         </>
                       )}
+                      {selectedReport === "inventory" && (
+                        <>
+                          <SelectItem value="low_stock">Low Stock Report</SelectItem>
+                          <SelectItem value="out_of_stock">Out-of-Stock Report</SelectItem>
+                          <SelectItem value="expiring">Expiring Items Report</SelectItem>
+                          <SelectItem value="medicine">Medicines Only</SelectItem>
+                          <SelectItem value="vaccine">Vaccines Only</SelectItem>
+                          <SelectItem value="dewormer">Dewormers Only</SelectItem>
+                          <SelectItem value="supply">Medical Supplies Only</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -689,14 +713,26 @@ export default function Reports() {
                       );
                     } else if (selectedReport === "inventory") {
                       printOfficialReport(
-                        "Inventory Stock Report",
-                        ["Item Name", "Category", "Quantity", "Unit"],
-                        filteredInventory.map((i) => [
-                          i.name,
-                          i.category || "Supply",
-                          String(i.quantity ?? 0),
-                          i.unit || "unit",
-                        ])
+                        "Inventory Stock & Expiration Report",
+                        ["Item Code", "Item Name", "Category", "Quantity", "Reorder Level", "Expiration Date", "Status"],
+                        filteredInventory.map((i) => {
+                          const qty = Number(i.quantity ?? 0);
+                          const reorder = Number(i.reorder_level ?? 5);
+                          let status = "Available";
+                          if (i.expiration_date && isBeforeTodayPH(i.expiration_date)) status = "Expired";
+                          else if (qty <= 0) status = "Out of Stock";
+                          else if (qty <= reorder) status = "Low Stock";
+
+                          return [
+                            i.item_code || i.id.slice(0, 8),
+                            i.name,
+                            i.category || "Supply",
+                            `${qty} ${i.unit || "unit"}`,
+                            String(reorder),
+                            i.expiration_date ? formatDate(i.expiration_date) : "N/A",
+                            status,
+                          ];
+                        })
                       );
                     } else if (selectedReport === "communication") {
                       printOfficialReport(

@@ -8,16 +8,63 @@ import {
   listClinicAccounts,
   listOwnerAccounts,
 } from "../services/staff.js";
+import {
+  getAllUsersForAdmin,
+  toggleAccountStatus,
+  adminResetPassword,
+  createStaffAccount as createStaffFull,
+} from "../services/data.js";
 
 const router = Router();
 
 function requireAdmin(req: AuthedRequest, res: import("express").Response): boolean {
   if (!req.user || !canManageStaff(req.user.role)) {
-    res.status(403).json({ error: "Forbidden" });
+    res.status(403).json({ error: "Forbidden: Admin access required" });
     return false;
   }
   return true;
 }
+
+router.get("/users", requireAuth, async (req: AuthedRequest, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const users = await getAllUsersForAdmin();
+    res.json({ users });
+  } catch (e) {
+    console.error("list all users error:", e);
+    res.status(500).json({ error: "Failed to load users" });
+  }
+});
+
+router.patch("/users/:id/status", requireAuth, async (req: AuthedRequest, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const { status } = req.body ?? {};
+    if (status !== "Active" && status !== "Deactivated") {
+      res.status(400).json({ error: "Status must be 'Active' or 'Deactivated'." });
+      return;
+    }
+    const result = await toggleAccountStatus(req.user!.id, req.params.id, status);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to update account status." });
+  }
+});
+
+router.post("/users/:id/reset-password", requireAuth, async (req: AuthedRequest, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const { newPassword } = req.body ?? {};
+    if (!newPassword) {
+      res.status(400).json({ error: "New password is required." });
+      return;
+    }
+    const result = await adminResetPassword(req.user!.id, req.params.id, newPassword);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Failed to reset password." });
+  }
+});
 
 router.get("/", requireAuth, async (req: AuthedRequest, res) => {
   if (!requireAdmin(req, res)) return;
@@ -33,17 +80,28 @@ router.get("/", requireAuth, async (req: AuthedRequest, res) => {
 router.post("/", requireAuth, async (req: AuthedRequest, res) => {
   if (!requireAdmin(req, res)) return;
   try {
-    const email = String(req.body?.email ?? "").trim();
-    const fullName = String(req.body?.fullName ?? "").trim();
-    const password = String(req.body?.password ?? "");
+    const { firstName, middleName, lastName, email, password, phone } = req.body ?? {};
+    const fullName = req.body?.fullName || [firstName, middleName, lastName].filter(Boolean).join(" ");
 
-    if (!email || !fullName || !password) {
-      res.status(400).json({ error: "Email, full name, and password are required." });
+    if (!email || !password || (!fullName && (!firstName || !lastName))) {
+      res.status(400).json({ error: "Email, Password, and Name are required." });
       return;
     }
 
-    const account = await createStaffAccount({ email, fullName, password });
-    res.status(201).json({ account });
+    if (firstName && lastName) {
+      const account = await createStaffFull(req.user!.id, {
+        firstName,
+        middleName,
+        lastName,
+        email,
+        password,
+        phone,
+      });
+      res.status(201).json({ account });
+    } else {
+      const account = await createStaffAccount({ email, fullName, password });
+      res.status(201).json({ account });
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create staff account";
     res.status(400).json({ error: message });

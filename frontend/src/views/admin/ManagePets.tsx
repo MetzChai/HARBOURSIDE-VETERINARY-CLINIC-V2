@@ -181,7 +181,7 @@ export default function ManagePets() {
       existing_conditions: form.existing_conditions.trim() || null,
       notes: form.notes.trim() || null,
       image_url: form.image_url || null,
-      status: form.status,
+      status: form.status === "Deceased" ? "deceased" : "available",
       cause_of_death: form.status === "Deceased" ? form.cause_of_death.trim() || null : null,
       deceased_date: form.status === "Deceased" ? form.deceased_date || todayPH() : null,
     };

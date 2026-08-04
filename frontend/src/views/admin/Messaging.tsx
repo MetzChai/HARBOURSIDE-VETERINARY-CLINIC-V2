@@ -212,7 +212,6 @@ export default function Messaging() {
       status: "SENT",
       sent_by: isAdmin ? "Admin" : "Staff",
       scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-      sent_at: formatNowPH(),
     };
 
     const { error } = await db.from("messages").insert(payload as any);
@@ -325,9 +324,6 @@ export default function Messaging() {
           </TabsTrigger>
           <TabsTrigger value="history" className="text-xs font-semibold flex items-center gap-1.5">
             <Clock className="h-4 w-4" /> Communication History Log ({messages.length})
-          </TabsTrigger>
-          <TabsTrigger value="reminders" className="text-xs font-semibold flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-amber-500" /> Automated Reminders & API Config
           </TabsTrigger>
         </TabsList>
 
@@ -644,56 +640,6 @@ export default function Messaging() {
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 3: Automated Reminders Config */}
-        <TabsContent value="reminders">
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-heading text-base font-bold flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-amber-500" /> Automated Trigger Reminders & API Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl border bg-card space-y-2">
-                  <h4 className="font-bold flex items-center gap-1.5 text-sm text-primary">
-                    <Calendar className="h-4 w-4" /> 24-Hour Appointment Reminders
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Automatically dispatches SMS and Email reminders 24 hours prior to scheduled appointment dates.
-                  </p>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                    Active & Automated
-                  </Badge>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-card space-y-2">
-                  <h4 className="font-bold flex items-center gap-1.5 text-sm text-primary">
-                    <Mail className="h-4 w-4" /> Nodemailer & Gmail SMTP Gateway
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    HTML emails formatted with clinic branding and recipient details are dispatched via Nodemailer.
-                  </p>
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                    Configured (SMTP / Simulation)
-                  </Badge>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-card space-y-2">
-                  <h4 className="font-bold flex items-center gap-1.5 text-sm text-primary">
-                    <Phone className="h-4 w-4" /> Semaphore / Twilio SMS Gateway
-                  </h4>
-                  <p className="text-muted-foreground leading-relaxed">
-                    SMS reminders format short, concise SMS texts sent to pet owner mobile contact numbers.
-                  </p>
-                  <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">
-                    Configured (SMS API)
-                  </Badge>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
