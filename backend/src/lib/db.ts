@@ -1,6 +1,13 @@
-import { Pool } from "@neondatabase/serverless";
+import { Pool, type PoolClient } from "@neondatabase/serverless";
 import { PrismaClient } from "@prisma/client";
-import { withDatabaseTimezone } from "./timezone.js";
+import {
+  PH_TIMEZONE,
+  ensurePhilippineTimezone,
+  resolveDatabaseUrl,
+  withDatabaseTimezone,
+} from "./timezone.js";
+
+ensurePhilippineTimezone();
 
 export const TABLES = [
   "profiles",
@@ -12,6 +19,7 @@ export const TABLES = [
   "dewormings",
   "care_records",
   "inventory_items",
+  "inventory_batches",
   "inventory_transactions",
   "inventory_suppliers",
   "lab_transactions",
@@ -28,6 +36,8 @@ export function isTableName(value: string): value is TableName {
 const JOIN_MAP: Record<string, { table: string; fk: string; alias: string }> = {
   pets: { table: "pets", fk: "pet_id", alias: "pets" },
   owners: { table: "owners", fk: "owner_id", alias: "owners" },
+  inventory_items: { table: "inventory_items", fk: "inventory_item_id", alias: "inventory_items" },
+  inventory_batches: { table: "inventory_batches", fk: "inventory_batch_id", alias: "inventory_batches" },
 };
 
 export function parseSelect(select: string) {
@@ -61,6 +71,11 @@ const globalForPrisma = globalThis as { prisma?: PrismaClient };
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL ? withDatabaseTimezone(process.env.DATABASE_URL) : undefined,
+      },
+    },
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
@@ -70,12 +85,17 @@ if (process.env.NODE_ENV !== "production") {
 
 let pool: Pool | null = null;
 
+function applySessionTimezone(client: PoolClient): void {
+  void client.query(`SET TIME ZONE '${PH_TIMEZONE}'`);
+}
+
 /** Native pg pool for raw SQL (correct UUID/param handling). Prisma used for schema client. */
 export function getPool() {
+  ensurePhilippineTimezone();
   if (!pool) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL is not set");
-    pool = new Pool({ connectionString: withDatabaseTimezone(url) });
+    pool = new Pool({ connectionString: resolveDatabaseUrl() });
+    pool.on("connect", applySessionTimezone);
+    pool.on("acquire", applySessionTimezone);
   }
   return pool;
 }

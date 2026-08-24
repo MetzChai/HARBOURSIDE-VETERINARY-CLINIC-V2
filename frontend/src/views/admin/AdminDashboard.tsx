@@ -49,7 +49,7 @@ import {
 } from "recharts";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH } from "@/lib/datetime";
+import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH, toDateOnly } from "@/lib/datetime";
 import { getStatusBadgeClass, CARE_TYPE_LABELS, normalizeCareType } from "@/lib/appointment-slots";
 import { useAdminNotifications } from "@/hooks/useNotifications";
 import { type NotificationItem } from "@/lib/notifications";
@@ -59,6 +59,23 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 const COLORS = ["#1B3A5C", "#1FA8A8", "#2E7D32", "#C62828", "#8E24AA", "#F57C00"];
+
+function normalizePetHealthStatus(pet: { health_status?: string | null; status?: string | null }) {
+  const raw = pet.health_status ?? pet.status ?? "Healthy";
+  const s = String(raw).toLowerCase().replace(/\s+/g, "_");
+  if (s === "deceased") return "deceased";
+  if (s === "under_treatment") return "under_treatment";
+  if (s === "recovered") return "recovered";
+  return "healthy";
+}
+
+function isAppointmentCompleted(status?: string | null) {
+  return String(status ?? "").toLowerCase() === "completed";
+}
+
+function isRecoveryOutcome(outcome?: string | null) {
+  return /(recover|recovered|healed|resolved|cured|improved)/i.test(String(outcome ?? ""));
+}
 
 export default function AdminDashboard() {
   const { role } = useAuth();
@@ -81,7 +98,7 @@ export default function AdminDashboard() {
 
   // Metrics computation
   const todayAppointments = useMemo(
-    () => appointments.filter((a) => a.date === today),
+    () => appointments.filter((a) => toDateOnly(a.date) === today),
     [appointments, today]
   );
 
@@ -91,25 +108,25 @@ export default function AdminDashboard() {
   );
 
   const completedToday = useMemo(
-    () => appointments.filter((a) => a.date === today && a.status === "Completed"),
+    () => appointments.filter((a) => toDateOnly(a.date) === today && isAppointmentCompleted(a.status)),
     [appointments, today]
   );
 
   // Pet Health Statuses
   const healthyPetsCount = useMemo(
-    () => pets.filter((p) => !p.status || p.status === "healthy" || p.status === "Healthy").length,
+    () => pets.filter((p) => normalizePetHealthStatus(p) === "healthy").length,
     [pets]
   );
   const underTreatmentCount = useMemo(
-    () => pets.filter((p) => p.status === "under_treatment" || p.status === "Under Treatment").length,
+    () => pets.filter((p) => normalizePetHealthStatus(p) === "under_treatment").length,
     [pets]
   );
   const recoveredPetsCount = useMemo(
-    () => pets.filter((p) => p.status === "recovered" || p.status === "Recovered").length,
+    () => pets.filter((p) => normalizePetHealthStatus(p) === "recovered").length,
     [pets]
   );
   const deceasedPetsCount = useMemo(
-    () => pets.filter((p) => p.status === "deceased" || p.status === "Deceased").length,
+    () => pets.filter((p) => normalizePetHealthStatus(p) === "deceased").length,
     [pets]
   );
 
@@ -156,8 +173,9 @@ export default function AdminDashboard() {
   // 1. Appointments Monthly Analytics
   const appointmentMonthlyData = useMemo(() => {
     return monthBuckets.map((m) => {
-      const count = appointments.filter((a) => String(a.date).slice(0, 7) === m.key).length;
-      const completed = appointments.filter((a) => String(a.date).slice(0, 7) === m.key && a.status === "Completed").length;
+      const monthAppts = appointments.filter((a) => toDateOnly(a.date).slice(0, 7) === m.key);
+      const count = monthAppts.filter((a) => String(a.status ?? "").toLowerCase() !== "cancelled").length;
+      const completed = monthAppts.filter((a) => isAppointmentCompleted(a.status)).length;
       return { label: m.label, Total: count, Completed: completed };
     });
   }, [monthBuckets, appointments]);
@@ -166,7 +184,7 @@ export default function AdminDashboard() {
   const careTypeDistribution = useMemo(() => {
     const counts: Record<string, number> = { Checkup: 0, Vaccination: 0, Treatment: 0, Deworming: 0 };
     care.forEach((c) => {
-      const t = normalizeCareType(c.care_type);
+      const t = normalizeCareType(c.record_type ?? c.care_type);
       if (t === "vaccination" || t === "vaccine") counts.Vaccination++;
       else if (t === "treatment") counts.Treatment++;
       else if (t === "deworming") counts.Deworming++;
@@ -193,8 +211,15 @@ export default function AdminDashboard() {
   // Monthly Recoveries vs Deaths
   const healthTrendsData = useMemo(() => {
     return monthBuckets.map((m) => {
-      const deaths = pets.filter((p) => p.status === "deceased" && String(p.deceased_date || "").slice(0, 7) === m.key).length;
-      const cures = care.filter((c) => /(cur|recover|healed|resolved)/i.test(c.outcome || "") && String(c.date || "").slice(0, 7) === m.key).length;
+      const deaths = pets.filter((p) => {
+        if (normalizePetHealthStatus(p) !== "deceased") return false;
+        const deathDate = toDateOnly(p.deceased_date);
+        return deathDate && deathDate.slice(0, 7) === m.key;
+      }).length;
+      const cures = care.filter((c) => {
+        const careMonth = toDateOnly(c.date).slice(0, 7);
+        return careMonth === m.key && isRecoveryOutcome(c.outcome);
+      }).length;
       return { label: m.label, Recoveries: cures, Deaths: deaths };
     });
   }, [monthBuckets, pets, care]);
@@ -394,6 +419,34 @@ export default function AdminDashboard() {
                   <span className="text-xs text-muted-foreground font-medium uppercase">Death Rate</span>
                   <p className="text-3xl font-bold font-heading text-rose-700">{deathRate}%</p>
                   <p className="text-xs text-rose-800">{deceasedPetsCount} total deceased records</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={petHealthDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                        {petHealthDistribution.map((_, index) => (
+                          <Cell key={`cell-health-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm">Pet Health Status</h4>
+                  {petHealthDistribution.map((item) => (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex justify-between text-xs font-medium">
+                        <span>{item.name}</span>
+                        <span>{item.value} pets</span>
+                      </div>
+                      <Progress value={pets.length ? (item.value / pets.length) * 100 : 0} className="h-2" />
+                    </div>
+                  ))}
                 </div>
               </div>
 

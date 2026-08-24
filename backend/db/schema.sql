@@ -171,6 +171,9 @@ ALTER TABLE pets ADD COLUMN IF NOT EXISTS blood_type text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS allergies text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS existing_conditions text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS health_status text NOT NULL DEFAULT 'Healthy';
+
+UPDATE pets SET health_status = 'Deceased' WHERE status::text = 'deceased' AND health_status = 'Healthy';
 
 DROP TRIGGER IF EXISTS trg_pets_updated ON pets;
 CREATE TRIGGER trg_pets_updated BEFORE UPDATE ON pets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -288,14 +291,37 @@ ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS item_code text;
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS description text;
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS reorder_level integer NOT NULL DEFAULT 5;
 ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Available';
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS batch_no text;
 
 DROP TRIGGER IF EXISTS trg_inv_updated ON inventory_items;
 CREATE TRIGGER trg_inv_updated BEFORE UPDATE ON inventory_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ===== inventory_batches =====
+CREATE TABLE IF NOT EXISTS inventory_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  batch_no text NOT NULL,
+  expiration_date date,
+  initial_quantity integer NOT NULL DEFAULT 0,
+  remaining_quantity integer NOT NULL DEFAULT 0,
+  received_date date DEFAULT CURRENT_DATE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT uq_inventory_batches_item_batch_exp UNIQUE (inventory_item_id, batch_no, expiration_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inv_batches_item_id ON inventory_batches(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_inv_batches_expiration ON inventory_batches(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_inv_batches_remaining_qty ON inventory_batches(remaining_quantity);
+
+DROP TRIGGER IF EXISTS trg_inv_batches_updated ON inventory_batches;
+CREATE TRIGGER trg_inv_batches_updated BEFORE UPDATE ON inventory_batches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ===== inventory_transactions =====
 CREATE TABLE IF NOT EXISTS inventory_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id uuid NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  inventory_batch_id uuid REFERENCES inventory_batches(id) ON DELETE SET NULL,
   type txn_type NOT NULL,
   quantity integer NOT NULL,
   batch_no text,
@@ -308,9 +334,65 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS inventory_batch_id uuid REFERENCES inventory_batches(id) ON DELETE SET NULL;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS recorded_by text;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS transaction_no text;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+-- Normalize pricing columns on existing databases
+UPDATE inventory_items SET unit_price = 0 WHERE unit_price IS NULL;
+UPDATE inventory_transactions SET unit_price = 0 WHERE unit_price IS NULL;
+UPDATE inventory_transactions SET total_amount = 0 WHERE total_amount IS NULL;
+ALTER TABLE inventory_items ALTER COLUMN unit_price TYPE NUMERIC(12,2);
+ALTER TABLE inventory_items ALTER COLUMN unit_price SET NOT NULL;
+ALTER TABLE inventory_items ALTER COLUMN unit_price SET DEFAULT 0;
+ALTER TABLE inventory_transactions ALTER COLUMN unit_price TYPE NUMERIC(12,2);
+ALTER TABLE inventory_transactions ALTER COLUMN unit_price SET NOT NULL;
+ALTER TABLE inventory_transactions ALTER COLUMN unit_price SET DEFAULT 0;
+ALTER TABLE inventory_transactions ALTER COLUMN total_amount TYPE NUMERIC(12,2);
+ALTER TABLE inventory_transactions ALTER COLUMN total_amount SET NOT NULL;
+ALTER TABLE inventory_transactions ALTER COLUMN total_amount SET DEFAULT 0;
+
+-- LEGACY backfill migration
+DO $$
+DECLARE
+  item_rec RECORD;
+  seq INT := 1;
+  b_no TEXT;
+  b_id UUID;
+BEGIN
+  FOR item_rec IN SELECT id, quantity, expiration_date, batch_no FROM inventory_items LOOP
+    IF NOT EXISTS (SELECT 1 FROM inventory_batches WHERE inventory_item_id = item_rec.id) THEN
+      b_no := COALESCE(NULLIF(TRIM(item_rec.batch_no), ''), 'LEGACY-' || LPAD(seq::text, 3, '0'));
+      seq := seq + 1;
+      INSERT INTO inventory_batches (
+        inventory_item_id,
+        batch_no,
+        expiration_date,
+        initial_quantity,
+        remaining_quantity
+      ) VALUES (
+        item_rec.id,
+        b_no,
+        item_rec.expiration_date,
+        GREATEST(0, item_rec.quantity),
+        GREATEST(0, item_rec.quantity)
+      )
+      ON CONFLICT (inventory_item_id, batch_no, expiration_date) DO UPDATE
+      SET initial_quantity = inventory_batches.initial_quantity + EXCLUDED.initial_quantity,
+          remaining_quantity = inventory_batches.remaining_quantity + EXCLUDED.remaining_quantity
+      RETURNING id INTO b_id;
+
+      UPDATE inventory_transactions
+      SET inventory_batch_id = b_id, batch_no = COALESCE(batch_no, b_no)
+      WHERE item_id = item_rec.id AND inventory_batch_id IS NULL;
+    END IF;
+  END LOOP;
+END $$;
 
 -- ===== lab_transactions =====
 CREATE TABLE IF NOT EXISTS lab_transactions (
@@ -361,9 +443,13 @@ CREATE TABLE IF NOT EXISTS lab_transaction_items (
   transaction_id uuid NOT NULL REFERENCES lab_transactions(id) ON DELETE CASCADE,
   description text NOT NULL,
   quantity integer NOT NULL DEFAULT 1,
-  unit_price numeric NOT NULL DEFAULT 0,
-  line_total numeric NOT NULL DEFAULT 0
+  unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+  line_total NUMERIC(12,2) NOT NULL DEFAULT 0
 );
+
+ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS category text;
+ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS source text;
+ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS inventory_transaction_id uuid REFERENCES inventory_transactions(id) ON DELETE SET NULL;
 
 -- ===== messages =====
 CREATE TABLE IF NOT EXISTS messages (

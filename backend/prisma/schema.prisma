@@ -162,6 +162,7 @@ model Pet {
   status       PetStatus @default(available)
   causeOfDeath String?   @map("cause_of_death")
   deceasedDate DateTime? @map("deceased_date") @db.Date
+  healthStatus String    @default("Healthy") @map("health_status")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
@@ -260,32 +261,60 @@ model InventoryItem {
   category       ItemCategory @default(supply)
   quantity       Int          @default(0)
   unit           String?      @default("unit")
+  unitPrice      Decimal      @default(0) @map("unit_price") @db.Decimal(12, 2)
   reorderLevel   Int          @default(5) @map("reorder_level")
   expirationDate DateTime?    @map("expiration_date") @db.Date
+  batchNo        String?      @map("batch_no")
   status         String?      @default("Available")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
 
+  batches      InventoryBatch[]
   transactions InventoryTransaction[]
 
   @@map("inventory_items")
 }
 
-model InventoryTransaction {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  itemId         String    @map("item_id") @db.Uuid
-  type           TxnType
-  quantity       Int
-  batchNo        String?   @map("batch_no")
-  expirationDate DateTime? @map("expiration_date") @db.Date
-  reason         String?
-  notes          String?
-  recordedBy     String?   @map("recorded_by")
-  petId          String?   @map("pet_id") @db.Uuid
-  date           DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+model InventoryBatch {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inventoryItemId   String    @map("inventory_item_id") @db.Uuid
+  batchNo           String    @map("batch_no")
+  expirationDate    DateTime? @map("expiration_date") @db.Date
+  initialQuantity   Int       @default(0) @map("initial_quantity")
+  remainingQuantity Int       @default(0) @map("remaining_quantity")
+  receivedDate      DateTime? @default(dbgenerated("CURRENT_DATE")) @map("received_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item         InventoryItem          @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  transactions InventoryTransaction[]
+
+  @@unique([inventoryItemId, batchNo, expirationDate])
+  @@index([inventoryItemId])
+  @@index([expirationDate])
+  @@index([remainingQuantity])
+  @@map("inventory_batches")
+}
+
+model InventoryTransaction {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId           String    @map("item_id") @db.Uuid
+  inventoryBatchId String?   @map("inventory_batch_id") @db.Uuid
+  type             TxnType
+  quantity         Int
+  unitPrice        Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  totalAmount      Decimal  @default(0) @map("total_amount") @db.Decimal(12, 2)
+  batchNo          String?   @map("batch_no")
+  expirationDate   DateTime? @map("expiration_date") @db.Date
+  reason           String?
+  notes            String?
+  recordedBy       String?   @map("recorded_by")
+  petId            String?   @map("pet_id") @db.Uuid
+  date             DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  item           InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  inventoryBatch InventoryBatch? @relation(fields: [inventoryBatchId], references: [id], onDelete: SetNull)
 
   @@map("inventory_transactions")
 }
@@ -308,12 +337,15 @@ model LabTransaction {
 }
 
 model LabTransactionItem {
-  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  transactionId String  @map("transaction_id") @db.Uuid
-  description   String
-  quantity      Int     @default(1)
-  unitPrice     Decimal @default(0) @map("unit_price") @db.Decimal
-  lineTotal     Decimal @default(0) @map("line_total") @db.Decimal
+  id                     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionId          String  @map("transaction_id") @db.Uuid
+  description            String
+  quantity               Int     @default(1)
+  unitPrice              Decimal @default(0) @map("unit_price") @db.Decimal(12, 2)
+  lineTotal              Decimal @default(0) @map("line_total") @db.Decimal(12, 2)
+  category               String?
+  source                 String?
+  inventoryTransactionId String? @map("inventory_transaction_id") @db.Uuid
 
   transaction LabTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 

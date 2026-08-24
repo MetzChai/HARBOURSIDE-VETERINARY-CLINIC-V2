@@ -57,6 +57,21 @@ type TransactionRow = {
   owners?: { name: string } | null;
 };
 
+type TransactionItemRow = {
+  id: string;
+  transaction_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  category?: string | null;
+  source?: string | null;
+  inventory_transaction_id?: string | null;
+};
+
+const formatPeso = (value: number | string | null | undefined) =>
+  `₱${Number(value ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 type LabRecordRow = {
   id: string;
   lab_record_number?: string | null;
@@ -84,6 +99,8 @@ export default function LabTransactions() {
     ascending: false,
   });
 
+  const { data: transactionItems = [] } = useRows<TransactionItemRow>("lab_transaction_items");
+
   const { data: labRecords = [], isLoading: loadingLabs } = useRows<LabRecordRow>("lab_records", {
     orderBy: "created_at",
     ascending: false,
@@ -98,6 +115,15 @@ export default function LabTransactions() {
   // Maps for lookups
   const petMap = useMemo(() => new Map(pets.map((p) => [p.id, p])), [pets]);
   const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o])), [owners]);
+  const itemsByTxnId = useMemo(() => {
+    const map = new Map<string, TransactionItemRow[]>();
+    for (const item of transactionItems) {
+      const list = map.get(item.transaction_id) ?? [];
+      list.push(item);
+      map.set(item.transaction_id, list);
+    }
+    return map;
+  }, [transactionItems]);
 
   // Tab State
   const [activeTab, setActiveTab] = useState("transactions");
@@ -402,8 +428,26 @@ export default function LabTransactions() {
   const handlePrintReceipt = (txn: TransactionRow) => {
     const pet = petMap.get(txn.pet_id || "") || txn.pets;
     const owner = ownerMap.get(txn.owner_id || "") || txn.owners;
+    const lineItems = itemsByTxnId.get(txn.id) ?? [];
     const w = window.open("", "_blank");
     if (!w) return;
+
+    const lineItemsHtml = lineItems.length
+      ? lineItems
+          .map(
+            (item) => `
+              <tr>
+                <td>${item.category || "Service"}</td>
+                <td>${item.description}</td>
+                <td style="text-align:center">${item.quantity}</td>
+                <td style="text-align:right">${formatPeso(item.unit_price)}</td>
+                <td style="text-align:right">${formatPeso(item.line_total)}</td>
+                <td>${item.source || "—"}</td>
+              </tr>
+            `
+          )
+          .join("")
+      : `<tr><td>Service</td><td>${txn.services_rendered || "Veterinary Medical Service"}</td><td style="text-align:center">1</td><td style="text-align:right">${formatPeso(txn.total_amount)}</td><td style="text-align:right">${formatPeso(txn.total_amount)}</td><td>Manual</td></tr>`;
 
     w.document.write(`
       <html>
@@ -435,10 +479,23 @@ export default function LabTransactions() {
           </div>
 
           <table>
-            <thead><tr><th>Services Rendered / Particulars</th><th style="text-align:right">Amount</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Description</th>
+                <th style="text-align:center">Qty</th>
+                <th style="text-align:right">Unit Price</th>
+                <th style="text-align:right">Amount</th>
+                <th>Source</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td>${txn.services_rendered || "Veterinary Medical Service"}</td><td style="text-align:right">₱${Number(txn.total_amount || 0).toLocaleString()}</td></tr>
-              <tr class="total-row"><td>Total Amount Paid</td><td style="text-align:right">₱${Number(txn.total_amount || 0).toLocaleString()}</td></tr>
+              ${lineItemsHtml}
+              <tr class="total-row">
+                <td colspan="4">Total Amount</td>
+                <td style="text-align:right">${formatPeso(txn.total_amount)}</td>
+                <td></td>
+              </tr>
             </tbody>
           </table>
 
@@ -1117,7 +1174,7 @@ export default function LabTransactions() {
 
       {/* View Transaction Details Modal */}
       <Dialog open={!!viewTxn} onOpenChange={() => setViewTxn(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           {viewTxn && (
             <>
               <DialogHeader>
@@ -1155,9 +1212,40 @@ export default function LabTransactions() {
                   <span className="text-muted-foreground">Payment Method:</span>
                   <span>{viewTxn.payment_method}</span>
                 </div>
+
+                {(itemsByTxnId.get(viewTxn.id) ?? []).length > 0 && (
+                  <div className="pt-2">
+                    <span className="font-semibold block uppercase text-[10px] text-muted-foreground mb-2">Line Items</span>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-[10px]">Category</TableHead>
+                          <TableHead className="text-[10px]">Description</TableHead>
+                          <TableHead className="text-[10px] text-center">Qty</TableHead>
+                          <TableHead className="text-[10px] text-right">Unit Price</TableHead>
+                          <TableHead className="text-[10px] text-right">Amount</TableHead>
+                          <TableHead className="text-[10px]">Source</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(itemsByTxnId.get(viewTxn.id) ?? []).map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="text-xs">{item.category || "—"}</TableCell>
+                            <TableCell className="text-xs font-medium">{item.description}</TableCell>
+                            <TableCell className="text-xs text-center">{item.quantity}</TableCell>
+                            <TableCell className="text-xs text-right font-mono">{formatPeso(item.unit_price)}</TableCell>
+                            <TableCell className="text-xs text-right font-mono font-semibold">{formatPeso(item.line_total)}</TableCell>
+                            <TableCell className="text-xs">{item.source || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
                 <div className="flex justify-between py-1 border-b font-bold text-sm">
                   <span>Total Amount:</span>
-                  <span className="text-primary">₱{Number(viewTxn.total_amount || 0).toLocaleString()}</span>
+                  <span className="text-primary">{formatPeso(viewTxn.total_amount)}</span>
                 </div>
                 {viewTxn.notes && (
                   <div className="p-2 rounded bg-muted/40 mt-2">

@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { loadEnv } from "./load-env.mjs";
+import { bindPoolTimezone, resolveDatabaseUrl } from "./db-timezone.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +33,8 @@ if (!url) {
 
 const normalized = email.toLowerCase().trim();
 const hash = await bcrypt.hash(password, 10);
-const pool = new Pool({ connectionString: url });
+const pool = new Pool({ connectionString: resolveDatabaseUrl() });
+bindPoolTimezone(pool);
 
 try {
   const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalized]);

@@ -58,6 +58,7 @@ type PetRow = {
   notes?: string | null;
   image_url?: string | null;
   status?: string | null;
+  health_status?: string | null;
   cause_of_death?: string | null;
   deceased_date?: string | null;
   owners?: { name: string; contact?: string; email?: string } | null;
@@ -149,7 +150,7 @@ export default function ManagePets() {
       existing_conditions: pet.existing_conditions || "",
       notes: pet.notes || "",
       image_url: pet.image_url || "",
-      status: pet.status || "Healthy",
+      status: pet.health_status || (pet.status === "deceased" ? "Deceased" : "Healthy"),
       cause_of_death: pet.cause_of_death || "",
       deceased_date: pet.deceased_date || "",
     });
@@ -181,6 +182,7 @@ export default function ManagePets() {
       existing_conditions: form.existing_conditions.trim() || null,
       notes: form.notes.trim() || null,
       image_url: form.image_url || null,
+      health_status: form.status,
       status: form.status === "Deceased" ? "deceased" : "available",
       cause_of_death: form.status === "Deceased" ? form.cause_of_death.trim() || null : null,
       deceased_date: form.status === "Deceased" ? form.deceased_date || todayPH() : null,
@@ -240,7 +242,7 @@ export default function ManagePets() {
       if (filterSpecies !== "all" && speciesStr !== filterSpecies.toLowerCase()) return false;
 
       // Status Filter
-      if (filterStatus !== "all" && (p.status || "Healthy").toLowerCase() !== filterStatus.toLowerCase()) return false;
+      if (filterStatus !== "all" && (p.health_status || p.status || "Healthy").toLowerCase().replace(/\s+/g, "_") !== filterStatus.toLowerCase().replace(/\s+/g, "_")) return false;
 
       // Owner Filter
       if (filterOwnerId !== "all" && p.owner_id !== filterOwnerId) return false;
@@ -470,7 +472,7 @@ export default function ManagePets() {
                         <TableCell className="text-xs">
                           {pet.gender || "—"} • {pet.dob ? formatAge(pet.dob) : pet.estimated_age || "—"}
                         </TableCell>
-                        <TableCell>{getPetStatusBadge(pet.status)}</TableCell>
+                        <TableCell>{getPetStatusBadge(pet.health_status || pet.status)}</TableCell>
                         <TableCell className="text-right pr-4">
                           <div className="flex items-center justify-end gap-1">
                             <Button

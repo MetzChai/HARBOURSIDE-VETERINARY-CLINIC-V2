@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar } from "lucide-react";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH } from "@/lib/datetime";
+import { formatNowPH, isBeforeTodayPH } from "@/lib/datetime";
 import { db } from "@/lib/db-client";
 import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
@@ -67,7 +67,80 @@ export default function CareHistory() {
     ascending: false,
   });
   const { data: inventoryItems = [] } = useRows<any>("inventory_items", { orderBy: "name" });
+  const { data: dbBatches = [] } = useRows<any>("inventory_batches");
   const invalidate = useInvalidate();
+
+  // Multi-medication selection state
+  const [medicationsList, setMedicationsList] = useState<
+    Array<{
+      inventory_item_id: string;
+      name: string;
+      quantity: number;
+      unit: string;
+      notes?: string;
+    }>
+  >([]);
+
+  // Calculate available stock map for validation & label rendering
+  const availableStockMap = useMemo(() => {
+    const map: Record<string, { totalQty: number; name: string; category: string; unit: string }> = {};
+    inventoryItems.forEach((item: any) => {
+      const itemBatches = dbBatches.filter((b: any) => b.inventory_item_id === item.id);
+      const activeBatches = itemBatches.filter((b: any) => {
+        const remQty = Number(b.remaining_quantity ?? 0);
+        if (remQty <= 0) return false;
+        if (!b.expiration_date) return true;
+        const expStr = String(b.expiration_date).slice(0, 10);
+        return !isBeforeTodayPH(expStr);
+      });
+      const totalQty = activeBatches.reduce((acc: number, b: any) => acc + Number(b.remaining_quantity ?? 0), 0);
+      map[item.id] = {
+        totalQty,
+        name: item.name,
+        category: item.category || "supply",
+        unit: item.unit || "unit",
+      };
+    });
+    return map;
+  }, [inventoryItems, dbBatches]);
+
+  const handleAddMedicationRow = () => {
+    setMedicationsList((prev) => [
+      ...prev,
+      { inventory_item_id: "", name: "", quantity: 1, unit: "unit", notes: "" },
+    ]);
+  };
+
+  const handleRemoveMedicationRow = (index: number) => {
+    setMedicationsList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMedicationItemChange = (index: number, itemId: string) => {
+    const targetItem = inventoryItems.find((i: any) => i.id === itemId);
+    setMedicationsList((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        return {
+          ...row,
+          inventory_item_id: itemId,
+          name: targetItem?.name || "",
+          unit: targetItem?.unit || "unit",
+        };
+      })
+    );
+  };
+
+  const handleMedicationQtyChange = (index: number, quantity: number) => {
+    setMedicationsList((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, quantity: Math.max(1, quantity) } : row))
+    );
+  };
+
+  const handleMedicationNotesChange = (index: number, notes: string) => {
+    setMedicationsList((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, notes } : row))
+    );
+  };
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -115,14 +188,18 @@ export default function CareHistory() {
   const [autoOpenedAptId, setAutoOpenedAptId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!aptId || autoOpenedAptId === aptId) return;
+    if (!aptId) return;
 
     const existingRecord = careRecords.find((r: any) => r.appointment_id === aptId);
     if (existingRecord) {
-      openEditModal(existingRecord);
-      setAutoOpenedAptId(aptId);
+      if (editingId !== existingRecord.id || autoOpenedAptId !== aptId) {
+        openEditModal(existingRecord);
+        setAutoOpenedAptId(aptId);
+      }
       return;
     }
+
+    if (autoOpenedAptId === aptId) return;
 
     const targetApt = appointments.find((a: any) => a.id === aptId);
     if (targetApt) {
@@ -150,10 +227,11 @@ export default function CareHistory() {
         outcome: "Completed",
         notes: targetApt.notes || "",
       });
+      setMedicationsList([]);
       setShowEditModal(true);
       setAutoOpenedAptId(aptId);
     }
-  }, [aptId, appointments, careRecords, autoOpenedAptId]);
+  }, [aptId, appointments, careRecords, autoOpenedAptId, editingId]);
 
   // Filter logic
   const filteredRecords = careRecords.filter((record) => {
@@ -161,7 +239,6 @@ export default function CareHistory() {
     const petName = pet?.name || "";
     const ownerName = pet?.owner_id ? ownerMap.get(pet.owner_id) || "" : "";
     const diagnosis = record.diagnosis || "";
-    const careTypeLabel = formatCareTypeLabel(record.record_type);
 
     // Search query filter (Pet Name, Owner Name, Diagnosis)
     if (searchQuery.trim()) {
@@ -181,22 +258,14 @@ export default function CareHistory() {
     if (filterOwnerId !== "all" && pet?.owner_id !== filterOwnerId) return false;
 
     // Care Type filter
-    if (filterCareType !== "all") {
-      const normRecordType = String(record.record_type || "").toLowerCase();
-      const normFilter = filterCareType.toLowerCase();
-      if (normFilter === "vaccination") {
-        if (normRecordType !== "vaccination" && normRecordType !== "vaccine") return false;
-      } else if (normRecordType !== normFilter) {
-        return false;
-      }
-    }
+    if (filterCareType !== "all" && record.record_type !== filterCareType) return false;
 
     // Vet filter
     if (filterVet !== "all" && (record.vet || "") !== filterVet) return false;
 
     // Date range filter
-    if (startDate && record.date < startDate) return false;
-    if (endDate && record.date > endDate) return false;
+    if (startDate && record.date && record.date < startDate) return false;
+    if (endDate && record.date && record.date > endDate) return false;
 
     return true;
   });
@@ -222,6 +291,7 @@ export default function CareHistory() {
       outcome: "Completed",
       notes: "",
     });
+    setMedicationsList([]);
   };
 
   const openAddModal = () => {
@@ -252,6 +322,31 @@ export default function CareHistory() {
       outcome: record.outcome || "Completed",
       notes: record.notes || "",
     });
+
+    let medList: any[] = [];
+    if (record.medications_json) {
+      try {
+        medList = JSON.parse(record.medications_json);
+      } catch {
+        medList = [];
+      }
+    }
+    if (!medList.length && record.medication) {
+      const matchedItem = inventoryItems.find(
+        (i: any) => i.name.toLowerCase().trim() === String(record.medication).toLowerCase().trim()
+      );
+      if (matchedItem) {
+        medList = [
+          {
+            inventory_item_id: matchedItem.id,
+            name: matchedItem.name,
+            quantity: Number(record.medication_qty) || 1,
+            unit: matchedItem.unit || "unit",
+          },
+        ];
+      }
+    }
+    setMedicationsList(medList);
     setShowEditModal(true);
   };
 
@@ -266,6 +361,36 @@ export default function CareHistory() {
       return;
     }
 
+    // Validate medications list
+    for (const med of medicationsList) {
+      if (!med.inventory_item_id) {
+        toast.error("Please select an inventory product for all medication rows.");
+        return;
+      }
+      if (!med.quantity || med.quantity <= 0 || isNaN(med.quantity)) {
+        toast.error(`Quantity for "${med.name || "selected product"}" must be greater than zero.`);
+        return;
+      }
+      const stockInfo = availableStockMap[med.inventory_item_id];
+      if (!stockInfo || stockInfo.totalQty < med.quantity) {
+        toast.error(`Insufficient available stock for ${med.name || "selected item"}.`);
+        return;
+      }
+    }
+
+    // Check duplicate products in the same care record
+    const itemIds = medicationsList.map((m) => m.inventory_item_id).filter(Boolean);
+    if (new Set(itemIds).size !== itemIds.length) {
+      toast.error("Please remove duplicate inventory products from the same care record.");
+      return;
+    }
+
+    const medSummary = medicationsList.length
+      ? medicationsList
+          .map((m) => `${m.name} — ${m.quantity} ${m.unit}${m.notes ? ` (${m.notes})` : ""}`)
+          .join("; ")
+      : form.medication.trim() || null;
+
     setSaving(true);
     const payload = {
       pet_id: form.pet_id,
@@ -278,8 +403,9 @@ export default function CareHistory() {
       diagnosis: form.diagnosis.trim() || null,
       findings: form.findings.trim() || null,
       treatment: form.treatment.trim() || null,
-      medication: form.medication.trim() || null,
-      medication_qty: Number(form.medication_qty) || 1,
+      medication: medSummary,
+      medication_qty: medicationsList.length ? medicationsList.reduce((acc, m) => acc + m.quantity, 0) : Number(form.medication_qty) || 1,
+      medications_json: medicationsList.length ? JSON.stringify(medicationsList) : null,
       vaccine_used: form.vaccine_used.trim() || null,
       next_vax_due: form.next_vax_due || null,
       dewormer_used: form.dewormer_used.trim() || null,
@@ -288,8 +414,16 @@ export default function CareHistory() {
       notes: form.notes.trim() || null,
     };
 
-    const { error } = editingId
-      ? await db.from("care_records").update(payload as any).eq("id", editingId)
+    let targetId = editingId;
+    if (!targetId && form.appointment_id) {
+      const existing = careRecords.find((r: any) => r.appointment_id === form.appointment_id);
+      if (existing) {
+        targetId = existing.id;
+      }
+    }
+
+    const { error } = targetId
+      ? await db.from("care_records").update(payload as any).eq("id", targetId)
       : await db.from("care_records").insert(payload as any);
 
     setSaving(false);
@@ -299,11 +433,16 @@ export default function CareHistory() {
       return;
     }
 
-    toast.success(editingId ? "Care History record updated." : "Care History record saved successfully.");
+    toast.success(targetId ? "Care History record updated." : "Care History record saved successfully.");
     setShowEditModal(false);
     setEditingId(null);
     resetForm();
     invalidate("care_records");
+    invalidate("inventory_items");
+    invalidate("inventory_batches");
+    invalidate("inventory_transactions");
+    invalidate("lab_transactions");
+    invalidate("lab_transaction_items");
   };
 
   const handleDelete = async (id: string) => {
@@ -790,30 +929,103 @@ export default function CareHistory() {
               </div>
             </div>
 
-            {/* Medication Section */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
-                Medication & Inventory Adjustment
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2 space-y-1.5">
-                  <Label>Medication / Product Used</Label>
-                  <Input
-                    value={form.medication}
-                    onChange={(e) => setForm({ ...form, medication: e.target.value })}
-                    placeholder="e.g. Amoxicillin, Eye Drops, Paracetamol"
-                  />
+            {/* Medication & Inventory Products Section */}
+            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Medication & Inventory Products Used
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Select products used from inventory. Quantities will be automatically deducted using FEFO.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Quantity Used</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={form.medication_qty}
-                    onChange={(e) => setForm({ ...form, medication_qty: Math.max(1, parseInt(e.target.value) || 1) })}
-                  />
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddMedicationRow}
+                  className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Product
+                </Button>
               </div>
+
+              {medicationsList.length > 0 ? (
+                <div className="space-y-2.5">
+                  {medicationsList.map((row, idx) => {
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-background p-2 rounded border text-xs">
+                        {/* Product Combobox/Select */}
+                        <div className="col-span-5 space-y-1">
+                          <Label className="text-[11px]">
+                            Product / Medication <span className="text-destructive">*</span>
+                          </Label>
+                          <Select
+                            value={row.inventory_item_id}
+                            onValueChange={(val) => handleMedicationItemChange(idx, val)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select inventory product" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-56">
+                              {inventoryItems.map((item: any) => {
+                                const stockInfo = availableStockMap[item.id] || { totalQty: 0, unit: "unit", category: "supply" };
+                                return (
+                                  <SelectItem key={item.id} value={item.id}>
+                                    {item.name} ({stockInfo.category}) — Available: {stockInfo.totalQty} {stockInfo.unit}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-[11px]">Qty Used *</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 text-xs"
+                            value={row.quantity}
+                            onChange={(e) => handleMedicationQtyChange(idx, parseInt(e.target.value, 10) || 1)}
+                          />
+                        </div>
+
+                        {/* Optional Notes/Instructions */}
+                        <div className="col-span-4 space-y-1">
+                          <Label className="text-[11px]">Instructions / Notes</Label>
+                          <Input
+                            className="h-8 text-xs"
+                            value={row.notes || ""}
+                            onChange={(e) => handleMedicationNotesChange(idx, e.target.value)}
+                            placeholder="e.g. 2 tabs twice daily..."
+                          />
+                        </div>
+
+                        {/* Remove Button */}
+                        <div className="col-span-1 flex justify-end pb-0.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleRemoveMedicationRow(idx)}
+                            title="Remove medication"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4 border border-dashed rounded text-xs text-muted-foreground bg-background/50">
+                  No inventory products added to this care record yet.
+                </div>
+              )}
             </div>
 
             {/* Vaccination Specific Fields */}
@@ -964,17 +1176,48 @@ export default function CareHistory() {
                   )}
                 </div>
 
-                {(selectedRecord.medication || selectedRecord.medication_qty) && (
-                  <div className="space-y-1.5 border-t pt-2">
-                    <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
-                      Medication Prescribed
-                    </h4>
-                    <p>
-                      <strong>Medicine:</strong> {selectedRecord.medication || "N/A"}{" "}
-                      (Qty: {selectedRecord.medication_qty || 1})
-                    </p>
-                  </div>
-                )}
+                {(() => {
+                  let medItems: any[] = [];
+                  if (selectedRecord.medications_json) {
+                    try {
+                      medItems = JSON.parse(selectedRecord.medications_json);
+                    } catch {
+                      medItems = [];
+                    }
+                  }
+                  if (!medItems.length && selectedRecord.medication) {
+                    medItems = [
+                      {
+                        name: selectedRecord.medication,
+                        quantity: selectedRecord.medication_qty || 1,
+                        unit: "unit",
+                      },
+                    ];
+                  }
+
+                  if (!medItems.length) return null;
+
+                  return (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                        Medication & Inventory Products Used
+                      </h4>
+                      <div className="rounded-md border p-2 bg-muted/20 space-y-1.5 text-xs">
+                        {medItems.map((m: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between py-1 border-b last:border-0">
+                            <div>
+                              <span className="font-semibold text-foreground">{m.name}</span>
+                              {m.notes && <span className="text-muted-foreground text-[11px] block">{m.notes}</span>}
+                            </div>
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {m.quantity} {m.unit || "unit"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedRecord.vaccine_used && (
                   <div className="space-y-1.5 border-t pt-2">

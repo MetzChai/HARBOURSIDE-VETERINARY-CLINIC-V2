@@ -94,7 +94,7 @@ export default function ImageUpload({
     <div className="flex items-center gap-3">
       <div className="relative group">
         <Avatar className={sizeClasses[size]}>
-          <AvatarImage src={preview} alt="Profile" />
+          <AvatarImage src={preview || undefined} alt="Profile" />
           <AvatarFallback className="bg-primary/10 text-primary font-bold">
             {fallback}
           </AvatarFallback>

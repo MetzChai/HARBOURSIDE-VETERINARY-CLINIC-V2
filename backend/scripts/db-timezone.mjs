@@ -2,9 +2,8 @@ export const PH_TIMEZONE = "Asia/Manila";
 
 const PG_TIMEZONE_OPTIONS = "options=-c%20TimeZone%3DAsia%2FManila";
 
-/** True when a value is not a valid PostgreSQL timezone name (e.g. Windows "GMT+0800"). */
-export function isInvalidPgTimezone(value: string): boolean {
-  const tz = value.trim();
+export function isInvalidPgTimezone(value) {
+  const tz = String(value ?? "").trim();
   if (!tz) return true;
   if (/^gmt/i.test(tz)) return true;
   if (/^[+-]\d{2}:?\d{2}$/.test(tz)) return true;
@@ -12,9 +11,8 @@ export function isInvalidPgTimezone(value: string): boolean {
   return false;
 }
 
-/** Force Node/libpq to use a PostgreSQL-compatible IANA timezone. */
-export function ensurePhilippineTimezone(): void {
-  for (const key of ["TZ", "PGTZ"] as const) {
+export function ensurePhilippineTimezone() {
+  for (const key of ["TZ", "PGTZ"]) {
     const current = process.env[key];
     if (!current || isInvalidPgTimezone(current)) {
       process.env[key] = PH_TIMEZONE;
@@ -22,7 +20,7 @@ export function ensurePhilippineTimezone(): void {
   }
 }
 
-function stripTimezoneQueryParams(url: string): string {
+function stripTimezoneQueryParams(url) {
   const qIndex = url.indexOf("?");
   if (qIndex === -1) return url;
 
@@ -38,20 +36,27 @@ function stripTimezoneQueryParams(url: string): string {
   return kept.length ? `${base}?${kept.join("&")}` : base;
 }
 
-/** Sanitize DATABASE_URL so PostgreSQL never receives GMT+0800 as a timezone name. */
-export function withDatabaseTimezone(url: string): string {
+export function withDatabaseTimezone(url) {
   if (!url) return url;
   ensurePhilippineTimezone();
-
   const cleanUrl = stripTimezoneQueryParams(url);
   return cleanUrl.includes("?")
     ? `${cleanUrl}&${PG_TIMEZONE_OPTIONS}`
     : `${cleanUrl}?${PG_TIMEZONE_OPTIONS}`;
 }
 
-export function resolveDatabaseUrl(): string {
+export function resolveDatabaseUrl() {
   ensurePhilippineTimezone();
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
   return withDatabaseTimezone(url);
+}
+
+export function bindPoolTimezone(pool) {
+  pool.on("connect", (client) => {
+    void client.query(`SET TIME ZONE '${PH_TIMEZONE}'`);
+  });
+  pool.on("acquire", (client) => {
+    void client.query(`SET TIME ZONE '${PH_TIMEZONE}'`);
+  });
 }

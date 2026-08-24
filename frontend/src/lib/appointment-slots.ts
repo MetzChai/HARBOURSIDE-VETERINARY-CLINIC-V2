@@ -18,12 +18,11 @@ export const APPOINTMENT_SLOTS = [
 export const VET_OPTIONS = ["Dr. Rivera", "Dr. Tan"] as const;
 
 export const APPOINTMENT_STATUSES = [
-  "Pending",
-  "Approved",
+  "Requested",
   "Scheduled",
   "Completed",
+  "Missed",
   "Cancelled",
-  "No Show",
 ] as const;
 
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];

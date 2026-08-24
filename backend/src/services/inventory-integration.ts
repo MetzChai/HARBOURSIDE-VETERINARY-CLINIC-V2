@@ -65,7 +65,45 @@ export function buildInventoryDeductionPlan(
   const plan: InventoryDeductionPlan = [];
   const reqQty = Math.max(1, Number(row.medication_qty ?? 1));
 
-  // Check for direct explicit item ID passed in row payload
+  // 1. Check if structured multi-medication array is passed in payload
+  let rawMedications = row.medications_json ?? row.medications ?? row.items_used ?? row.medication_items;
+  if (typeof rawMedications === "string" && rawMedications.trim().startsWith("[")) {
+    try {
+      rawMedications = JSON.parse(rawMedications);
+    } catch {
+      rawMedications = null;
+    }
+  }
+
+  if (Array.isArray(rawMedications) && rawMedications.length > 0) {
+    for (const entry of rawMedications) {
+      if (!entry || typeof entry !== "object") continue;
+      const itemId = String(
+        (entry as any).inventory_item_id ??
+        (entry as any).itemId ??
+        (entry as any).id ??
+        ""
+      ).trim();
+      const qty = Math.max(1, Number((entry as any).quantity ?? (entry as any).qty ?? 1));
+
+      if (itemId) {
+        const item = items.find((c) => c.id === itemId);
+        if (item) {
+          plan.push({
+            itemId: item.id,
+            quantity: qty,
+            reason: "Used for Care History",
+          });
+        }
+      }
+    }
+
+    if (plan.length > 0) {
+      return validateInventoryDeductionPlan(plan, items);
+    }
+  }
+
+  // 2. Check for direct explicit item ID passed in row payload
   const directItemId = String(
     row.inventory_item_id ??
     row.item_id ??
@@ -158,13 +196,13 @@ export function validateInventoryDeductionPlan(
     if (isExpired(item)) {
       return {
         plan: [],
-        error: `Insufficient inventory. Selected item "${item.name}" is expired.`,
+        error: `Insufficient available stock for ${item.name}. (Selected item is expired)`,
       };
     }
     if (Number(item.quantity ?? 0) < step.quantity) {
       return {
         plan: [],
-        error: `Insufficient inventory. Selected item "${item.name}" has insufficient stock (Available: ${item.quantity ?? 0}, Required: ${step.quantity}).`,
+        error: `Insufficient available stock for ${item.name}.`,
       };
     }
   }

@@ -361,17 +361,48 @@ export default function UserCareHistory() {
                   )}
                 </div>
 
-                {(selectedRecord.medication || selectedRecord.medication_qty) && (
-                  <div className="space-y-1.5 border-t pt-2">
-                    <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
-                      Prescribed Medication
-                    </h4>
-                    <p>
-                      <strong>Medicine:</strong> {selectedRecord.medication || "N/A"}{" "}
-                      (Qty: {selectedRecord.medication_qty || 1})
-                    </p>
-                  </div>
-                )}
+                {(() => {
+                  let medItems: any[] = [];
+                  if (selectedRecord.medications_json) {
+                    try {
+                      medItems = JSON.parse(selectedRecord.medications_json);
+                    } catch {
+                      medItems = [];
+                    }
+                  }
+                  if (!medItems.length && selectedRecord.medication) {
+                    medItems = [
+                      {
+                        name: selectedRecord.medication,
+                        quantity: selectedRecord.medication_qty || 1,
+                        unit: "unit",
+                      },
+                    ];
+                  }
+
+                  if (!medItems.length) return null;
+
+                  return (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                        Prescribed Medication & Products
+                      </h4>
+                      <div className="rounded-md border p-2 bg-muted/20 space-y-1.5 text-xs">
+                        {medItems.map((m: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between py-1 border-b last:border-0">
+                            <div>
+                              <span className="font-semibold text-foreground">{m.name}</span>
+                              {m.notes && <span className="text-muted-foreground text-[11px] block">{m.notes}</span>}
+                            </div>
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {m.quantity} {m.unit || "unit"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedRecord.vaccine_used && (
                   <div className="space-y-1.5 border-t pt-2">

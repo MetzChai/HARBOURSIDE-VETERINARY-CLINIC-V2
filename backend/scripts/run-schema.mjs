@@ -3,6 +3,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { Pool } from "@neondatabase/serverless";
 import { loadEnv } from "./load-env.mjs";
+import { bindPoolTimezone, resolveDatabaseUrl } from "./db-timezone.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, "..", "db", "schema.sql");
@@ -21,7 +22,8 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString: url });
+  const pool = new Pool({ connectionString: resolveDatabaseUrl() });
+  bindPoolTimezone(pool);
 
   try {
     await pool.query("ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'staff'");

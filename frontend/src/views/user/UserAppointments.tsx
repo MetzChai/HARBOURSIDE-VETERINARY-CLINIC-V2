@@ -93,7 +93,7 @@ export default function UserAppointments() {
       time: form.time,
       reason: form.reason.trim(),
       care_type: form.appointment_type,
-      status: "Pending",
+      status: "Requested",
       type: "request",
     } as any);
 
