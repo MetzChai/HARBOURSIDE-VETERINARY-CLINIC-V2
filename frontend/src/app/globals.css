@@ -15,7 +15,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 192 6% 19%;
 
-    --primary: 180 69% 39%;
+    --primary: 212 54% 23%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 212 35% 93%;
@@ -38,9 +38,12 @@
 
     --border: 210 15% 88%;
     --input: 210 15% 88%;
-    --ring: 180 69% 39%;
+    --ring: 212 54% 23%;
 
-    --radius: 0.375rem;
+    --radius: 0.5rem;
+
+    --info: 180 69% 39%;
+    --info-foreground: 0 0% 100%;
 
     --sidebar-background: 212 48% 23%;
     --sidebar-foreground: 0 0% 92%;
@@ -98,6 +101,33 @@
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply space-y-6 animate-fade-in;
+  }
+
+  .data-table-wrap {
+    @apply rounded-lg border border-border/60 bg-card shadow-sm overflow-hidden;
+  }
+
+  .data-table-wrap thead th,
+  .section-card thead th {
+    @apply bg-brand-navy-light/70 text-brand-navy font-semibold;
+  }
+
+  .section-card {
+    @apply rounded-lg border border-border/60 bg-card shadow-sm;
+  }
+
+  .form-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  .auth-link {
+    @apply text-primary hover:text-primary/80 font-medium transition-colors;
   }
 }
 

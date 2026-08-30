@@ -16,6 +16,9 @@ import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { isOnOrBeforeTodayPH, formatNowPH } from "@/lib/datetime";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { EmptyState } from "@/components/EmptyState";
 
 const STATUSES = ["Scheduled", "Completed", "Due Follow-up"] as const;
 
@@ -82,10 +85,10 @@ export default function Dewormings() {
     const w = window.open("", "_blank"); if (!w) return;
     w.document.write(`
       <html><head><title>Deworming Record</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;color:#222}h1{color:#0d7d6f;margin-bottom:0}
+      <style>body{font-family:Arial,sans-serif;padding:40px;color:#222}h1{color:#1B3A5C;margin-bottom:0}
       h2{color:#555;font-weight:normal;margin-top:4px}
       .row{display:flex;padding:8px 0;border-bottom:1px solid #eee}
-      .label{width:180px;font-weight:bold;color:#0d7d6f}</style></head>
+      .label{width:180px;font-weight:bold;color:#1B3A5C}</style></head>
       <body><h1>Harbourside Veterinary Clinic</h1><h2>Deworming Record</h2>
       <div class="row"><div class="label">Pet</div><div>${petName(r.pet_id)}</div></div>
       <div class="row"><div class="label">Product</div><div>${r.product ?? "—"}</div></div>
@@ -102,9 +105,9 @@ export default function Dewormings() {
     const w = window.open("", "_blank"); if (!w) return;
     w.document.write(`
       <html><head><title>Deworming Records</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#0d7d6f}
+      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
       table{width:100%;border-collapse:collapse;margin-top:16px}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#e6f4f1;color:#0d7d6f}</style></head>
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}</style></head>
       <body><h1>Harbourside Veterinary Clinic</h1><h2>Deworming Records</h2>
       <table><tr><th>Pet</th><th>Product</th><th>Date Given</th><th>Next Due</th><th>Vet</th><th>Status</th></tr>
       ${rows.map((r) => `<tr><td>${petName(r.pet_id)}</td><td>${r.product ?? "—"}</td><td>${r.date_given ? formatDate(r.date_given) : "—"}</td><td>${r.next_due ? formatDate(r.next_due) : "—"}</td><td>${r.vet ?? "—"}</td><td>${effectiveStatus(r)}</td></tr>`).join("")}
@@ -113,13 +116,12 @@ export default function Dewormings() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold flex items-center gap-2"><Bug className="h-6 w-6 text-primary" /> Deworming</h1>
-          <p className="text-muted-foreground text-sm">{rows.length} deworming records</p>
-        </div>
-        <div className="flex gap-2">
+    <div className="page-container">
+      <PageHeader
+        title="Deworming"
+        description={`${rows.length} deworming records`}
+        actions={
+          <div className="flex gap-2">
           <Button variant="outline" onClick={printAll}><Printer className="h-4 w-4 mr-1" /> Print All</Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" /> Add Record</Button></DialogTrigger>
@@ -156,11 +158,12 @@ export default function Dewormings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {reminders.length > 0 && (
-        <Card className="border-0 shadow-sm bg-destructive/5">
+        <Card className="border-destructive/20 shadow-sm bg-red-50/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 font-medium text-destructive mb-2">
               <BellRing className="h-4 w-4" /> Follow-up Reminders ({reminders.length})
@@ -182,10 +185,12 @@ export default function Dewormings() {
         <Input placeholder="Search by pet or product..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            <div className="p-8">
+              <PageSkeleton rows={6} />
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -217,7 +222,13 @@ export default function Dewormings() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="p-0">
+                      <EmptyState icon={Bug} title="No records found." description="Add a deworming record or adjust your search." />
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}

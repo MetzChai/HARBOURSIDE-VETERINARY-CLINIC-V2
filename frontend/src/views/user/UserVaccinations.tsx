@@ -3,19 +3,22 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Syringe } from "lucide-react";
 import { useMyVaccinations } from "@/hooks/useOwnerData";
 import { isOnOrBeforeTodayPH } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function UserVaccinations() {
   const { data: vaccinations = [] } = useMyVaccinations();
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="font-heading text-2xl font-bold">Vaccinations</h2>
-        <p className="text-muted-foreground text-sm">Track your pets' vaccination records</p>
-      </div>
-      <Card className="shadow-sm">
+    <div className="page-container">
+      <PageHeader
+        title="Vaccinations"
+        description="Track your pets' vaccination records and upcoming due dates"
+      />
+      <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -29,7 +32,15 @@ export default function UserVaccinations() {
             </TableHeader>
             <TableBody>
               {vaccinations.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No vaccination records yet.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={5} className="p-0">
+                    <EmptyState
+                      icon={Syringe}
+                      title="No vaccination records yet."
+                      description="Clinic vaccination history for your pets will appear here."
+                    />
+                  </TableCell>
+                </TableRow>
               )}
               {vaccinations.map((v: any) => {
                 const isDue = v.next_due && isOnOrBeforeTodayPH(v.next_due);
@@ -40,7 +51,7 @@ export default function UserVaccinations() {
                     <TableCell>{v.date_given}</TableCell>
                     <TableCell>{v.next_due}</TableCell>
                     <TableCell>
-                      <Badge variant={isDue ? "destructive" : "default"}>
+                      <Badge variant={isDue ? "destructive" : "success"}>
                         {isDue ? "Due" : "Up to date"}
                       </Badge>
                     </TableCell>
@@ -54,4 +65,3 @@ export default function UserVaccinations() {
     </div>
   );
 }
-

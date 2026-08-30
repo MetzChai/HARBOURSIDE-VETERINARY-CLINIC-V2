@@ -1,23 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   PawPrint,
   Calendar,
   Syringe,
-  Printer,
   PlusCircle,
   FileText,
-  MessageSquare,
   Clock,
-  CheckCircle2,
-  Bell,
   HeartPulse,
   Sparkles,
 } from "lucide-react";
@@ -32,7 +27,9 @@ import {
 import { formatAge, formatDate } from "@/lib/age";
 import { isWithinDaysFromTodayPH, daysFromTodayPH } from "@/lib/datetime";
 import { getStatusBadgeClass } from "@/lib/appointment-slots";
-import { useOwnerNotifications } from "@/hooks/useNotifications";
+import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function UserDashboard() {
   const { data: owner } = useMyOwner();
@@ -42,11 +39,13 @@ export default function UserDashboard() {
   const { data: dewormings = [] } = useMyDewormings();
   const { data: careRecords = [] } = useMyCareRecords();
 
-  const { notifications = [] } = useOwnerNotifications();
-  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
-
   const upcomingAppointments = useMemo(
     () => appointments.filter((a: any) => (daysFromTodayPH(a.date) ?? -1) >= 0 && a.status !== "Cancelled"),
+    [appointments]
+  );
+
+  const requestedAppointments = useMemo(
+    () => appointments.filter((a: any) => a.status === "Requested" || a.status === "Pending"),
     [appointments]
   );
 
@@ -67,108 +66,59 @@ export default function UserDashboard() {
       case "under treatment":
         return <Badge className="bg-amber-500 text-white">Under Treatment</Badge>;
       case "recovered":
-        return <Badge className="bg-blue-600 text-white">Recovered</Badge>;
+        return <Badge className="bg-brand-teal text-white">Recovered</Badge>;
       case "deceased":
         return <Badge variant="destructive">Deceased</Badge>;
       default:
-        return <Badge className="bg-emerald-600 text-white">Healthy</Badge>;
+        return <Badge className="bg-brand-green text-white">Healthy</Badge>;
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Header & Quick Action Buttons */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-heading text-2xl font-bold">Welcome back, {owner?.name ?? "Pet Owner"}</h2>
-          <p className="text-muted-foreground text-sm">
-            Overview of your registered pets, medical history, and upcoming clinic visits
-          </p>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/user/appointments">
-            <Button size="sm" className="h-9">
-              <PlusCircle className="h-4 w-4 mr-1.5" /> Request Appointment
+    <div className="page-container pb-10">
+      <PageHeader
+        title={`Welcome back, ${owner?.name ?? "Pet Owner"}`}
+        description="Your pets, upcoming visits, and recent care records"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" asChild>
+              <Link href="/user/appointments">
+                <PlusCircle className="h-4 w-4" /> Request Appointment
+              </Link>
             </Button>
-          </Link>
-          <Link href="/user/care-history">
-            <Button size="sm" variant="outline" className="h-9">
-              <FileText className="h-4 w-4 mr-1.5 text-primary" /> View Care History
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/user/care-history">
+                <FileText className="h-4 w-4" /> View Care History
+              </Link>
             </Button>
-          </Link>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9 text-teal-700 bg-teal-50 border-teal-200 hover:bg-teal-100"
-            onClick={() => {
-              // Trigger PawBot chatbot opening if available or toast
-              const chatBtn = document.querySelector('[data-chat-toggle="true"]') as HTMLButtonElement;
-              if (chatBtn) chatBtn.click();
-            }}
-          >
-            <Sparkles className="h-4 w-4 mr-1.5 text-teal-600" /> Open PawBot AI
-          </Button>
-        </div>
-      </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const chatBtn = document.querySelector('[data-chat-toggle="true"]') as HTMLButtonElement;
+                if (chatBtn) chatBtn.click();
+              }}
+            >
+              <Sparkles className="h-4 w-4" /> Open PawBot
+            </Button>
+          </div>
+        }
+      />
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <PawPrint className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-heading">{pets.length}</p>
-              <p className="text-xs text-muted-foreground font-medium">My Registered Pets</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-              <Calendar className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-heading">{upcomingAppointments.length}</p>
-              <p className="text-xs text-muted-foreground font-medium">Upcoming Appointments</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-              <Syringe className="h-6 w-6 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-heading">{vaccinesDue.length}</p>
-              <p className="text-xs text-muted-foreground font-medium">Upcoming Vaccinations</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-              <HeartPulse className="h-6 w-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-heading">{dewormingsDue.length}</p>
-              <p className="text-xs text-muted-foreground font-medium">Upcoming Deworming</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <StatCard title="My Pets" value={pets.length} icon={PawPrint} variant="default" />
+        <StatCard title="Upcoming Appointments" value={upcomingAppointments.length} icon={Calendar} variant="info" />
+        <StatCard title="Requested Appointments" value={requestedAppointments.length} icon={Clock} variant="warning" />
+        <StatCard title="Recent Care Records" value={careRecords.length} icon={FileText} variant="success" />
+        <StatCard title="Vaccines Due" value={vaccinesDue.length} icon={Syringe} variant="warning" />
+        <StatCard title="Deworming Due" value={dewormingsDue.length} icon={HeartPulse} variant="success" />
       </div>
 
       {/* My Pets Grid */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="font-heading text-base flex items-center gap-2">
-            <PawPrint className="h-4 w-4 text-primary" /> My Pets
+          <CardTitle className="flex items-center gap-2">
+            <PawPrint className="h-4 w-4 text-brand-teal" /> My Pets
           </CardTitle>
           <Link href="/user/pets">
             <Button variant="ghost" size="sm" className="text-xs">
@@ -178,18 +128,25 @@ export default function UserDashboard() {
         </CardHeader>
         <CardContent>
           {pets.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No pets registered under your account yet. Please contact the clinic staff to register your pets.
-            </p>
+            <EmptyState
+              icon={PawPrint}
+              title="No pets registered yet"
+              description="Please contact the clinic staff to register your pets."
+            />
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {pets.map((pet: any) => (
-              <Card key={pet.id} className="border shadow-none hover:border-primary/40 transition-colors">
+              <Card key={pet.id} className="hover:border-brand-teal/40 transition-colors">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
-                        {pet.name[0]}
+                      <div className="h-12 w-12 rounded-full bg-brand-navy-light flex items-center justify-center font-heading font-bold text-brand-navy overflow-hidden">
+                        {pet.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={pet.image_url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          pet.name[0]
+                        )}
                       </div>
                       <div>
                         <h4 className="font-bold text-base">{pet.name}</h4>
@@ -205,6 +162,9 @@ export default function UserDashboard() {
                     <div>Gender: <span className="font-medium text-foreground">{pet.gender || "—"}</span></div>
                     <div>Age: <span className="font-medium text-foreground">{pet.dob ? formatAge(pet.dob) : "—"}</span></div>
                   </div>
+                  <Button size="sm" variant="outline" className="w-full" asChild>
+                    <Link href="/user/pets">View Profile</Link>
+                  </Button>
                 </CardContent>
               </Card>
             ))}
@@ -213,10 +173,10 @@ export default function UserDashboard() {
       </Card>
 
       {/* Upcoming Appointments Table */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="font-heading text-base flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-primary" /> Upcoming Appointments
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-brand-teal" /> Upcoming Appointments
           </CardTitle>
           <Link href="/user/appointments">
             <Button variant="ghost" size="sm" className="text-xs">
@@ -270,10 +230,10 @@ export default function UserDashboard() {
       </Card>
 
       {/* Recent Care History Section */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="font-heading text-base flex items-center gap-2">
-            <FileText className="h-4 w-4 text-primary" /> Recent Medical Care History
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-brand-teal" /> Recent Care Records
           </CardTitle>
           <Link href="/user/care-history">
             <Button variant="ghost" size="sm" className="text-xs">

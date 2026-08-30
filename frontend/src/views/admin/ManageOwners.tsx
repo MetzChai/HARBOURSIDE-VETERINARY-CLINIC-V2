@@ -42,6 +42,8 @@ import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type OwnerRow = {
   id: string;
@@ -325,28 +327,29 @@ export default function ManageOwners() {
     w.print();
   };
 
+  if (isLoading) {
+    return <PageSkeleton rows={8} />;
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Manage Pet Owners</h1>
-          <p className="text-muted-foreground text-sm">
-            Register clients, manage profiles, walk-in records, and billing history
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => openAdd(true)}>
-            <Plus className="h-4 w-4 mr-1.5 text-teal-600" /> Walk-in Client
-          </Button>
-          <Button onClick={() => openAdd(false)}>
-            <Plus className="h-4 w-4 mr-1.5" /> Add Owner
-          </Button>
-        </div>
-      </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Manage Pet Owners"
+        description="Register clients, manage profiles, walk-in records, and billing history"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => openAdd(true)}>
+              <Plus className="h-4 w-4 mr-1.5 text-brand-teal" /> Walk-in Client
+            </Button>
+            <Button onClick={() => openAdd(false)}>
+              <Plus className="h-4 w-4 mr-1.5" /> Add Owner
+            </Button>
+          </div>
+        }
+      />
 
       {/* Filter & Search Card */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Search */}
@@ -463,8 +466,8 @@ export default function ManageOwners() {
                             variant="outline"
                             className={
                               owner.is_walk_in
-                                ? "bg-teal-50 text-teal-700 border-teal-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
+                                ? "bg-brand-teal-light text-brand-teal border-brand-teal/30"
+                                : "bg-brand-navy-light text-brand-navy border-brand-navy/20"
                             }
                           >
                             {owner.is_walk_in ? "Walk-in" : "Online"}
@@ -475,8 +478,8 @@ export default function ManageOwners() {
                             variant="outline"
                             className={
                               (owner.account_status || "Active").toLowerCase() === "active"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-rose-50 text-rose-700 border-rose-200"
+                                ? "bg-brand-green-light text-brand-green border-brand-green/30"
+                                : "bg-red-50 text-red-800 border-red-200"
                             }
                           >
                             {owner.account_status || "Active"}

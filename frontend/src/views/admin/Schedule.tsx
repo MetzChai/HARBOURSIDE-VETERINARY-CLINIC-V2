@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,8 @@ import AppointmentCalendar from "@/components/AppointmentCalendar";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 export default function Schedule() {
   const { role, user } = useAuth();
@@ -383,24 +385,16 @@ export default function Schedule() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return <PageSkeleton rows={8} showStats />;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Appointment Scheduling & Management</h1>
-          <p className="text-muted-foreground text-sm">
-            Book, approve, reschedule, and complete clinic appointments (Philippine Time)
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="page-container">
+      <PageHeader
+        title="Appointment Schedule"
+        description="Book, approve, reschedule, and complete clinic appointments (Philippine Time)"
+        actions={
+        <div className="flex flex-wrap items-center gap-2">
           {/* View Toggle */}
           <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border">
             <Button
@@ -428,7 +422,8 @@ export default function Schedule() {
             <Plus className="h-4 w-4 mr-1.5" /> Book Appointment
           </Button>
         </div>
-      </div>
+        }
+      />
 
       {/* Appointment Dashboard Metric Cards */}
       <AppointmentDashboardCards appointments={appointments} />
@@ -623,7 +618,7 @@ export default function Schedule() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                className="h-7 text-xs bg-brand-navy-light text-brand-navy hover:bg-brand-navy/10"
                                 onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
                               >
                                 <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
@@ -634,7 +629,7 @@ export default function Schedule() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                className="h-7 text-xs bg-brand-green-light text-brand-green hover:bg-brand-green/10"
                                 onClick={() => updateAppointmentStatus(a.id, "Completed")}
                               >
                                 Complete
@@ -898,7 +893,7 @@ export default function Schedule() {
                       setShowViewModal(false);
                       updateAppointmentStatus(selectedAppointment.id, "Completed");
                     }}
-                    className="bg-emerald-600 hover:bg-emerald-700"
+                    className="bg-brand-green hover:bg-brand-green/90"
                   >
                     Mark as Completed
                   </Button>

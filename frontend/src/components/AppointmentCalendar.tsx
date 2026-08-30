@@ -136,10 +136,10 @@ export default function AppointmentCalendar({
   });
 
   return (
-    <Card className="border-0 shadow-sm">
+    <Card>
       <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <CalendarIcon className="h-5 w-5 text-primary" />
+          <CalendarIcon className="h-5 w-5 text-brand-teal" />
           <CardTitle className="text-lg font-bold font-heading">{monthLabel}</CardTitle>
         </div>
 
@@ -233,9 +233,9 @@ export default function AppointmentCalendar({
                           key={a.id}
                           type="button"
                           onClick={() => onSelectAppointment(a)}
-                          className="w-full text-left p-1 rounded border text-[11px] font-medium leading-tight truncate hover:opacity-80 transition-opacity bg-background shadow-2xs block"
+                          className={`w-full text-left p-1 rounded border text-[11px] font-medium leading-tight truncate hover:opacity-80 transition-opacity bg-background shadow-2xs block ${getStatusBadgeClass(a.status)}`}
                         >
-                          <span className="font-semibold text-primary">{a.time || "—"}</span> {getPetName(a)}
+                          <span className="font-semibold">{a.time || "—"}</span> {getPetName(a)}
                         </button>
                       ))}
                       {dayApts.length > 3 && (

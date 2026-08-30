@@ -1,6 +1,6 @@
 "use client";
 
-import { PawPrint, Calendar, Syringe, LogOut, LayoutDashboard, Heart, DollarSign, MessageSquare } from "lucide-react";
+import { PawPrint, Calendar, LogOut, LayoutDashboard, Heart, DollarSign, MessageSquare, Bot, UserCircle } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRouter } from "next/navigation";
@@ -22,10 +22,11 @@ import {
 const mainItems = [
   { title: "Dashboard", url: "/user", icon: LayoutDashboard },
   { title: "My Pets", url: "/user/pets", icon: PawPrint },
-  { title: "Care History", url: "/user/care-history", icon: Heart },
   { title: "Appointments", url: "/user/appointments", icon: Calendar },
+  { title: "Records", url: "/user/care-history", icon: Heart },
   { title: "Transactions", url: "/user/transactions", icon: DollarSign },
   { title: "Messages", url: "/user/messages", icon: MessageSquare },
+  { title: "Profile", url: "/user/profile", icon: UserCircle },
 ];
 
 export function UserSidebar() {
@@ -40,8 +41,8 @@ export function UserSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="p-4">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="p-4 border-b border-sidebar-border/50">
         <BrandLogo
           size="sm"
           showText
@@ -65,7 +66,7 @@ export function UserSidebar() {
                       href={item.url}
                       end={item.url === "/user"}
                       className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium border-l-2 border-sidebar-primary"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {!collapsed && <span>{item.title}</span>}
@@ -81,7 +82,19 @@ export function UserSidebar() {
       <SidebarFooter className="p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout} className="text-sidebar-foreground/50 hover:text-destructive transition-colors">
+            <SidebarMenuButton
+              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => {
+                const chatBtn = document.querySelector('[data-chat-toggle="true"]') as HTMLButtonElement | null;
+                chatBtn?.click();
+              }}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>PawBot</span>}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground">
               <LogOut className="h-4 w-4 shrink-0" />
               {!collapsed && <span>Logout</span>}
             </SidebarMenuButton>

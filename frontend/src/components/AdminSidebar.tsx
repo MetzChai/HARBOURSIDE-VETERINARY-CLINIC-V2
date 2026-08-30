@@ -1,6 +1,6 @@
 "use client";
 
-import { PawPrint, Users, Calendar, Heart, Package, FileText, LogOut, LayoutDashboard, Bug, Receipt, MessageSquare, UserCog } from "lucide-react";
+import { PawPrint, Users, Calendar, Heart, Package, FileText, LogOut, LayoutDashboard, Receipt, MessageSquare, UserCog, Bot, Settings } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRouter } from "next/navigation";
@@ -30,7 +30,8 @@ const mainItems: { title: string; url: string; icon: typeof LayoutDashboard; rol
   { title: "Lab & Transactions", url: "/admin/transactions", icon: Receipt, roles: ["admin", "staff"] },
   { title: "Communications", url: "/admin/messages", icon: MessageSquare, roles: ["admin", "staff"] },
   { title: "Reports", url: "/admin/reports", icon: FileText, roles: ["admin"] },
-  { title: "Accounts", url: "/admin/staff", icon: UserCog, roles: ["admin"] },
+  { title: "Staff Management", url: "/admin/staff", icon: UserCog, roles: ["admin"] },
+  { title: "Settings", url: "/admin/profile", icon: Settings, roles: ["admin", "staff"] },
 ];
 
 export function AdminSidebar() {
@@ -46,8 +47,8 @@ export function AdminSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="p-4">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="p-4 border-b border-sidebar-border/50">
         <BrandLogo
           size="sm"
           showText
@@ -71,7 +72,7 @@ export function AdminSidebar() {
                       href={item.url}
                       end={item.url === "/admin"}
                       className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium border-l-2 border-sidebar-primary"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {!collapsed && <span>{item.title}</span>}
@@ -86,6 +87,18 @@ export function AdminSidebar() {
 
       <SidebarFooter className="p-2">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => {
+                const chatBtn = document.querySelector('[data-chat-toggle="true"]') as HTMLButtonElement | null;
+                chatBtn?.click();
+              }}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>PawBot</span>}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground">
               <LogOut className="h-4 w-4 shrink-0" />

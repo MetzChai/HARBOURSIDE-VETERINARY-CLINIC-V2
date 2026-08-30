@@ -57,6 +57,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/db-client";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
+import { EmptyState } from "@/components/EmptyState";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 const COLORS = ["#1B3A5C", "#1FA8A8", "#2E7D32", "#C62828", "#8E24AA", "#F57C00"];
 
@@ -82,7 +86,7 @@ export default function AdminDashboard() {
   const isAdmin = role === "admin";
   const invalidate = useInvalidate();
 
-  const { data: pets = [] } = useRows<any>("pets");
+  const { data: pets = [], isLoading } = useRows<any>("pets");
   const { data: owners = [] } = useRows<any>("owners");
   const { data: staffAccounts = [] } = useRows<any>("profiles");
   const { data: appointments = [] } = useRows<any>("appointments", { orderBy: "date", ascending: false });
@@ -156,15 +160,38 @@ export default function AdminDashboard() {
   const ownerName = (id?: string) => owners.find((o) => o.id === id)?.name ?? "—";
 
   // Summary Stat Cards Data (8 simplified cards)
+  const completedAppointments = useMemo(
+    () => appointments.filter((a) => isAppointmentCompleted(a.status)),
+    [appointments]
+  );
+
+  const upcomingAppointments = useMemo(
+    () =>
+      appointments.filter(
+        (a) => (daysFromTodayPH(a.date) ?? -1) > 0 && a.status !== "Cancelled" && a.status !== "Completed"
+      ),
+    [appointments]
+  );
+
+  const outOfStockItems = useMemo(
+    () => inventory.filter((i) => (i.quantity ?? 0) <= 0),
+    [inventory]
+  );
+
+  const expiredItems = useMemo(
+    () => inventory.filter((i) => i.expiration_date && isBeforeTodayPH(i.expiration_date)),
+    [inventory]
+  );
+
   const summaryCards = [
-    { label: "Total Pets", value: pets.length, icon: PawPrint, color: "text-primary bg-primary/10" },
-    { label: "Pet Owners", value: owners.length, icon: Users, color: "text-teal-600 bg-teal-50" },
-    { label: "Today's Appointments", value: todayAppointments.length, icon: Calendar, color: "text-blue-600 bg-blue-50" },
-    { label: "Pending Appointments", value: pendingRequests.length, icon: Clock, color: "text-amber-600 bg-amber-50" },
-    { label: "Active Care Records", value: care.length, icon: FileText, color: "text-indigo-600 bg-indigo-50" },
-    { label: "Healthy Pets", value: healthyPetsCount, icon: HeartPulse, color: "text-emerald-600 bg-emerald-50" },
-    { label: "Low Stock Items", value: lowStockItems.length, icon: AlertTriangle, color: "text-rose-600 bg-rose-50" },
-    { label: "Total Inventory Items", value: inventory.length, icon: Package, color: "text-purple-600 bg-purple-50" },
+    { label: "Total Pets", value: pets.length, icon: PawPrint, variant: "default" as const },
+    { label: "Total Owners", value: owners.length, icon: Users, variant: "info" as const },
+    { label: "Today's Appointments", value: todayAppointments.length, icon: Calendar, variant: "info" as const },
+    { label: "Requested Appointments", value: pendingRequests.length, icon: Clock, variant: "warning" as const },
+    { label: "Completed Appointments", value: completedAppointments.length, icon: CheckCircle2, variant: "success" as const },
+    { label: "Inventory Items", value: inventory.length, icon: Package, variant: "default" as const },
+    { label: "Low Stock", value: lowStockItems.length, icon: AlertTriangle, variant: "warning" as const },
+    { label: "Expiring Inventory", value: expiringItems.length, icon: ShieldAlert, variant: "danger" as const },
   ];
 
   // Analytics Chart Data
@@ -299,57 +326,53 @@ export default function AdminDashboard() {
     }
   };
 
+  if (isLoading) {
+    return <PageSkeleton rows={8} showStats />;
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Header & Quick Action Buttons */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Clinic Dashboard & Operations</h1>
-          <p className="text-muted-foreground text-sm">Real-time clinic metrics, analytics, and shortcuts</p>
-        </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Clinic Dashboard"
+        description="Real-time operations, appointments, inventory alerts, and clinic analytics"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/admin/pets">
+                <PawPrint className="h-4 w-4" /> Register Pet
+              </Link>
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/admin/schedule">
+                <PlusCircle className="h-4 w-4" /> Book Appointment
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/admin/care-history">
+                <FileText className="h-4 w-4" /> Record Care History
+              </Link>
+            </Button>
+          </div>
+        }
+      />
 
-        {/* Quick Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/admin/pets">
-            <Button size="sm" variant="outline" className="h-9">
-              <PawPrint className="h-4 w-4 mr-1.5 text-primary" /> Register Pet
-            </Button>
-          </Link>
-          <Link href="/admin/schedule">
-            <Button size="sm" variant="outline" className="h-9">
-              <PlusCircle className="h-4 w-4 mr-1.5 text-blue-600" /> Book Appointment
-            </Button>
-          </Link>
-          <Link href="/admin/care-history">
-            <Button size="sm" variant="outline" className="h-9">
-              <FileText className="h-4 w-4 mr-1.5 text-indigo-600" /> Record Care History
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Summary Statistic Cards (8 Cards) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
-          <Card key={card.label} className="border-0 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-            <CardContent className="p-4 flex items-center gap-3.5">
-              <div className={`p-2.5 rounded-xl shrink-0 ${card.color}`}>
-                <card.icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-2xl font-bold font-heading truncate tracking-tight">{card.value}</p>
-                <p className="text-xs text-muted-foreground truncate">{card.label}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            key={card.label}
+            title={card.label}
+            value={card.value}
+            icon={card.icon}
+            variant={card.variant}
+          />
         ))}
       </div>
 
       {/* Analytics Tabs Section */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-bold font-heading flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" /> Interactive Analytics & Health Outcomes
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-brand-teal" /> Analytics & Health Outcomes
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -410,15 +433,15 @@ export default function AdminDashboard() {
             {/* 3. Pet Health & Recovery/Death Analytics */}
             <TabsContent value="health" className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border bg-emerald-50/50 space-y-1">
+                <div className="p-4 rounded-xl border bg-brand-green-light/70 space-y-1">
                   <span className="text-xs text-muted-foreground font-medium uppercase">Recovery Rate</span>
-                  <p className="text-3xl font-bold font-heading text-emerald-700">{recoveryRate}%</p>
-                  <p className="text-xs text-emerald-800">{recoveredPetsCount} total pets marked as Recovered</p>
+                  <p className="text-3xl font-bold font-heading text-brand-green">{recoveryRate}%</p>
+                  <p className="text-xs text-brand-green">{recoveredPetsCount} total pets marked as Recovered</p>
                 </div>
-                <div className="p-4 rounded-xl border bg-rose-50/50 space-y-1">
+                <div className="p-4 rounded-xl border bg-red-50/70 space-y-1">
                   <span className="text-xs text-muted-foreground font-medium uppercase">Death Rate</span>
-                  <p className="text-3xl font-bold font-heading text-rose-700">{deathRate}%</p>
-                  <p className="text-xs text-rose-800">{deceasedPetsCount} total deceased records</p>
+                  <p className="text-3xl font-bold font-heading text-red-700">{deathRate}%</p>
+                  <p className="text-xs text-red-800">{deceasedPetsCount} total deceased records</p>
                 </div>
               </div>
 
@@ -505,91 +528,106 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Appointments Table */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-primary" /> Recent Appointments
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-brand-teal" /> Appointments
           </CardTitle>
-          <Link href="/admin/schedule">
-            <Button variant="ghost" size="sm" className="text-xs">
-              View All Schedule →
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" className="text-xs" asChild>
+            <Link href="/admin/schedule">View schedule</Link>
+          </Button>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Apt #</TableHead>
-                <TableHead>Pet</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Date & Time</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right pr-4">Quick Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {appointments.slice(0, 5).map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-mono text-xs font-bold text-primary">
-                    {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
-                  </TableCell>
-                  <TableCell className="font-semibold">{petName(a.pet_id)}</TableCell>
-                  <TableCell>{ownerName(a.owner_id)}</TableCell>
-                  <TableCell className="text-xs">
-                    {formatDate(a.date)} at {a.time}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
-                      {a.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right pr-4">
-                    <div className="flex items-center justify-end gap-1">
-                      {(a.status === "Pending" || a.status === "Requested") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs bg-blue-50 text-blue-700"
-                          onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
-                        >
-                          Approve
-                        </Button>
-                      )}
-                      {a.status !== "Completed" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs bg-emerald-50 text-emerald-700"
-                          onClick={() => updateAppointmentStatus(a.id, "Completed")}
-                        >
-                          Complete
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {appointments.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                    No appointments recorded yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <CardContent>
+          <Tabs defaultValue="today" className="space-y-3">
+            <TabsList className="flex flex-wrap h-auto">
+              <TabsTrigger value="today">Today ({todayAppointments.length})</TabsTrigger>
+              <TabsTrigger value="upcoming">Upcoming ({upcomingAppointments.length})</TabsTrigger>
+              <TabsTrigger value="requested">Requested ({pendingRequests.length})</TabsTrigger>
+              <TabsTrigger value="completed">Completed ({completedAppointments.length})</TabsTrigger>
+            </TabsList>
+            {(
+              [
+                ["today", todayAppointments],
+                ["upcoming", upcomingAppointments],
+                ["requested", pendingRequests],
+                ["completed", completedAppointments],
+              ] as const
+            ).map(([key, list]) => (
+              <TabsContent key={key} value={key} className="p-0 mt-0">
+                {list.length === 0 ? (
+                  <EmptyState title="No appointments found." description="There are no appointments in this list right now." />
+                ) : (
+                  <div className="rounded-lg border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Apt #</TableHead>
+                          <TableHead>Pet</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead>Date & Time</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right pr-4">Quick Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {list.slice(0, 8).map((a) => (
+                          <TableRow key={a.id}>
+                            <TableCell className="font-mono text-xs font-bold text-brand-navy">
+                              {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
+                            </TableCell>
+                            <TableCell className="font-semibold">{petName(a.pet_id)}</TableCell>
+                            <TableCell>{ownerName(a.owner_id)}</TableCell>
+                            <TableCell className="text-xs">
+                              {formatDate(a.date)} at {a.time}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
+                                {a.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right pr-4">
+                              <div className="flex items-center justify-end gap-1">
+                                {(a.status === "Pending" || a.status === "Requested") && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {a.status !== "Completed" && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => updateAppointmentStatus(a.id, "Completed")}
+                                  >
+                                    Complete
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
         </CardContent>
       </Card>
 
       {/* Grid Section: Reminders & Low Inventory */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Reminders Widget */}
-        <Card className="border-0 shadow-sm">
+        <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" /> Upcoming Reminders & Due Dates
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-600" /> Upcoming Reminders
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -630,18 +668,34 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Low Inventory Alert Widget */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-bold font-heading flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-rose-500" /> Low & Expiring Inventory Alerts
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" /> Inventory Alerts
             </CardTitle>
-            <Link href="/admin/inventory">
-              <Button variant="ghost" size="sm" className="text-xs">
-                Manage Inventory →
-              </Button>
-            </Link>
+            <Button variant="ghost" size="sm" className="text-xs" asChild>
+              <Link href="/admin/inventory">Manage inventory</Link>
+            </Button>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border p-3 bg-amber-50">
+                <p className="text-[10px] uppercase font-semibold text-amber-800">Low Stock</p>
+                <p className="font-heading text-xl font-bold text-amber-800">{lowStockItems.length}</p>
+              </div>
+              <div className="rounded-lg border p-3 bg-muted">
+                <p className="text-[10px] uppercase font-semibold text-brand-charcoal">Out of Stock</p>
+                <p className="font-heading text-xl font-bold text-brand-charcoal">{outOfStockItems.length}</p>
+              </div>
+              <div className="rounded-lg border p-3 bg-amber-50">
+                <p className="text-[10px] uppercase font-semibold text-amber-800">Expiring Soon</p>
+                <p className="font-heading text-xl font-bold text-amber-800">{expiringItems.length}</p>
+              </div>
+              <div className="rounded-lg border p-3 bg-red-50">
+                <p className="text-[10px] uppercase font-semibold text-red-800">Expired</p>
+                <p className="font-heading text-xl font-bold text-red-800">{expiredItems.length}</p>
+              </div>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -655,7 +709,7 @@ export default function AdminDashboard() {
                 {lowStockItems.concat(expiringItems).slice(0, 5).map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-semibold text-xs">{item.name}</TableCell>
-                    <TableCell className="font-bold text-rose-600">{item.quantity ?? 0}</TableCell>
+                    <TableCell className="font-bold text-red-700">{item.quantity ?? 0}</TableCell>
                     <TableCell className="text-xs">{item.reorder_level ?? 5}</TableCell>
                     <TableCell className="text-xs">{item.expiration_date ? formatDate(item.expiration_date) : "—"}</TableCell>
                   </TableRow>

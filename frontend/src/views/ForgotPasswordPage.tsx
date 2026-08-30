@@ -64,15 +64,15 @@ export default function ForgotPasswordPage() {
           : "Enter your email to receive a password reset link"
       }
     >
-      <Card className="border border-border shadow-sm">
+      <Card className="border-border/60 shadow-md">
         <CardContent className="p-6">
           {submitted ? (
             <div className="space-y-5 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-teal-100 dark:bg-teal-950 flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-teal-600 dark:text-teal-400" />
+              <div className="mx-auto w-14 h-14 rounded-full bg-brand-green-light flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-brand-green" />
               </div>
               <div className="space-y-2">
-                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">Reset Email Sent</h3>
+                <h3 className="font-heading font-bold text-lg text-brand-navy">Reset Email Sent</h3>
                 <p className="text-sm text-muted-foreground">
                   A password reset link has been sent to your Gmail address <strong className="text-foreground">{email}</strong>.
                 </p>
@@ -83,7 +83,7 @@ export default function ForgotPasswordPage() {
                 <span><strong>Notice:</strong> The password reset link will expire after <strong>30 minutes</strong>.</span>
               </div>
 
-              <Button asChild className="w-full h-11 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white">
+              <Button asChild className="w-full h-11 text-sm font-semibold">
                 <Link href="/login">Back to Login</Link>
               </Button>
             </div>
@@ -112,7 +112,7 @@ export default function ForgotPasswordPage() {
                 <p className="text-sm text-destructive bg-destructive/10 rounded-lg p-3 text-center font-medium">{error}</p>
               )}
 
-              <Button type="submit" className="w-full h-11 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white" disabled={loading}>
+              <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Send Reset Link"}
               </Button>
 

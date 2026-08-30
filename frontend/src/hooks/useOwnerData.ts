@@ -23,7 +23,7 @@ export function useMyPets() {
     queryFn: async () => {
       const { data, error } = await db.from("pets").select("*").order("created_at", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown[];
+      return (data ?? []) as any[];
     },
   });
 }
@@ -39,7 +39,7 @@ export function useMyAppointments() {
         .select("*, pets(name)")
         .order("date", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown[];
+      return (data ?? []) as any[];
     },
   });
 }
@@ -55,7 +55,7 @@ export function useMyVaccinations() {
         .select("*, pets(name)")
         .order("next_due", { ascending: true });
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown[];
+      return (data ?? []) as any[];
     },
   });
 }
@@ -71,7 +71,7 @@ export function useMyCareRecords() {
         .select("*, pets(name)")
         .order("date", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown[];
+      return (data ?? []) as any[];
     },
   });
 }
@@ -87,7 +87,7 @@ export function useMyDewormings() {
         .select("*, pets(name)")
         .order("next_due", { ascending: true });
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown[];
+      return (data ?? []) as any[];
     },
   });
 }

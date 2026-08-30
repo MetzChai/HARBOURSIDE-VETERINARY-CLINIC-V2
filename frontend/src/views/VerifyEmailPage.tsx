@@ -83,19 +83,19 @@ function VerifyEmailContent() {
         </Link>
       </div>
 
-      <Card className="border border-border shadow-sm">
+      <Card className="border-border/60 shadow-md">
         <CardContent className="p-6 text-center space-y-6">
           {verifying && (
             <div className="py-8 space-y-4">
-              <Loader2 className="w-12 h-12 text-teal-600 animate-spin mx-auto" />
+              <Loader2 className="w-12 h-12 text-brand-teal animate-spin mx-auto" />
               <p className="text-sm font-medium text-muted-foreground">Verifying your email address...</p>
             </div>
           )}
 
           {!verifying && success && (
             <div className="py-6 space-y-4">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+              <CheckCircle2 className="w-16 h-16 text-brand-green mx-auto" />
+              <h3 className="font-heading text-xl font-bold text-brand-navy">
                 Your email has been verified successfully.
               </h3>
               <p className="text-sm text-muted-foreground">
@@ -103,7 +103,7 @@ function VerifyEmailContent() {
               </p>
               <Button
                 onClick={() => router.push("/login")}
-                className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+                className="w-full h-11 font-semibold"
               >
                 Proceed to Login
               </Button>
@@ -113,13 +113,13 @@ function VerifyEmailContent() {
           {!verifying && !success && token && error && (
             <div className="py-6 space-y-4">
               <XCircle className="w-16 h-16 text-destructive mx-auto" />
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Verification Link Expired</h3>
+              <h3 className="font-heading text-lg font-bold text-brand-navy">Verification Link Expired</h3>
               <p className="text-sm text-muted-foreground">{error}</p>
 
               <Button
                 onClick={handleResend}
                 disabled={resending}
-                className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+                className="w-full h-11 font-semibold"
               >
                 {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Request New Verification Link"}
               </Button>
@@ -128,8 +128,8 @@ function VerifyEmailContent() {
 
           {!verifying && !token && (
             <div className="space-y-4 text-left">
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-200 text-sm">
-                <Mail className="h-5 w-5 text-teal-600 shrink-0" />
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-brand-teal-light text-brand-navy text-sm border border-brand-teal/20">
+                <Mail className="h-5 w-5 text-brand-teal shrink-0" />
                 <span>Please check your Gmail inbox for the verification link.</span>
               </div>
 
@@ -144,14 +144,14 @@ function VerifyEmailContent() {
                   onClick={handleResend}
                   disabled={resending}
                   variant="outline"
-                  className="w-full h-11 font-medium border-teal-600 text-teal-700 hover:bg-teal-50"
+                  className="w-full h-11 font-medium"
                 >
                   {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Resend Verification Email"}
                 </Button>
 
                 <Button
                   onClick={() => router.push("/login")}
-                  className="w-full h-11 bg-slate-800 hover:bg-slate-900 text-white font-medium"
+                  className="w-full h-11 font-medium"
                 >
                   Return to Login
                 </Button>

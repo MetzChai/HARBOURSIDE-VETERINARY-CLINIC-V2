@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Printer, Plus, Loader2, Clock, XCircle, Eye } from "lucide-react";
+import { Printer, Plus, Loader2, Clock, XCircle, Eye, Calendar } from "lucide-react";
 import { useMyAppointments, useMyPets } from "@/hooks/useOwnerData";
 import { useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
@@ -19,8 +19,11 @@ import {
   getStatusBadgeClass,
 } from "@/lib/appointment-slots";
 import { formatDate } from "@/lib/age";
-import { todayPH, isBeforeTodayPH } from "@/lib/datetime";
+import { todayPH, isBeforeTodayPH, daysFromTodayPH } from "@/lib/datetime";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function UserAppointments() {
   const { data: appointments = [], isLoading } = useMyAppointments();
@@ -143,16 +146,133 @@ export default function UserAppointments() {
     [appointments]
   );
 
+  const requested = useMemo(
+    () => sorted.filter((a: any) => a.status === "Requested" || a.status === "Pending"),
+    [sorted],
+  );
+  const upcoming = useMemo(
+    () =>
+      sorted.filter(
+        (a: any) =>
+          a.status !== "Cancelled" &&
+          a.status !== "Completed" &&
+          a.status !== "Missed" &&
+          a.status !== "Requested" &&
+          a.status !== "Pending" &&
+          (daysFromTodayPH(a.date) ?? -1) >= 0,
+      ),
+    [sorted],
+  );
+  const completed = useMemo(
+    () => sorted.filter((a: any) => a.status === "Completed" || a.status === "Missed"),
+    [sorted],
+  );
+  const cancelled = useMemo(
+    () => sorted.filter((a: any) => a.status === "Cancelled"),
+    [sorted],
+  );
+
+  const renderTable = (rows: any[]) => (
+    <Card>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-12 flex justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-brand-navy" />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={Calendar}
+            title="No appointments found."
+            description="Request a visit and the clinic will review your booking."
+          />
+        ) : (
+          <div className="data-table-wrap border-0 shadow-none">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Apt Number</TableHead>
+                  <TableHead>Pet</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Time (PHT)</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Veterinarian</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right pr-6">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((a: any) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-mono text-xs font-bold text-brand-navy">
+                      {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
+                    </TableCell>
+                    <TableCell className="font-semibold">{a.pets?.name ?? "—"}</TableCell>
+                    <TableCell>{a.date ? formatDate(a.date) : "—"}</TableCell>
+                    <TableCell className="font-semibold">{a.time}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {a.appointment_type || a.care_type || "Check-up"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{a.vet ?? (a.status === "Pending" || a.status === "Requested" ? "Unassigned" : "—")}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{a.reason ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
+                        {a.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right pr-4">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => {
+                            setSelectedAppointment(a);
+                            setShowDetails(true);
+                          }}
+                          title="View Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+
+                        {(a.status === "Pending" || a.status === "Requested") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-destructive hover:text-destructive hover:bg-red-50"
+                            onClick={() => cancelPendingRequest(a.id)}
+                            disabled={cancellingId === a.id}
+                          >
+                            {cancellingId === a.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-heading text-2xl font-bold">My Appointments</h2>
-          <p className="text-muted-foreground text-sm">
-            Request clinic visits, track booking status, and view appointment history (Philippine Time)
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <div className="page-container">
+      <PageHeader
+        title="My Appointments"
+        description="Request clinic visits, track booking status, and view appointment history"
+        actions={
+          <div className="flex gap-2">
           <Dialog
             open={open}
             onOpenChange={(o) => {
@@ -285,98 +405,23 @@ export default function UserAppointments() {
             <Printer className="h-4 w-4 mr-1.5" /> Print
           </Button>
         </div>
-      </div>
+        }
+      />
 
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-8 flex justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Apt Number</TableHead>
-                  <TableHead>Pet</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time (PHT)</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Veterinarian</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
-                      No appointment requests found. Click Request Appointment above to get started.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {sorted.map((a: any) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-mono text-xs font-bold text-primary">
-                      {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
-                    </TableCell>
-                    <TableCell className="font-semibold">{a.pets?.name ?? "—"}</TableCell>
-                    <TableCell>{a.date ? formatDate(a.date) : "—"}</TableCell>
-                    <TableCell className="font-semibold">{a.time}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {a.appointment_type || a.care_type || "Check-up"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{a.vet ?? (a.status === "Pending" || a.status === "Requested" ? "Unassigned" : "—")}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{a.reason ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
-                        {a.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right pr-4">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => {
-                            setSelectedAppointment(a);
-                            setShowDetails(true);
-                          }}
-                          title="View Details"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-
-                        {(a.status === "Pending" || a.status === "Requested") && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                            onClick={() => cancelPendingRequest(a.id)}
-                            disabled={cancellingId === a.id}
-                          >
-                            {cancellingId === a.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <>
-                                <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel
-                              </>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="upcoming" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
+          <TabsTrigger value="requested">Requested ({requested.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({completed.length})</TabsTrigger>
+          <TabsTrigger value="cancelled">Cancelled ({cancelled.length})</TabsTrigger>
+          <TabsTrigger value="all">All ({sorted.length})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="upcoming">{renderTable(upcoming)}</TabsContent>
+        <TabsContent value="requested">{renderTable(requested)}</TabsContent>
+        <TabsContent value="completed">{renderTable(completed)}</TabsContent>
+        <TabsContent value="cancelled">{renderTable(cancelled)}</TabsContent>
+        <TabsContent value="all">{renderTable(sorted)}</TabsContent>
+      </Tabs>
 
       {/* Appointment Details Modal for Owner */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>

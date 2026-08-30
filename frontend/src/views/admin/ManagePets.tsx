@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,8 @@ import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatAge, formatDate } from "@/lib/age";
 import { formatNowPH, todayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type PetRow = {
   id: string;
@@ -90,6 +93,7 @@ export default function ManagePets() {
 
   // Modals
   const [viewPet, setViewPet] = useState<PetRow | null>(null);
+  const [profileTab, setProfileTab] = useState("info");
   const [showAdd, setShowAdd] = useState(false);
   const [editPet, setEditPet] = useState<PetRow | null>(null);
   const [deletePetTarget, setDeletePetTarget] = useState<PetRow | null>(null);
@@ -270,11 +274,11 @@ export default function ManagePets() {
       case "under treatment":
         return <Badge className="bg-amber-500 text-white">Under Treatment</Badge>;
       case "recovered":
-        return <Badge className="bg-blue-600 text-white">Recovered</Badge>;
+        return <Badge className="bg-brand-teal text-white">Recovered</Badge>;
       case "deceased":
         return <Badge variant="destructive">Deceased</Badge>;
       default:
-        return <Badge className="bg-emerald-600 text-white">Healthy</Badge>;
+        return <Badge className="bg-brand-green text-white">Healthy</Badge>;
     }
   };
 
@@ -339,23 +343,24 @@ export default function ManagePets() {
     w.print();
   };
 
+  if (isLoading) {
+    return <PageSkeleton rows={8} />;
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Manage Pets</h1>
-          <p className="text-muted-foreground text-sm">
-            Register pets, manage medical profiles, status tracking, and care timelines
-          </p>
-        </div>
-        <Button onClick={openAdd} disabled={owners.length === 0}>
-          <Plus className="h-4 w-4 mr-1.5" /> Register Pet
-        </Button>
-      </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Manage Pets"
+        description="Register pets, manage medical profiles, status tracking, and care timelines"
+        actions={
+          <Button onClick={openAdd} disabled={owners.length === 0}>
+            <Plus className="h-4 w-4 mr-1.5" /> Register Pet
+          </Button>
+        }
+      />
 
       {/* Filter & Search Card */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {/* Search */}
@@ -798,7 +803,15 @@ export default function ManagePets() {
       </Dialog>
 
       {/* Comprehensive Pet Profile Modal */}
-      <Dialog open={!!viewPet} onOpenChange={() => setViewPet(null)}>
+      <Dialog
+        open={!!viewPet}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewPet(null);
+            setProfileTab("info");
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl">
           {viewPet && (
             <>
@@ -816,7 +829,7 @@ export default function ManagePets() {
                 </div>
               </DialogHeader>
 
-              <Tabs defaultValue="info" className="space-y-4 pt-2">
+              <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4 pt-2">
                 <TabsList className="bg-muted p-1">
                   <TabsTrigger value="info" className="text-xs">Pet & Owner Info</TabsTrigger>
                   <TabsTrigger value="timeline" className="text-xs">Care History Timeline</TabsTrigger>
@@ -827,6 +840,21 @@ export default function ManagePets() {
 
                 {/* Tab 1: Pet & Owner Info */}
                 <TabsContent value="info" className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" asChild>
+                      <Link href={`/admin/schedule?petId=${viewPet.id}&new=1`}>
+                        <Calendar className="h-4 w-4" /> Schedule Appointment
+                      </Link>
+                    </Button>
+                    <Button size="sm" variant="secondary" asChild>
+                      <Link href={`/admin/care-history?petId=${viewPet.id}&new=1`}>
+                        <FileText className="h-4 w-4" /> Add Care Record
+                      </Link>
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setProfileTab("timeline")}>
+                      <Syringe className="h-4 w-4" /> View Care History
+                    </Button>
+                  </div>
                   <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
                     <Avatar className="h-20 w-20">
                       <AvatarImage src={viewPet.image_url ?? undefined} alt={viewPet.name} />

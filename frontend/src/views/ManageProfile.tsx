@@ -15,6 +15,8 @@ import { roleLabel, type AppRole } from "@/lib/roles";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 import { useMyOwner } from "@/hooks/useOwnerData";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type LoginHistoryItem = {
   id: string;
@@ -216,11 +218,7 @@ export default function ManageProfile({ portal }: Props) {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
-      </div>
-    );
+    return <PageSkeleton rows={4} />;
   }
 
   if (!profile) {
@@ -236,13 +234,13 @@ export default function ManageProfile({ portal }: Props) {
   const authLabel = profile.authMethod === "google" ? "Google (Gmail)" : "Email & Password";
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-slate-800 dark:text-slate-100">My Profile</h1>
-        <p className="text-muted-foreground text-sm">Manage your personal account details and security settings</p>
-      </div>
+    <div className="page-container max-w-3xl">
+      <PageHeader
+        title="My Profile"
+        description="Manage your personal account details and security settings"
+      />
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-base">Profile Picture</CardTitle>
         </CardHeader>
@@ -261,17 +259,17 @@ export default function ManageProfile({ portal }: Props) {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-base flex items-center gap-2">
-            <User className="h-4 w-4 text-teal-600" /> Account Overview
+            <User className="h-4 w-4 text-brand-teal" /> Account Overview
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Badge className="bg-teal-600 text-white">{roleLabelText}</Badge>
+            <Badge className="bg-brand-navy text-white">{roleLabelText}</Badge>
             <Badge variant="secondary">{authLabel}</Badge>
-            {profile.emailVerified && <Badge variant="outline" className="border-emerald-500 text-emerald-600">Verified Gmail</Badge>}
+            {profile.emailVerified && <Badge variant="outline" className="border-brand-green text-brand-green">Verified Gmail</Badge>}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -296,14 +294,14 @@ export default function ManageProfile({ portal }: Props) {
               <p className="text-sm font-medium">{formatDatePH(profile.createdAt)}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3 text-teal-600" /> Last Login (Asia/Manila)</p>
-              <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">{formatDateTimePH(profile.lastLogin)}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3 text-brand-teal" /> Last Login (Asia/Manila)</p>
+              <p className="text-sm font-semibold text-brand-navy">{formatDateTimePH(profile.lastLogin)}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-base">Edit Profile Information</CardTitle>
         </CardHeader>
@@ -354,7 +352,7 @@ export default function ManageProfile({ portal }: Props) {
                 id="emailReadonly"
                 value={profile.email}
                 disabled
-                className="bg-slate-100 dark:bg-slate-800 text-muted-foreground cursor-not-allowed"
+                className="bg-muted text-muted-foreground cursor-not-allowed"
               />
               <p className="text-[11px] text-muted-foreground">Email address cannot be changed directly. Email verification is required for email changes.</p>
             </div>
@@ -372,7 +370,7 @@ export default function ManageProfile({ portal }: Props) {
 
           {profile.authMethod === "password" && (
             <div className="pt-3 border-t space-y-4">
-              <p className="text-sm font-semibold flex items-center gap-1.5"><KeyRound className="h-4 w-4 text-teal-600" /> Change Password</p>
+              <p className="text-sm font-semibold flex items-center gap-1.5"><KeyRound className="h-4 w-4 text-brand-teal" /> Change Password</p>
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">Current Password</Label>
                 <Input
@@ -414,17 +412,17 @@ export default function ManageProfile({ portal }: Props) {
             </p>
           )}
 
-          <Button onClick={save} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold">
+          <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Save Changes"}
           </Button>
         </CardContent>
       </Card>
 
       {/* Recent Login History */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="font-heading text-base flex items-center gap-2">
-            <History className="h-4 w-4 text-teal-600" /> Recent Login History
+            <History className="h-4 w-4 text-brand-teal" /> Recent Login History
           </CardTitle>
         </CardHeader>
         <CardContent>

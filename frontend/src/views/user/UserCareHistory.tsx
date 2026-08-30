@@ -9,10 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Loader2, Eye, Search, Filter } from "lucide-react";
+import { Printer, Eye, Search, Filter, Heart } from "lucide-react";
 import { useRows } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 function formatCareTypeLabel(type?: string | null) {
   switch (String(type ?? "").toLowerCase()) {
@@ -33,14 +36,14 @@ function getCareTypeBadgeClass(type?: string | null) {
   switch (String(type ?? "").toLowerCase()) {
     case "vaccination":
     case "vaccine":
-      return "bg-blue-100 text-blue-800 border-blue-200";
+      return "bg-brand-navy-light text-brand-navy border-brand-navy/20";
     case "treatment":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-brand-teal-light text-brand-teal border-brand-teal/30";
     case "deworming":
-      return "bg-amber-100 text-amber-800 border-amber-200";
+      return "bg-amber-50 text-amber-800 border-amber-300";
     case "checkup":
     default:
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      return "bg-brand-green-light text-brand-green border-brand-green/30";
   }
 }
 
@@ -156,28 +159,22 @@ export default function UserCareHistory() {
   };
 
   if (petsLoading || recordsLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return <PageSkeleton rows={8} />;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">My Pets' Care History</h1>
-          <p className="text-muted-foreground text-sm">
-            View medical history, visit notes, prescribed medications, and upcoming due dates for your pets
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => handlePrint()}>
-          <Printer className="h-4 w-4 mr-1.5" /> Print Medical History
-        </Button>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="My Pets' Care History"
+        description="Medical history, visit notes, prescribed medications, and upcoming due dates"
+        actions={
+          <Button variant="outline" onClick={() => handlePrint()}>
+            <Printer className="h-4 w-4 mr-1.5" /> Print Medical History
+          </Button>
+        }
+      />
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Filter className="h-4 w-4 text-primary" /> Filter Medical History
@@ -234,7 +231,7 @@ export default function UserCareHistory() {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -257,7 +254,7 @@ export default function UserCareHistory() {
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.date ? formatDate(r.date) : "—"}</TableCell>
-                      <TableCell className="font-semibold text-primary">{pet?.name || "—"}</TableCell>
+                      <TableCell className="font-semibold text-brand-navy">{pet?.name || "—"}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={getCareTypeBadgeClass(r.record_type)}>
                           {formatCareTypeLabel(r.record_type)}
@@ -292,8 +289,12 @@ export default function UserCareHistory() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                    No medical records found for your pets.
+                  <TableCell colSpan={6} className="p-0">
+                    <EmptyState
+                      icon={Filter}
+                      title="No care records found."
+                      description="Medical visits for your pets will appear here."
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -412,7 +413,7 @@ export default function UserCareHistory() {
                     <p>
                       <strong>Vaccine Administered:</strong> {selectedRecord.vaccine_used}
                     </p>
-                    <p className="text-blue-700 font-medium">
+                    <p className="text-brand-navy font-medium">
                       <strong>Next Vaccination Due:</strong>{" "}
                       {selectedRecord.next_vax_due ? formatDate(selectedRecord.next_vax_due) : "N/A"}
                     </p>

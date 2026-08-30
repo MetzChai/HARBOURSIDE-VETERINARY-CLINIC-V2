@@ -83,13 +83,13 @@ function ResetPasswordForm() {
         </Link>
       </div>
 
-      <Card className="border border-border shadow-sm">
+      <Card className="border-border/60 shadow-md">
         <CardContent className="p-6">
           {success ? (
             <div className="py-6 text-center space-y-5">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+              <CheckCircle2 className="w-16 h-16 text-brand-green mx-auto" />
               <div className="space-y-2">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                <h3 className="font-heading text-xl font-bold text-brand-navy">
                   Password changed successfully.
                 </h3>
                 <p className="text-sm text-muted-foreground">
@@ -98,7 +98,7 @@ function ResetPasswordForm() {
               </div>
               <Button
                 onClick={() => router.push("/login")}
-                className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+                className="w-full h-11 font-semibold"
               >
                 Proceed to Login
               </Button>
@@ -156,23 +156,23 @@ function ResetPasswordForm() {
 
               {/* Password criteria */}
               {newPassword && (
-                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs space-y-1 border border-slate-200 dark:border-slate-800">
-                  <p className="font-semibold text-muted-foreground mb-1">Password Requirements:</p>
+                <div className="p-3 bg-muted/60 rounded-lg text-xs space-y-1 border border-border/60">
+                  <p className="font-semibold text-brand-navy mb-1">Password Requirements</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <div className={`flex items-center gap-1 ${passwordChecks.length ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
-                      {passwordChecks.length ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-slate-400" />} At least 8 characters
+                    <div className={`flex items-center gap-1 ${passwordChecks.length ? "text-brand-green font-medium" : "text-muted-foreground"}`}>
+                      {passwordChecks.length ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />} At least 8 characters
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordChecks.uppercase ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
-                      {passwordChecks.uppercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-slate-400" />} 1 uppercase letter
+                    <div className={`flex items-center gap-1 ${passwordChecks.uppercase ? "text-brand-green font-medium" : "text-muted-foreground"}`}>
+                      {passwordChecks.uppercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />} 1 uppercase letter
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordChecks.lowercase ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
-                      {passwordChecks.lowercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-slate-400" />} 1 lowercase letter
+                    <div className={`flex items-center gap-1 ${passwordChecks.lowercase ? "text-brand-green font-medium" : "text-muted-foreground"}`}>
+                      {passwordChecks.lowercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />} 1 lowercase letter
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordChecks.number ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
-                      {passwordChecks.number ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-slate-400" />} 1 number
+                    <div className={`flex items-center gap-1 ${passwordChecks.number ? "text-brand-green font-medium" : "text-muted-foreground"}`}>
+                      {passwordChecks.number ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />} 1 number
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordChecks.special ? "text-emerald-600 font-medium" : "text-muted-foreground"}`}>
-                      {passwordChecks.special ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-slate-400" />} 1 special character
+                    <div className={`flex items-center gap-1 ${passwordChecks.special ? "text-brand-green font-medium" : "text-muted-foreground"}`}>
+                      {passwordChecks.special ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/50" />} 1 special character
                     </div>
                   </div>
                 </div>
@@ -187,7 +187,7 @@ function ResetPasswordForm() {
               <Button
                 type="submit"
                 disabled={loading || !token}
-                className="w-full h-11 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white"
+                className="w-full h-11 text-sm font-semibold"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Reset Password"}
               </Button>

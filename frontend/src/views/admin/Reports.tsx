@@ -50,6 +50,8 @@ import { formatNowPH, todayPH, daysFromTodayPH, isBeforeTodayPH } from "@/lib/da
 import { useAuth } from "@/hooks/useAuth";
 import { canViewReports } from "@/lib/roles";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type ReportType =
   | "appointment"
@@ -125,7 +127,7 @@ export default function Reports() {
       desc: "Historical analysis of scheduled, walk-in, completed, and cancelled appointments",
       count: appointments.length,
       icon: Calendar,
-      color: "text-blue-600 bg-blue-50",
+      color: "text-brand-navy bg-brand-navy-light",
     },
     {
       type: "care" as ReportType,
@@ -133,7 +135,7 @@ export default function Reports() {
       desc: "Check-ups, Vaccinations, Treatments, and Dewormings trends & medical logs",
       count: careRecords.length,
       icon: Heart,
-      color: "text-rose-600 bg-rose-50",
+      color: "text-brand-green bg-brand-green-light",
     },
     {
       type: "pet" as ReportType,
@@ -141,7 +143,7 @@ export default function Reports() {
       desc: "Species distribution, pet health status, recovered & deceased pet records",
       count: pets.length,
       icon: PawPrint,
-      color: "text-teal-600 bg-teal-50",
+      color: "text-brand-teal bg-brand-teal-light",
     },
     {
       type: "owner" as ReportType,
@@ -149,7 +151,7 @@ export default function Reports() {
       desc: "Registered vs Walk-in client demographics, active accounts, and visit history",
       count: owners.length,
       icon: Users,
-      color: "text-purple-600 bg-purple-50",
+      color: "text-brand-navy bg-brand-navy-light",
     },
     {
       type: "inventory" as ReportType,
@@ -165,7 +167,7 @@ export default function Reports() {
       desc: "Paid vs Pending payments, Cash vs GCash revenue breakdown & financial logs",
       count: transactions.length,
       icon: Receipt,
-      color: "text-emerald-600 bg-emerald-50",
+      color: "text-brand-green bg-brand-green-light",
     },
     {
       type: "communication" as ReportType,
@@ -173,7 +175,7 @@ export default function Reports() {
       desc: "Email, SMS, and In-App notification distribution and delivery status logs",
       count: messages.length,
       icon: MessageSquare,
-      color: "text-indigo-600 bg-indigo-50",
+      color: "text-brand-teal bg-brand-teal-light",
     },
     {
       type: "staff" as ReportType,
@@ -181,7 +183,7 @@ export default function Reports() {
       desc: "Staff performance tracking across appointments, care records, and transactions",
       count: profiles.length,
       icon: UserCheck,
-      color: "text-sky-600 bg-sky-50",
+      color: "text-brand-navy bg-brand-navy-light",
     },
   ];
 
@@ -457,32 +459,22 @@ export default function Reports() {
   }, [filteredTransactions]);
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return <PageSkeleton rows={8} showStats />;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" /> Reports & Historical Analytics Center
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Generate, filter, export (CSV/Excel/PDF), and print comprehensive clinic operational reports
-          </p>
-        </div>
-
-        {selectedReport && (
-          <Button variant="outline" size="sm" onClick={() => setSelectedReport(null)}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Reports Home
-          </Button>
-        )}
-      </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Reports"
+        description="Generate, filter, export, and print clinic operational reports from existing data"
+        actions={
+          selectedReport ? (
+            <Button variant="outline" size="sm" onClick={() => setSelectedReport(null)}>
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Reports Home
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* REPORTS HOME (NAVIGATION CENTER CARDS GRID) */}
       {!selectedReport && (
@@ -829,7 +821,7 @@ export default function Reports() {
             <Card className="border-0 shadow-sm flex flex-col justify-between">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold font-heading flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-teal-600" /> Report Summary & Highlights
+                  <Activity className="h-4 w-4 text-brand-teal" /> Report Summary & Highlights
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
@@ -1126,7 +1118,7 @@ export default function Reports() {
                             variant="outline"
                             className={
                               t.payment_status === "Paid"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                ? "bg-brand-green-light text-brand-green border-brand-green/30"
                                 : "bg-amber-50 text-amber-700 border-amber-200"
                             }
                           >

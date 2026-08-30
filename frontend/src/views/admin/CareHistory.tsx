@@ -19,6 +19,8 @@ import { db } from "@/lib/db-client";
 import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 function toInputDate(value?: string | null) {
   if (!value) return "";
@@ -44,14 +46,14 @@ function getCareTypeBadgeClass(type?: string | null) {
   switch (String(type ?? "").toLowerCase()) {
     case "vaccination":
     case "vaccine":
-      return "bg-blue-100 text-blue-800 border-blue-200";
+      return "bg-brand-navy-light text-brand-navy border-brand-navy/20";
     case "treatment":
-      return "bg-purple-100 text-purple-800 border-purple-200";
+      return "bg-brand-teal-light text-brand-teal border-brand-teal/30";
     case "deworming":
-      return "bg-amber-100 text-amber-800 border-amber-200";
+      return "bg-amber-50 text-amber-800 border-amber-300";
     case "checkup":
     default:
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      return "bg-brand-green-light text-brand-green border-brand-green/30";
   }
 }
 
@@ -83,7 +85,7 @@ export default function CareHistory() {
 
   // Calculate available stock map for validation & label rendering
   const availableStockMap = useMemo(() => {
-    const map: Record<string, { totalQty: number; name: string; category: string; unit: string }> = {};
+    const map: Record<string, { totalQty: number; name: string; category: string; unit: string; unitPrice: number }> = {};
     inventoryItems.forEach((item: any) => {
       const itemBatches = dbBatches.filter((b: any) => b.inventory_item_id === item.id);
       const activeBatches = itemBatches.filter((b: any) => {
@@ -99,6 +101,7 @@ export default function CareHistory() {
         name: item.name,
         category: item.category || "supply",
         unit: item.unit || "unit",
+        unitPrice: Number(item.unit_price ?? item.purchase_price ?? 0),
       };
     });
     return map;
@@ -185,7 +188,10 @@ export default function CareHistory() {
 
   const searchParams = useSearchParams();
   const aptId = searchParams?.get("aptId");
+  const petIdParam = searchParams?.get("petId");
+  const openNew = searchParams?.get("new") === "1";
   const [autoOpenedAptId, setAutoOpenedAptId] = useState<string | null>(null);
+  const [autoOpenedNew, setAutoOpenedNew] = useState(false);
 
   useEffect(() => {
     if (!aptId) return;
@@ -232,6 +238,21 @@ export default function CareHistory() {
       setAutoOpenedAptId(aptId);
     }
   }, [aptId, appointments, careRecords, autoOpenedAptId, editingId]);
+
+  useEffect(() => {
+    if (petIdParam) setFilterPetId(petIdParam);
+  }, [petIdParam]);
+
+  useEffect(() => {
+    if (!openNew || autoOpenedNew || aptId) return;
+    setEditingId(null);
+    resetForm();
+    setShowEditModal(true);
+    if (petIdParam) {
+      setForm((prev) => ({ ...prev, pet_id: petIdParam }));
+    }
+    setAutoOpenedNew(true);
+  }, [openNew, petIdParam, aptId, autoOpenedNew]);
 
   // Filter logic
   const filteredRecords = careRecords.filter((record) => {
@@ -535,35 +556,28 @@ export default function CareHistory() {
   const selectedPetOwnerName = selectedPetObject?.owner_id ? ownerMap.get(selectedPetObject.owner_id) || "Unassigned" : "Unassigned";
 
   if (petsLoading || recordsLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return <PageSkeleton rows={8} />;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Central Care History</h1>
-          <p className="text-muted-foreground text-sm">
-            Unified medical records for Check-ups, Vaccinations, Treatments, and Dewormings
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => handlePrint()}>
-            <Printer className="h-4 w-4 mr-1.5" /> Print Records
-          </Button>
-          <Button onClick={openAddModal}>
-            <Plus className="h-4 w-4 mr-1.5" /> Add Care Record
-          </Button>
-        </div>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Care History"
+        description="Unified medical records for check-ups, vaccinations, treatments, and dewormings"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => handlePrint()}>
+              <Printer className="h-4 w-4 mr-1.5" /> Print Records
+            </Button>
+            <Button onClick={openAddModal}>
+              <Plus className="h-4 w-4 mr-1.5" /> Add Care Record
+            </Button>
+          </div>
+        }
+      />
 
       {/* Filter and Search Card */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Filter className="h-4 w-4 text-primary" /> Filters & Search
@@ -930,11 +944,11 @@ export default function CareHistory() {
             </div>
 
             {/* Medication & Inventory Products Section */}
-            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border">
-              <div className="flex items-center justify-between border-b pb-2">
+            <div className="space-y-3 p-4 bg-brand-navy-light/40 rounded-lg border border-border/60">
+              <div className="flex items-center justify-between border-b border-border/60 pb-2">
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    Medication & Inventory Products Used
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-navy">
+                    Medication / Product Used
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
                     Select products used from inventory. Quantities will be automatically deducted using FEFO.
@@ -945,19 +959,24 @@ export default function CareHistory() {
                   variant="outline"
                   size="sm"
                   onClick={handleAddMedicationRow}
-                  className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                  className="h-7 text-xs gap-1"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Add Product
+                  <Plus className="h-3.5 w-3.5" /> Add Another Product
                 </Button>
               </div>
 
               {medicationsList.length > 0 ? (
                 <div className="space-y-2.5">
                   {medicationsList.map((row, idx) => {
+                    const stockInfo = availableStockMap[row.inventory_item_id] || {
+                      totalQty: 0,
+                      unit: row.unit || "unit",
+                      unitPrice: 0,
+                    };
+                    const lineTotal = (stockInfo.unitPrice || 0) * (row.quantity || 0);
                     return (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-background p-2 rounded border text-xs">
-                        {/* Product Combobox/Select */}
-                        <div className="col-span-5 space-y-1">
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-card p-3 rounded-lg border border-border/60 text-xs">
+                        <div className="col-span-12 sm:col-span-5 space-y-1">
                           <Label className="text-[11px]">
                             Product / Medication <span className="text-destructive">*</span>
                           </Label>
@@ -970,10 +989,10 @@ export default function CareHistory() {
                             </SelectTrigger>
                             <SelectContent className="max-h-56">
                               {inventoryItems.map((item: any) => {
-                                const stockInfo = availableStockMap[item.id] || { totalQty: 0, unit: "unit", category: "supply" };
+                                const info = availableStockMap[item.id] || { totalQty: 0, unit: "unit", category: "supply" };
                                 return (
                                   <SelectItem key={item.id} value={item.id}>
-                                    {item.name} ({stockInfo.category}) — Available: {stockInfo.totalQty} {stockInfo.unit}
+                                    {item.name} ({info.category}) — Available: {info.totalQty} {info.unit}
                                   </SelectItem>
                                 );
                               })}
@@ -981,9 +1000,8 @@ export default function CareHistory() {
                           </Select>
                         </div>
 
-                        {/* Quantity Input */}
-                        <div className="col-span-2 space-y-1">
-                          <Label className="text-[11px]">Qty Used *</Label>
+                        <div className="col-span-4 sm:col-span-2 space-y-1">
+                          <Label className="text-[11px]">Quantity *</Label>
                           <Input
                             type="number"
                             min={1}
@@ -993,8 +1011,7 @@ export default function CareHistory() {
                           />
                         </div>
 
-                        {/* Optional Notes/Instructions */}
-                        <div className="col-span-4 space-y-1">
+                        <div className="col-span-8 sm:col-span-4 space-y-1">
                           <Label className="text-[11px]">Instructions / Notes</Label>
                           <Input
                             className="h-8 text-xs"
@@ -1004,8 +1021,7 @@ export default function CareHistory() {
                           />
                         </div>
 
-                        {/* Remove Button */}
-                        <div className="col-span-1 flex justify-end pb-0.5">
+                        <div className="col-span-11 sm:col-span-1 flex justify-end pb-0.5">
                           <Button
                             type="button"
                             variant="ghost"
@@ -1017,12 +1033,20 @@ export default function CareHistory() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
+
+                        {row.inventory_item_id ? (
+                          <div className="col-span-12 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-border/50 pt-2">
+                            <span>Available: <strong className="text-foreground">{stockInfo.totalQty} {stockInfo.unit}</strong></span>
+                            <span>Unit Price: <strong className="text-foreground">₱{Number(stockInfo.unitPrice || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                            <span>Total: <strong className="text-brand-navy">₱{lineTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="text-center py-4 border border-dashed rounded text-xs text-muted-foreground bg-background/50">
+                <div className="text-center py-4 border border-dashed rounded-lg text-xs text-muted-foreground bg-card/50">
                   No inventory products added to this care record yet.
                 </div>
               )}
@@ -1030,8 +1054,8 @@ export default function CareHistory() {
 
             {/* Vaccination Specific Fields */}
             {(form.record_type === "vaccination" || form.record_type === "vaccine") && (
-              <div className="space-y-4 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-blue-800 border-b border-blue-200 pb-1">
+              <div className="space-y-4 p-3 bg-brand-navy-light/50 rounded-lg border border-brand-navy/15">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-navy border-b border-brand-navy/15 pb-1">
                   Vaccination Details & Reminder Schedule
                 </h3>
                 <div className="grid grid-cols-2 gap-4">

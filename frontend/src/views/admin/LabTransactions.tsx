@@ -36,6 +36,8 @@ import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH, todayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
 
 type TransactionRow = {
   id: string;
@@ -508,69 +510,46 @@ export default function LabTransactions() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Lab & Clinic Transactions</h1>
-          <p className="text-muted-foreground text-sm">
-            Manage billing transactions, payment status, GCash/Cash receipts, and laboratory records
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {activeTab === "transactions" ? (
-            <Button onClick={openAddTxn}>
-              <Plus className="h-4 w-4 mr-1.5" /> Create Transaction
-            </Button>
-          ) : (
-            <Button onClick={openAddLab}>
-              <FlaskConical className="h-4 w-4 mr-1.5" /> Record Lab Test
-            </Button>
-          )}
-        </div>
-      </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Lab & Transactions"
+        description="Medication, laboratory, and treatment-related transactions from existing clinic records"
+        actions={
+          <div className="flex items-center gap-2">
+            {activeTab === "transactions" ? (
+              <Button onClick={openAddTxn}>
+                <Plus className="h-4 w-4 mr-1.5" /> Create Transaction
+              </Button>
+            ) : (
+              <Button onClick={openAddLab}>
+                <FlaskConical className="h-4 w-4 mr-1.5" /> Record Lab Test
+              </Button>
+            )}
+          </div>
+        }
+      />
 
-      {/* Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Total Revenue (Paid)</p>
-              <h3 className="text-2xl font-bold font-heading text-emerald-600">
-                ₱{metrics.totalRevenue.toLocaleString()}
-              </h3>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
-              <DollarSign className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Total Revenue (Paid)"
+          value={formatPeso(metrics.totalRevenue)}
+          icon={DollarSign}
+          variant="success"
+        />
 
-        <Card className="border-0 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Pending Payments</p>
-              <h3 className="text-2xl font-bold font-heading text-amber-600">
-                {metrics.pendingCount} <span className="text-xs text-muted-foreground font-normal">(₱{metrics.pendingAmount.toLocaleString()})</span>
-              </h3>
-            </div>
-            <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
-              <Clock className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Total Transactions</p>
-              <h3 className="text-2xl font-bold font-heading text-primary">{metrics.totalCount}</h3>
-            </div>
-            <div className="p-3 rounded-xl bg-primary/10 text-primary">
-              <CreditCard className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Pending Payments"
+          value={metrics.pendingCount}
+          subtitle={formatPeso(metrics.pendingAmount)}
+          icon={Clock}
+          variant="warning"
+        />
+        <StatCard
+          title="Total Transactions"
+          value={metrics.totalCount}
+          icon={CreditCard}
+          variant="default"
+        />
       </div>
 
       {/* Dual Tab Interface */}
@@ -704,7 +683,7 @@ export default function LabTransactions() {
                                 variant="outline"
                                 className={
                                   t.payment_status === "Paid"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold"
+                                    ? "bg-brand-green-light text-brand-green border-brand-green/30 font-semibold"
                                     : "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
                                 }
                               >
@@ -717,7 +696,7 @@ export default function LabTransactions() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                    className="h-7 text-xs bg-brand-green-light text-brand-green border-brand-green/30 hover:bg-brand-green/10"
                                     onClick={() => handleMarkAsPaid(t)}
                                     title="Mark as Paid"
                                   >
@@ -902,7 +881,7 @@ export default function LabTransactions() {
                               {l.owners?.name || ownerMap.get(l.owner_id || "")?.name || "—"}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
+                              <Badge variant="outline" className="text-xs bg-brand-teal-light text-brand-navy border-brand-teal/30">
                                 {l.test_type}
                               </Badge>
                             </TableCell>
@@ -1184,7 +1163,7 @@ export default function LabTransactions() {
                   </DialogTitle>
                   <Badge
                     variant="outline"
-                    className={viewTxn.payment_status === "Paid" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}
+                    className={viewTxn.payment_status === "Paid" ? "bg-brand-green-light text-brand-green" : "bg-amber-50 text-amber-700"}
                   >
                     {viewTxn.payment_status}
                   </Badge>

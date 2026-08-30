@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/age";
 import { formatNowPH, todayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
 
 type MessageRow = {
   id: string;
@@ -288,33 +289,28 @@ export default function Messaging() {
   const getChannelBadge = (ch: string) => {
     switch (ch) {
       case "ALL":
-        return <Badge className="bg-purple-600 text-white">Email + SMS + In-App</Badge>;
+        return <Badge className="bg-brand-navy text-white">Email + SMS + In-App</Badge>;
       case "EMAIL_SMS":
-        return <Badge className="bg-blue-600 text-white">Email + SMS</Badge>;
+        return <Badge className="bg-brand-navy text-white">Email + SMS</Badge>;
       case "EMAIL_INAPP":
-        return <Badge className="bg-indigo-600 text-white">Email + In-App</Badge>;
+        return <Badge className="bg-brand-teal text-white">Email + In-App</Badge>;
       case "SMS_INAPP":
-        return <Badge className="bg-teal-600 text-white">SMS + In-App</Badge>;
+        return <Badge className="bg-brand-teal text-white">SMS + In-App</Badge>;
       case "EMAIL":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Email Only</Badge>;
+        return <Badge variant="outline" className="bg-brand-navy-light text-brand-navy border-brand-navy/20">Email Only</Badge>;
       case "SMS":
-        return <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">SMS Only</Badge>;
+        return <Badge variant="outline" className="bg-brand-teal-light text-brand-teal border-brand-teal/30">SMS Only</Badge>;
       default:
         return <Badge variant="secondary">In-App Only</Badge>;
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      {/* Top Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-          <MessageSquare className="h-6 w-6 text-primary" /> Communications Hub
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Send Email, SMS, and In-App notifications to pet owners with automated reminders and pre-formatted templates
-        </p>
-      </div>
+    <div className="page-container pb-10">
+      <PageHeader
+        title="Communications"
+        description="Send email, SMS, and in-app notifications to pet owners using existing templates and channels"
+      />
 
       {/* Main Tabs */}
       <Tabs defaultValue="compose" className="space-y-4">
@@ -578,8 +574,8 @@ export default function Messaging() {
                                 variant="outline"
                                 className={
                                   m.status === "FAILED"
-                                    ? "bg-rose-50 text-rose-700 border-rose-200"
-                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    ? "bg-red-50 text-red-800 border-red-200"
+                                    : "bg-brand-green-light text-brand-green border-brand-green/30"
                                 }
                               >
                                 {m.status || "SENT"}

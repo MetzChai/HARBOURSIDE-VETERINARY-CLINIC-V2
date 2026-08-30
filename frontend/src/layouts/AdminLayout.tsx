@@ -35,10 +35,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="min-h-screen flex w-full">
         <AdminSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b border-brand-teal/20 bg-card px-4 no-print">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
-              <span className="text-sm text-muted-foreground font-medium">
+          <header className="h-14 flex items-center justify-between border-b border-brand-teal/20 bg-card px-4 shadow-sm no-print">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="text-brand-navy" />
+              <div className="hidden sm:block h-5 w-px bg-border" />
+              <span className="text-sm font-medium text-brand-navy">
                 {role === "admin" ? "Admin Panel" : "Staff Portal"}
               </span>
             </div>
@@ -56,7 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
             </div>
           </header>
-          <main className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-auto bg-brand-navy-light/40 p-4 md:p-6 lg:p-8">{children}</main>
         </div>
       </div>
       <ChatbotWidget />

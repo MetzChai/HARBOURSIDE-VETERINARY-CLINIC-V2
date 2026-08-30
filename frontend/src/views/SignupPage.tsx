@@ -25,18 +25,8 @@ import {
   Check,
 } from "lucide-react";
 import { AuthShell } from "@/components/AuthShell";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { toast } from "sonner";
-
-function GoogleIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </svg>
-  );
-}
 
 type FieldErrors = {
   firstName?: string;
@@ -193,34 +183,34 @@ export default function SignupPage() {
       <div className="mb-4">
         <Link
           href="/login"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 rounded"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring rounded"
         >
           <ArrowLeft className="w-4 h-4" /> Back to login
         </Link>
       </div>
 
-      <Card className="border border-border shadow-sm">
+      <Card className="border-border/60 shadow-md">
         <CardContent className="p-6">
           {isSuccess ? (
             /* Registration Success Screen */
             <div className="py-6 text-center space-y-6">
-              <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center">
-                <CheckCircle2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
+              <div className="mx-auto w-16 h-16 rounded-full bg-brand-green-light flex items-center justify-center">
+                <CheckCircle2 className="w-10 h-10 text-brand-green" />
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                  ✔ Registration Successful
+                <h2 className="font-heading text-2xl font-bold text-brand-navy">
+                  Registration Successful
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
                   We&apos;ve sent a verification email to{" "}
-                  <strong className="text-slate-800 dark:text-slate-200">{registeredEmail}</strong>. Please verify your account before signing in.
+                  <strong className="text-foreground">{registeredEmail}</strong>. Please verify your account before signing in.
                 </p>
               </div>
 
-              <div className="p-4 bg-teal-50 dark:bg-teal-950/40 rounded-lg text-xs text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60 text-left space-y-1">
+              <div className="p-4 bg-brand-teal-light rounded-lg text-xs text-brand-navy border border-brand-teal/20 text-left space-y-1">
                 <p className="font-semibold flex items-center gap-1">
-                  <Info className="w-4 h-4 text-teal-600 shrink-0" /> Important Notice:
+                  <Info className="w-4 h-4 text-brand-teal shrink-0" /> Important Notice:
                 </p>
                 <p className="pl-5">
                   The verification link will expire after <strong>24 hours</strong>. If you do not see the email in your inbox, please check your spam or junk folder.
@@ -233,7 +223,7 @@ export default function SignupPage() {
                   onClick={handleResendEmail}
                   disabled={resending}
                   variant="outline"
-                  className="w-full h-11 text-sm font-semibold border-teal-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950"
+                  className="w-full h-11 text-sm font-semibold"
                 >
                   {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Resend Verification Email
@@ -242,7 +232,7 @@ export default function SignupPage() {
                 <Button
                   type="button"
                   onClick={() => router.push("/login")}
-                  className="w-full h-11 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white"
+                  className="w-full h-11 text-sm font-semibold"
                 >
                   Back to Login
                 </Button>
@@ -438,35 +428,35 @@ export default function SignupPage() {
               </div>
 
               {/* Password Requirements Live Checklist */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs space-y-1.5 border border-slate-200 dark:border-slate-800">
-                <p className="font-semibold text-slate-700 dark:text-slate-300">Password Requirements</p>
+              <div className="p-3 bg-muted/60 rounded-lg text-xs space-y-1.5 border border-border/60">
+                <p className="font-semibold text-brand-navy">Password Requirements</p>
                 <div className="space-y-1 text-muted-foreground">
-                  <div className={`flex items-center gap-1.5 ${passwordChecks.length ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
-                    {passwordChecks.length ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-3.5 text-center text-slate-400">•</span>}
+                  <div className={`flex items-center gap-1.5 ${passwordChecks.length ? "text-brand-green font-medium" : ""}`}>
+                    {passwordChecks.length ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <span className="w-3.5 text-center text-muted-foreground">•</span>}
                     Minimum of 8 characters
                   </div>
-                  <div className={`flex items-center gap-1.5 ${passwordChecks.uppercase ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
-                    {passwordChecks.uppercase ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-3.5 text-center text-slate-400">•</span>}
+                  <div className={`flex items-center gap-1.5 ${passwordChecks.uppercase ? "text-brand-green font-medium" : ""}`}>
+                    {passwordChecks.uppercase ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <span className="w-3.5 text-center text-muted-foreground">•</span>}
                     At least one uppercase letter
                   </div>
-                  <div className={`flex items-center gap-1.5 ${passwordChecks.lowercase ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
-                    {passwordChecks.lowercase ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-3.5 text-center text-slate-400">•</span>}
+                  <div className={`flex items-center gap-1.5 ${passwordChecks.lowercase ? "text-brand-green font-medium" : ""}`}>
+                    {passwordChecks.lowercase ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <span className="w-3.5 text-center text-muted-foreground">•</span>}
                     At least one lowercase letter
                   </div>
-                  <div className={`flex items-center gap-1.5 ${passwordChecks.number ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
-                    {passwordChecks.number ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-3.5 text-center text-slate-400">•</span>}
+                  <div className={`flex items-center gap-1.5 ${passwordChecks.number ? "text-brand-green font-medium" : ""}`}>
+                    {passwordChecks.number ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <span className="w-3.5 text-center text-muted-foreground">•</span>}
                     At least one number
                   </div>
-                  <div className={`flex items-center gap-1.5 ${passwordChecks.special ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
-                    {passwordChecks.special ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <span className="w-3.5 text-center text-slate-400">•</span>}
+                  <div className={`flex items-center gap-1.5 ${passwordChecks.special ? "text-brand-green font-medium" : ""}`}>
+                    {passwordChecks.special ? <Check className="w-3.5 h-3.5 text-brand-green" /> : <span className="w-3.5 text-center text-muted-foreground">•</span>}
                     At least one special character
                   </div>
                 </div>
               </div>
 
               {/* Email Verification Informational Notice */}
-              <div className="p-3 bg-teal-50/80 dark:bg-teal-950/40 rounded-lg text-xs text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-teal-800/60 flex items-start gap-2">
-                <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+              <div className="p-3 bg-brand-teal-light/80 rounded-lg text-xs text-brand-navy border border-brand-teal/20 flex items-start gap-2">
+                <Info className="w-4 h-4 text-brand-teal shrink-0 mt-0.5" />
                 <span>
                   After registration, a verification email will be sent to your email address. You must verify your account before signing in.
                 </span>
@@ -486,11 +476,11 @@ export default function SignupPage() {
                   />
                   <Label htmlFor="terms" className="text-xs text-muted-foreground leading-normal cursor-pointer">
                     I have read and agree to the{" "}
-                    <span className="text-teal-600 dark:text-teal-400 font-medium underline hover:text-teal-700">
+                    <span className="text-brand-teal font-medium underline hover:text-brand-navy">
                       Terms of Service
                     </span>{" "}
                     and{" "}
-                    <span className="text-teal-600 dark:text-teal-400 font-medium underline hover:text-teal-700">
+                    <span className="text-brand-teal font-medium underline hover:text-brand-navy">
                       Privacy Policy
                     </span>
                     .
@@ -504,7 +494,7 @@ export default function SignupPage() {
               {/* Submit Register Button */}
               <Button
                 type="submit"
-                className="w-full h-11 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white transition-colors"
+                className="w-full h-11 text-sm font-semibold"
                 disabled={loading}
               >
                 {loading ? (
@@ -526,25 +516,13 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              {/* Google OAuth Sign-In Button */}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-11 text-sm font-medium border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-                onClick={() => {
-                  window.location.href = "/api/auth/google";
-                }}
-                disabled={loading}
-              >
-                <GoogleIcon />
-                <span className="ml-2">Continue with Google</span>
-              </Button>
+              <GoogleSignInButton disabled={loading} />
 
               <div className="text-center text-sm text-muted-foreground pt-1">
                 Already have an account?{" "}
                 <Link
                   href="/login"
-                  className="text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-500 rounded"
+                  className="auth-link font-semibold underline underline-offset-4"
                 >
                   Sign in
                 </Link>

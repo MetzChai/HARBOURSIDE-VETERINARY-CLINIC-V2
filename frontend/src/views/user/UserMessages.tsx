@@ -4,10 +4,13 @@ import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Mail, Phone, Bell, Loader2 } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { useRows } from "@/hooks/useRows";
 import { useMyOwner, useMyPets } from "@/hooks/useOwnerData";
 import { formatDate } from "@/lib/age";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 export default function UserMessages() {
   const { data: owner } = useMyOwner();
@@ -34,35 +37,29 @@ export default function UserMessages() {
   const getChannelBadge = (ch: string) => {
     switch (ch) {
       case "ALL":
-        return <Badge className="bg-purple-600 text-white">Email + SMS + In-App</Badge>;
+        return <Badge className="bg-brand-navy text-white">Email + SMS + In-App</Badge>;
       case "EMAIL_SMS":
-        return <Badge className="bg-blue-600 text-white">Email + SMS</Badge>;
+        return <Badge className="bg-brand-teal text-white">Email + SMS</Badge>;
       case "EMAIL":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Email</Badge>;
+        return <Badge variant="outline" className="bg-brand-navy-light text-brand-navy border-brand-navy/20">Email</Badge>;
       case "SMS":
-        return <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">SMS</Badge>;
+        return <Badge variant="outline" className="bg-brand-teal-light text-brand-teal border-brand-teal/30">SMS</Badge>;
       default:
         return <Badge variant="secondary">In-App</Badge>;
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      <div>
-        <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-          <MessageSquare className="h-6 w-6 text-primary" /> My Message History
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          View all clinic notices, email logs, SMS reminders, and in-app notifications
-        </p>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="My Messages"
+        description="Clinic notices, email logs, SMS reminders, and in-app notifications"
+      />
 
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-12 flex justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
+            <PageSkeleton rows={6} />
           ) : (
             <Table>
               <TableHeader>
@@ -91,15 +88,19 @@ export default function UserMessages() {
                       </TableCell>
                       <TableCell>{getChannelBadge(m.channel)}</TableCell>
                       <TableCell className="text-xs max-w-[300px]">
-                        {m.subject ? <strong className="block text-primary">{m.subject}</strong> : null}
+                        {m.subject ? <strong className="block text-brand-navy">{m.subject}</strong> : null}
                         <span className="text-muted-foreground">{m.body}</span>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                      No message history recorded yet.
+                    <TableCell colSpan={5} className="p-0">
+                      <EmptyState
+                        icon={MessageSquare}
+                        title="No messages found."
+                        description="Clinic communications sent to you will appear here."
+                      />
                     </TableCell>
                   </TableRow>
                 )}

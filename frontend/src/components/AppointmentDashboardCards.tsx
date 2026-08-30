@@ -37,7 +37,7 @@ export default function AppointmentDashboardCards({ appointments = [] }: Appoint
       value: todaysAppointments,
       subtitle: `Scheduled for ${today}`,
       icon: Calendar,
-      color: "text-blue-600 bg-blue-50 border-blue-200",
+      color: "text-brand-navy bg-brand-navy-light border-brand-navy/20",
     },
     {
       title: "Pending Requests",
@@ -51,21 +51,21 @@ export default function AppointmentDashboardCards({ appointments = [] }: Appoint
       value: upcomingAppointments,
       subtitle: "Future bookings",
       icon: AlertCircle,
-      color: "text-purple-600 bg-purple-50 border-purple-200",
+      color: "text-brand-teal bg-brand-teal-light border-brand-teal/30",
     },
     {
       title: "Completed Today",
       value: completedToday,
       subtitle: "Finished & recorded",
       icon: CheckCircle2,
-      color: "text-emerald-600 bg-emerald-50 border-emerald-200",
+      color: "text-brand-green bg-brand-green-light border-brand-green/30",
     },
     {
       title: "Cancelled Appointments",
       value: cancelledAppointments,
       subtitle: "Cancelled or rejected",
       icon: XCircle,
-      color: "text-rose-600 bg-rose-50 border-rose-200",
+      color: "text-red-700 bg-red-50 border-red-200",
     },
   ];
 

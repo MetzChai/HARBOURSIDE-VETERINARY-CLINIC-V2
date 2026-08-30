@@ -7,22 +7,40 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Eye, Printer } from "lucide-react";
-import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords } from "@/hooks/useOwnerData";
-import { formatAge } from "@/lib/age";
-import { formatNowPH } from "@/lib/datetime";
+import { Calendar, Eye, PawPrint, Printer } from "lucide-react";
+import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords, useMyAppointments } from "@/hooks/useOwnerData";
+import { formatAge, formatDate } from "@/lib/age";
+import { daysFromTodayPH, formatNowPH } from "@/lib/datetime";
 import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { getStatusBadgeClass } from "@/lib/appointment-slots";
 
 export default function UserPets() {
   const { data: owner } = useMyOwner();
   const { data: pets = [] } = useMyPets();
   const { data: vaccinations = [] } = useMyVaccinations();
   const { data: careRecords = [] } = useMyCareRecords();
+  const { data: appointments = [] } = useMyAppointments();
   const [viewPet, setViewPet] = useState<any | null>(null);
 
+  const upcomingForPet = (petId: string) =>
+    appointments
+      .filter(
+        (a: any) =>
+          a.pet_id === petId &&
+          a.status !== "Cancelled" &&
+          a.status !== "Completed" &&
+          a.status !== "Missed" &&
+          (daysFromTodayPH(a.date) ?? -1) >= 0,
+      )
+      .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)))[0];
+
   const vaccinesByPet = (petId: string) => vaccinations.filter((v: any) => v.pet_id === petId);
-  const checkupsByPet = (petId: string) => careRecords.filter((c: any) => c.pet_id === petId && c.record_type !== "treatment");
-  const treatmentsByPet = (petId: string) => careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "treatment");
+  const checkupsByPet = (petId: string) =>
+    careRecords.filter((c: any) => c.pet_id === petId && c.record_type !== "treatment");
+  const treatmentsByPet = (petId: string) =>
+    careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "treatment");
 
   const handlePrint = (pet: any) => {
     const vaccs = vaccinesByPet(pet.id);
@@ -62,64 +80,108 @@ export default function UserPets() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="font-heading text-2xl font-bold">My Pets</h2>
-        <p className="text-muted-foreground text-sm">View your pets' details and history</p>
-      </div>
-      {pets.length === 0 && <p className="text-sm text-muted-foreground">No pets registered yet. Contact the clinic to add your pets.</p>}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {pets.map((pet: any) => (
-          <Card key={pet.id} className="shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={pet.image_url} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold">{pet.name[0]}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-heading font-semibold">{pet.name} {pet.status === "deceased" && <Badge variant="secondary" className="ml-1">Deceased</Badge>}</p>
-                    <p className="text-xs text-muted-foreground">{pet.species} · {pet.breed} · {pet.gender}</p>
-                    <p className="text-xs text-muted-foreground">Age: {formatAge(pet.dob)}</p>
+    <div className="page-container">
+      <PageHeader
+        title="My Pets"
+        description="View your pets’ details, upcoming visits, and care history"
+      />
+      {pets.length === 0 && (
+        <EmptyState
+          icon={PawPrint}
+          title="No pets registered yet"
+          description="Contact the clinic to add your pets to this account."
+        />
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {pets.map((pet: any) => {
+          const upcoming = upcomingForPet(pet.id);
+          return (
+            <Card key={pet.id}>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-4 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="h-16 w-16 rounded-lg">
+                      <AvatarImage src={pet.image_url} className="object-cover" />
+                      <AvatarFallback className="rounded-lg bg-brand-navy-light text-brand-navy font-bold text-lg">
+                        {pet.name?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-heading font-semibold text-brand-navy truncate">
+                        {pet.name}{" "}
+                        {pet.status === "deceased" && (
+                          <Badge variant="secondary" className="ml-1">Deceased</Badge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {pet.species} · {pet.breed} · {pet.gender}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Age: {formatAge(pet.dob)}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" onClick={() => setViewPet(pet)} aria-label="View profile">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handlePrint(pet)} aria-label="Print profile">
+                      <Printer className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => setViewPet(pet)}><Eye className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => handlePrint(pet)}><Printer className="h-4 w-4" /></Button>
-                </div>
-              </div>
-              <Tabs defaultValue="vaccines" className="mt-2">
-                <TabsList className="h-8">
-                  <TabsTrigger value="vaccines" className="text-xs">Vaccines</TabsTrigger>
-                  <TabsTrigger value="checkups" className="text-xs">Check-ups</TabsTrigger>
-                  <TabsTrigger value="treatments" className="text-xs">Treatments</TabsTrigger>
-                </TabsList>
-                <TabsContent value="vaccines" className="mt-2">
-                  {vaccinesByPet(pet.id).map((v: any) => (
-                    <div key={v.id} className="text-xs flex justify-between py-1 border-b last:border-0">
-                      <span>{v.vaccine_type}</span><span className="text-muted-foreground">{v.next_due}</span>
+                {upcoming ? (
+                  <div className="mb-3 flex items-start gap-2 rounded-md border border-brand-teal/20 bg-brand-teal-light/60 p-2.5">
+                    <Calendar className="h-4 w-4 text-brand-teal mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy">
+                        Upcoming appointment
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(upcoming.date)} {upcoming.time ? `· ${upcoming.time}` : ""}
+                      </p>
+                      <Badge variant="outline" className={`${getStatusBadgeClass(upcoming.status)} mt-1`}>
+                        {upcoming.status}
+                      </Badge>
                     </div>
-                  ))}
-                </TabsContent>
-                <TabsContent value="checkups" className="mt-2">
-                  {checkupsByPet(pet.id).map((c: any) => (
-                    <div key={c.id} className="text-xs py-1 border-b last:border-0">
-                      <span className="font-medium">{c.date}</span> — {c.diagnosis}
-                    </div>
-                  ))}
-                </TabsContent>
-                <TabsContent value="treatments" className="mt-2">
-                  {treatmentsByPet(pet.id).map((t: any) => (
-                    <div key={t.id} className="text-xs py-1 border-b last:border-0">
-                      <span className="font-medium">{t.treatment}</span> — {t.notes}
-                    </div>
-                  ))}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        ))}
+                  </div>
+                ) : (
+                  <p className="mb-3 text-xs text-muted-foreground">No upcoming appointment</p>
+                )}
+                <Button size="sm" className="w-full mb-3" onClick={() => setViewPet(pet)}>
+                  View Profile
+                </Button>
+                <Tabs defaultValue="vaccines" className="mt-2">
+                  <TabsList className="h-8">
+                    <TabsTrigger value="vaccines" className="text-xs">Vaccines</TabsTrigger>
+                    <TabsTrigger value="checkups" className="text-xs">Check-ups</TabsTrigger>
+                    <TabsTrigger value="treatments" className="text-xs">Treatments</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="vaccines" className="mt-2">
+                    {vaccinesByPet(pet.id).map((v: any) => (
+                      <div key={v.id} className="text-xs flex justify-between py-1 border-b last:border-0">
+                        <span>{v.vaccine_type}</span>
+                        <span className="text-muted-foreground">{v.next_due}</span>
+                      </div>
+                    ))}
+                  </TabsContent>
+                  <TabsContent value="checkups" className="mt-2">
+                    {checkupsByPet(pet.id).map((c: any) => (
+                      <div key={c.id} className="text-xs py-1 border-b last:border-0">
+                        <span className="font-medium">{c.date}</span> — {c.diagnosis}
+                      </div>
+                    ))}
+                  </TabsContent>
+                  <TabsContent value="treatments" className="mt-2">
+                    {treatmentsByPet(pet.id).map((t: any) => (
+                      <div key={t.id} className="text-xs py-1 border-b last:border-0">
+                        <span className="font-medium">{t.treatment}</span> — {t.notes}
+                      </div>
+                    ))}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Dialog open={!!viewPet} onOpenChange={(open) => !open && setViewPet(null)}>
@@ -132,12 +194,19 @@ export default function UserPets() {
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
                   <AvatarImage src={viewPet.image_url} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">{viewPet.name[0]}</AvatarFallback>
+                  <AvatarFallback className="bg-brand-navy-light text-brand-navy text-2xl font-bold">
+                    {viewPet.name?.[0]}
+                  </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="font-heading text-lg font-bold">{viewPet.name}</h3>
-                  <p className="text-sm text-muted-foreground">{viewPet.species} · {viewPet.breed} · {viewPet.gender}</p>
+                  <h3 className="font-heading text-lg font-bold text-brand-navy">{viewPet.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {viewPet.species} · {viewPet.breed} · {viewPet.gender}
+                  </p>
                   <p className="text-sm text-muted-foreground">Age: {formatAge(viewPet.dob)}</p>
+                  {viewPet.weight && (
+                    <p className="text-sm text-muted-foreground">Weight: {viewPet.weight}</p>
+                  )}
                   <p className="text-sm text-muted-foreground">Owner: {owner?.name}</p>
                 </div>
               </div>
@@ -152,28 +221,46 @@ export default function UserPets() {
                   <PetCareHistoryTimeline petId={viewPet.id} />
                 </TabsContent>
                 <TabsContent value="vaccines" className="mt-3 space-y-1">
-                  {vaccinesByPet(viewPet.id).length === 0 && <p className="text-sm text-muted-foreground">No records</p>}
+                  {vaccinesByPet(viewPet.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No records</p>
+                  )}
                   {vaccinesByPet(viewPet.id).map((v: any) => (
                     <div key={v.id} className="flex justify-between items-center text-sm py-2 border-b last:border-0">
-                      <div><p className="font-medium">{v.vaccine_type}</p><p className="text-xs text-muted-foreground">Given: {v.date_given}</p></div>
-                      <div className="text-right"><p className="text-xs text-muted-foreground">Next due</p><p className="text-sm font-medium">{v.next_due}</p></div>
+                      <div>
+                        <p className="font-medium">{v.vaccine_type}</p>
+                        <p className="text-xs text-muted-foreground">Given: {v.date_given}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Next due</p>
+                        <p className="text-sm font-medium">{v.next_due}</p>
+                      </div>
                     </div>
                   ))}
                 </TabsContent>
                 <TabsContent value="checkups" className="mt-3 space-y-1">
-                  {checkupsByPet(viewPet.id).length === 0 && <p className="text-sm text-muted-foreground">No records</p>}
+                  {checkupsByPet(viewPet.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No records</p>
+                  )}
                   {checkupsByPet(viewPet.id).map((c: any) => (
                     <div key={c.id} className="text-sm py-2 border-b last:border-0">
-                      <div className="flex justify-between"><span className="font-medium">{c.date}</span><span className="text-muted-foreground">{c.vet}</span></div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">{c.date}</span>
+                        <span className="text-muted-foreground">{c.vet}</span>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">{c.diagnosis}</p>
                     </div>
                   ))}
                 </TabsContent>
                 <TabsContent value="treatments" className="mt-3 space-y-1">
-                  {treatmentsByPet(viewPet.id).length === 0 && <p className="text-sm text-muted-foreground">No records</p>}
+                  {treatmentsByPet(viewPet.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground">No records</p>
+                  )}
                   {treatmentsByPet(viewPet.id).map((t: any) => (
                     <div key={t.id} className="text-sm py-2 border-b last:border-0">
-                      <div className="flex justify-between"><span className="font-medium">{t.treatment}</span><span className="text-muted-foreground">{t.date}</span></div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">{t.treatment}</span>
+                        <span className="text-muted-foreground">{t.date}</span>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">{t.notes}</p>
                     </div>
                   ))}
@@ -191,4 +278,3 @@ export default function UserPets() {
     </div>
   );
 }
-

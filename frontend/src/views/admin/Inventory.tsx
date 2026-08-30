@@ -36,6 +36,9 @@ import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatNowPH } from "@/lib/da
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { isAdmin } from "@/lib/roles";
+import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 // Categories definition
 const CATEGORIES = [
@@ -71,17 +74,17 @@ type ItemStatus = (typeof STATUS_OPTIONS)[number];
 function getStatusBadgeStyle(status: ItemStatus) {
   switch (status) {
     case "Available":
-      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+      return "bg-brand-green-light text-brand-green border-brand-green/30";
     case "Low Stock":
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30";
+      return "bg-amber-50 text-amber-800 border-amber-300";
     case "Out of Stock":
-      return "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30";
+      return "bg-brand-charcoal/10 text-brand-charcoal border-brand-charcoal/20";
     case "Expiring Soon":
-      return "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30";
+      return "bg-amber-50 text-amber-800 border-amber-300";
     case "Expired":
-      return "bg-red-700/15 text-red-800 dark:text-red-400 border-red-700/30 font-semibold";
+      return "bg-red-50 text-red-800 border-red-300 font-semibold";
     default:
-      return "bg-secondary text-secondary-foreground";
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -1162,82 +1165,36 @@ export default function Inventory() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-8">
-      {/* TOP HEADER & TOOLBAR */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Package className="h-6 w-6 text-primary" /> Inventory
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Clinic stock management for medicines, vaccines, dewormers, and medical supplies with batch tracking.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportCSV}>
-            <Download className="h-4 w-4 mr-1.5" /> Export CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handlePrintReport}>
-            <Printer className="h-4 w-4 mr-1.5" /> Print Report
-          </Button>
-          {canManageItems && (
-            <Button size="sm" onClick={openAddItem} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-              <Plus className="h-4 w-4 mr-1.5" /> Add Item
+    <div className="page-container pb-8">
+      <PageHeader
+        title="Inventory"
+        description="Clinic stock management for medicines, vaccines, dewormers, and medical supplies with batch tracking."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Download className="h-4 w-4 mr-1.5" /> Export CSV
             </Button>
-          )}
-        </div>
-      </div>
+            <Button variant="outline" size="sm" onClick={handlePrintReport}>
+              <Printer className="h-4 w-4 mr-1.5" /> Print Report
+            </Button>
+            {canManageItems && (
+              <Button size="sm" onClick={openAddItem}>
+                <Plus className="h-4 w-4 mr-1.5" /> Add Item
+              </Button>
+            )}
+          </div>
+        }
+      />
 
-      {/* DASHBOARD SUMMARY CARDS (8 Cards) */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-        <Card className="shadow-xs border bg-card">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground">Total Items</p>
-            <p className="text-xl font-bold mt-1 text-foreground">{metrics.total}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border bg-card">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground">Medicines</p>
-            <p className="text-xl font-bold mt-1 text-foreground">{metrics.medicines}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border bg-card">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground">Vaccines</p>
-            <p className="text-xl font-bold mt-1 text-foreground">{metrics.vaccines}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border bg-card">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground">Dewormers</p>
-            <p className="text-xl font-bold mt-1 text-foreground">{metrics.dewormers}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border bg-card">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground">Medical Supplies</p>
-            <p className="text-xl font-bold mt-1 text-foreground">{metrics.supplies}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border border-amber-500/20 bg-amber-500/5">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Low Stock</p>
-            <p className="text-xl font-bold mt-1 text-amber-700 dark:text-amber-400">{metrics.lowStock}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border border-rose-500/20 bg-rose-500/5">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-rose-700 dark:text-rose-400">Out of Stock</p>
-            <p className="text-xl font-bold mt-1 text-rose-700 dark:text-rose-400">{metrics.outOfStock}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-xs border border-orange-500/20 bg-orange-500/5">
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-orange-700 dark:text-orange-400">Expiring Soon</p>
-            <p className="text-xl font-bold mt-1 text-orange-700 dark:text-orange-400">{metrics.expiringSoon}</p>
-          </CardContent>
-        </Card>
+        <StatCard title="Total Items" value={metrics.total} icon={Package} variant="default" />
+        <StatCard title="Medicines" value={metrics.medicines} icon={Box} variant="info" />
+        <StatCard title="Vaccines" value={metrics.vaccines} icon={Layers} variant="info" />
+        <StatCard title="Dewormers" value={metrics.dewormers} icon={Layers2} variant="success" />
+        <StatCard title="Medical Supplies" value={metrics.supplies} icon={Box} variant="default" />
+        <StatCard title="Low Stock" value={metrics.lowStock} icon={AlertTriangle} variant="warning" />
+        <StatCard title="Out of Stock" value={metrics.outOfStock} icon={Package} variant="danger" />
+        <StatCard title="Expiring Soon" value={metrics.expiringSoon} icon={Calendar} variant="warning" />
       </div>
 
       {/* ALERT BANNER IF STOCK OR EXPIRATION ALERTS EXIST */}
@@ -1330,9 +1287,7 @@ export default function Inventory() {
 
               {/* ITEM TABLE (ONE ROW PER ITEM) */}
               {isLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
+                <PageSkeleton rows={8} />
               ) : (
                 <>
                   <div className="rounded-md border overflow-x-auto">
@@ -1408,7 +1363,7 @@ export default function Inventory() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                    className="h-8 w-8 text-brand-green hover:text-brand-green hover:bg-brand-green-light"
                                     onClick={() => openStockInModal(item)}
                                     title="Stock In"
                                   >
@@ -1566,11 +1521,11 @@ export default function Inventory() {
                           <TableCell className="font-mono text-xs font-semibold">{batchDisplay}</TableCell>
                           <TableCell>
                             {isAuto ? (
-                              <Badge variant="outline" className="bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30">
+                              <Badge variant="outline" className="bg-brand-teal-light text-brand-teal border-brand-teal/30">
                                 Automatic Care History Deduction
                               </Badge>
                             ) : txn.type === "in" ? (
-                              <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                              <Badge variant="outline" className="bg-brand-green-light text-brand-green border-brand-green/30">
                                 Stock In
                               </Badge>
                             ) : (
@@ -1582,8 +1537,8 @@ export default function Inventory() {
                           <TableCell
                             className={`text-right font-semibold ${
                               txn.type === "in"
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-amber-600 dark:text-amber-400"
+                                ? "text-brand-green"
+                                : "text-amber-700"
                             }`}
                           >
                             {txn.type === "in" ? `+${txn.quantity}` : `-${txn.quantity}`} {item?.unit || "unit"}
@@ -2037,9 +1992,9 @@ export default function Inventory() {
                                 <TableCell className="font-mono text-xs">{txn.batch_no || (isAuto ? "FEFO" : "—")}</TableCell>
                                 <TableCell>
                                   {isAuto ? (
-                                    <span className="text-sky-600 font-medium">Auto Deduction</span>
+                                    <span className="text-brand-teal font-medium">Auto Deduction</span>
                                   ) : txn.type === "in" ? (
-                                    <span className="text-emerald-600 font-medium">Stock In</span>
+                                    <span className="text-brand-green font-medium">Stock In</span>
                                   ) : (
                                     <span className="text-amber-600 font-medium">Stock Out</span>
                                   )}
@@ -2072,7 +2027,7 @@ export default function Inventory() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-emerald-600 hover:text-emerald-700"
+                className="text-brand-green hover:text-brand-green hover:bg-brand-green-light"
                 onClick={() => {
                   setShowViewModal(false);
                   openStockInModal(viewingItem);
@@ -2104,7 +2059,7 @@ export default function Inventory() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-heading text-lg flex items-center gap-2">
-              <ArrowDownToLine className="h-5 w-5 text-emerald-600" /> Stock In
+              <ArrowDownToLine className="h-5 w-5 text-brand-green" /> Stock In
             </DialogTitle>
             <DialogDescription className="text-xs">
               Add new stock or receive a batch for <strong>{targetItem?.name}</strong>.
@@ -2162,11 +2117,17 @@ export default function Inventory() {
                   const priceVal = Math.max(0, parseFloat(stockInForm.unit_price || "0") || 0);
                   const calcTotal = Number((qtyVal * priceVal).toFixed(2));
                   return (
-                    <div className="bg-emerald-500/10 p-2.5 rounded-md border border-emerald-500/20 text-xs flex justify-between items-center">
-                      <span className="text-muted-foreground font-medium">Calculated Total Amount</span>
-                      <span className="font-bold text-emerald-700 dark:text-emerald-400 text-sm font-mono">
-                        ₱{calcTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
+                    <div className="bg-brand-green-light p-2.5 rounded-md border border-brand-green/20 text-xs space-y-1">
+                      <p className="text-muted-foreground font-medium">
+                        {qtyVal} {targetItem.unit || "units"} × ₱
+                        {priceVal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Total Amount</span>
+                        <span className="font-bold text-brand-green text-sm font-mono">
+                          ₱{calcTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   );
                 })()}
@@ -2232,7 +2193,7 @@ export default function Inventory() {
               size="sm"
               onClick={handleSaveStockIn}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-brand-green hover:bg-brand-green/90 text-white"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record Stock In"}
             </Button>
@@ -2309,10 +2270,10 @@ export default function Inventory() {
 
                 {/* SELECTED BATCH INFO DISPLAY */}
                 {selectedBatch && (
-                  <div className="grid grid-cols-2 gap-3 bg-emerald-500/10 p-2.5 rounded-md border border-emerald-500/20 text-xs">
+                  <div className="grid grid-cols-2 gap-3 bg-brand-green-light p-2.5 rounded-md border border-brand-green/20 text-xs">
                     <div>
                       <span className="text-muted-foreground block text-[11px]">Available Qty in Batch</span>
-                      <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      <span className="font-bold text-brand-green">
                         {selectedBatch.remaining_quantity} {targetItem.unit || "unit"}
                       </span>
                     </div>
@@ -2344,16 +2305,17 @@ export default function Inventory() {
                   const priceVal = Math.max(0, Number(targetItem?.unit_price ?? targetItem?.purchase_price ?? 0));
                   const calcTotal = Number((qtyVal * priceVal).toFixed(2));
                   return (
-                    <div className="grid grid-cols-2 gap-3 bg-amber-500/10 p-2.5 rounded-md border border-amber-500/20 text-xs">
+                    <div className="grid grid-cols-2 gap-3 bg-amber-50 p-2.5 rounded-md border border-amber-200 text-xs">
                       <div>
-                        <span className="text-muted-foreground block text-[11px]">Unit Price</span>
-                        <span className="font-semibold text-foreground font-mono">
-                          ₱{priceVal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="text-muted-foreground block text-[11px]">Quantity × Unit Price</span>
+                        <span className="font-semibold text-foreground">
+                          {qtyVal} × ₱
+                          {priceVal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground block text-[11px]">Calculated Total Amount</span>
-                        <span className="font-bold text-amber-700 dark:text-amber-400 font-mono">
+                        <span className="text-muted-foreground block text-[11px]">Total Amount</span>
+                        <span className="font-bold text-amber-800 font-mono">
                           ₱{calcTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>

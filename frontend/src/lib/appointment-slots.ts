@@ -64,20 +64,20 @@ export function getStatusBadgeClass(status?: string | null): string {
   switch (String(status ?? "").toLowerCase()) {
     case "pending":
     case "requested":
-      return "bg-amber-100 text-amber-800 border-amber-300";
+      return "bg-amber-50 text-amber-800 border-amber-300";
     case "approved":
-      return "bg-blue-100 text-blue-800 border-blue-300";
+      return "bg-brand-teal-light text-brand-teal border-brand-teal/30";
     case "scheduled":
-      return "bg-sky-100 text-sky-800 border-sky-300";
+      return "bg-brand-navy-light text-brand-navy border-brand-navy/20";
     case "completed":
-      return "bg-emerald-100 text-emerald-800 border-emerald-300";
+      return "bg-brand-green-light text-brand-green border-brand-green/30";
     case "cancelled":
-      return "bg-rose-100 text-rose-800 border-rose-300";
+      return "bg-red-50 text-red-800 border-red-300";
     case "no show":
     case "noshow":
     case "missed":
-      return "bg-slate-100 text-slate-700 border-slate-300";
+      return "bg-muted text-muted-foreground border-border";
     default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
+      return "bg-muted text-muted-foreground border-border";
   }
 }

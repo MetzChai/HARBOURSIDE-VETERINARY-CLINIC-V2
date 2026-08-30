@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { formatDatePH, formatDateTimePH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { canManageStaff, roleLabel, type AppRole } from "@/lib/roles";
+import { PageHeader } from "@/components/PageHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type UserRecord = {
   id: string;
@@ -189,31 +191,23 @@ export default function ManageStaff() {
   };
 
   if (authLoading || !canManageStaff(role)) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
-      </div>
-    );
+    return <PageSkeleton rows={6} />;
   }
 
   const staffUsers = usersList.filter((u) => u.role === "admin" || u.role === "staff");
   const petOwners = usersList.filter((u) => u.role === "owner");
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
-            <UserCog className="h-6 w-6 text-teal-600" /> Admin Account Management
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Create staff accounts, toggle account statuses (Active/Deactivated), and reset passwords.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold">
-          <Plus className="h-4 w-4 mr-1.5" /> Create Staff Account
-        </Button>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Staff Management"
+        description="Create staff accounts, toggle account statuses, and reset passwords."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" /> Create Staff Account
+          </Button>
+        }
+      />
 
       <Tabs defaultValue="all">
         <TabsList>
@@ -232,12 +226,12 @@ export default function ManageStaff() {
                 <CardContent className="p-0">
                   {loadingUsers ? (
                     <div className="p-8 flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+                      <Loader2 className="h-6 w-6 animate-spin text-brand-teal" />
                     </div>
                   ) : (
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-slate-50 dark:bg-slate-900">
+                        <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Email</TableHead>
                           <TableHead>Role</TableHead>
@@ -248,17 +242,17 @@ export default function ManageStaff() {
                       </TableHeader>
                       <TableBody>
                         {displayedUsers.map((account) => (
-                          <TableRow key={account.id} className={account.accountStatus === "Deactivated" ? "opacity-60 bg-slate-50/50" : ""}>
+                          <TableRow key={account.id} className={account.accountStatus === "Deactivated" ? "opacity-60 bg-muted/40" : ""}>
                             <TableCell>
                               <div>
-                                <p className="font-semibold text-slate-900 dark:text-slate-100">{account.fullName}</p>
+                                <p className="font-semibold text-brand-navy">{account.fullName}</p>
                                 {account.phone && <p className="text-xs text-muted-foreground">{account.phone}</p>}
                               </div>
                             </TableCell>
                             <TableCell className="text-sm">
                               <span className="font-mono">{account.email}</span>
                               {account.emailVerified ? (
-                                <Badge variant="outline" className="ml-2 text-[10px] border-emerald-500 text-emerald-600">Verified</Badge>
+                                <Badge variant="outline" className="ml-2 text-[10px] border-brand-green text-brand-green">Verified</Badge>
                               ) : (
                                 <Badge variant="outline" className="ml-2 text-[10px] border-amber-500 text-amber-600">Unverified</Badge>
                               )}
@@ -270,7 +264,7 @@ export default function ManageStaff() {
                             </TableCell>
                             <TableCell>
                               {account.accountStatus === "Active" ? (
-                                <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">Active</Badge>
+                                <Badge className="bg-brand-green hover:bg-brand-green/90 text-white">Active</Badge>
                               ) : (
                                 <Badge variant="destructive">Deactivated</Badge>
                               )}
@@ -285,7 +279,7 @@ export default function ManageStaff() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleToggleStatus(account)}
-                                  className={account.accountStatus === "Active" ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"}
+                                  className={account.accountStatus === "Active" ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-brand-green hover:text-brand-green hover:bg-brand-green-light"}
                                   title={account.accountStatus === "Active" ? "Deactivate Account" : "Reactivate Account"}
                                 >
                                   {account.accountStatus === "Active" ? <Ban className="w-4 h-4 mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
@@ -306,7 +300,7 @@ export default function ManageStaff() {
                                   setResetPasswordValue("");
                                   setResetOpen(true);
                                 }}
-                                className="text-teal-600 hover:text-teal-700 hover:bg-teal-50"
+                                className="text-brand-teal hover:text-brand-teal hover:bg-brand-teal-light"
                                 title="Reset User Password"
                               >
                                 <KeyRound className="w-4 h-4 mr-1" /> Reset Pass
@@ -409,7 +403,7 @@ export default function ManageStaff() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateStaff} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white">
+            <Button onClick={handleCreateStaff} disabled={saving} className="bg-brand-navy hover:bg-brand-navy/90 text-white">
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Create Staff"}
             </Button>
           </DialogFooter>
@@ -443,7 +437,7 @@ export default function ManageStaff() {
             <Button variant="outline" onClick={() => setResetOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAdminResetPassword} disabled={saving} className="bg-teal-600 hover:bg-teal-700 text-white">
+            <Button onClick={handleAdminResetPassword} disabled={saving} className="bg-brand-navy hover:bg-brand-navy/90 text-white">
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Reset Password"}
             </Button>
           </DialogFooter>

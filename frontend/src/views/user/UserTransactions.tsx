@@ -5,11 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Printer, CreditCard, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { DollarSign, Printer, Clock, CheckCircle, Loader2 } from "lucide-react";
 import { useRows } from "@/hooks/useRows";
 import { useMyOwner, useMyPets } from "@/hooks/useOwnerData";
 import { formatDate } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function UserTransactions() {
   const { data: owner } = useMyOwner();
@@ -90,51 +93,32 @@ export default function UserTransactions() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
-      <div>
-        <h1 className="font-heading text-2xl font-bold">My Payment Transactions</h1>
-        <p className="text-muted-foreground text-sm">
-          View your clinic payment history, services rendered, and payment status
-        </p>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="My Transactions"
+        description="Clinic payment history, services rendered, and payment status"
+      />
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card className="border-0 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Total Paid Amount</p>
-              <h3 className="text-2xl font-bold font-heading text-emerald-600">
-                ₱{totalSpent.toLocaleString()}
-              </h3>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
-              <CheckCircle className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Pending Payment Amount</p>
-              <h3 className="text-2xl font-bold font-heading text-amber-600">
-                ₱{pendingAmount.toLocaleString()}
-              </h3>
-            </div>
-            <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
-              <Clock className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Total Paid Amount"
+          value={`₱${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          icon={CheckCircle}
+          variant="success"
+        />
+        <StatCard
+          title="Pending Payment Amount"
+          value={`₱${pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          icon={Clock}
+          variant="warning"
+        />
       </div>
 
-      {/* Transaction Table */}
-      <Card className="border-0 shadow-sm">
+      <Card>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-12 flex justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <Loader2 className="h-6 w-6 animate-spin text-brand-navy" />
             </div>
           ) : (
             <Table>
@@ -154,7 +138,7 @@ export default function UserTransactions() {
                 {userTransactions.length ? (
                   userTransactions.map((t: any) => (
                     <TableRow key={t.id}>
-                      <TableCell className="font-mono text-xs font-bold text-primary">
+                      <TableCell className="font-mono text-xs font-bold text-brand-navy">
                         {t.transaction_number || `TXN-${t.id.slice(0, 6)}`}
                       </TableCell>
                       <TableCell className="text-xs">{formatDate(t.date || t.created_at)}</TableCell>
@@ -165,7 +149,7 @@ export default function UserTransactions() {
                         {t.services_rendered || "Veterinary Medical Service"}
                       </TableCell>
                       <TableCell className="font-bold text-xs">
-                        ₱{Number(t.total_amount || t.total || 0).toLocaleString()}
+                        ₱{Number(t.total_amount || t.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
@@ -177,8 +161,8 @@ export default function UserTransactions() {
                           variant="outline"
                           className={
                             (t.payment_status || t.status) === "Paid"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
+                              ? "bg-brand-green-light text-brand-green border-brand-green/30"
+                              : "bg-amber-50 text-amber-800 border-amber-300"
                           }
                         >
                           {t.payment_status || t.status || "Pending"}
@@ -199,8 +183,12 @@ export default function UserTransactions() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      No transaction records logged.
+                    <TableCell colSpan={8} className="p-0">
+                      <EmptyState
+                        icon={DollarSign}
+                        title="No transactions found."
+                        description="Clinic charges linked to your pets will appear here."
+                      />
                     </TableCell>
                   </TableRow>
                 )}
