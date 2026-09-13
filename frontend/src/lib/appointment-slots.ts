@@ -15,7 +15,7 @@ export const APPOINTMENT_SLOTS = [
   "16:30",
 ] as const;
 
-export const VET_OPTIONS = ["Dr. Rivera", "Dr. Tan"] as const;
+export const VET_OPTIONS: string[] = ["Alfredo B. Badiola, Jr., DVM"];
 
 export const APPOINTMENT_STATUSES = [
   "Requested",

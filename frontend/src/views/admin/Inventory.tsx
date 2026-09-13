@@ -28,6 +28,11 @@ import {
   Calendar,
   Layers2,
   Box,
+  Pill,
+  Syringe,
+  ShieldCheck,
+  PackageX,
+  Clock,
 } from "lucide-react";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
@@ -1186,15 +1191,116 @@ export default function Inventory() {
         }
       />
 
+      {/* Enhanced Interactive Inventory Metric Boxes */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-        <StatCard title="Total Items" value={metrics.total} icon={Package} variant="default" />
-        <StatCard title="Medicines" value={metrics.medicines} icon={Box} variant="info" />
-        <StatCard title="Vaccines" value={metrics.vaccines} icon={Layers} variant="info" />
-        <StatCard title="Dewormers" value={metrics.dewormers} icon={Layers2} variant="success" />
-        <StatCard title="Medical Supplies" value={metrics.supplies} icon={Box} variant="default" />
-        <StatCard title="Low Stock" value={metrics.lowStock} icon={AlertTriangle} variant="warning" />
-        <StatCard title="Out of Stock" value={metrics.outOfStock} icon={Package} variant="danger" />
-        <StatCard title="Expiring Soon" value={metrics.expiringSoon} icon={Calendar} variant="warning" />
+        {[
+          {
+            title: "Total Items",
+            value: metrics.total,
+            icon: Package,
+            gradient: "from-[#1B3A5C] to-[#1E4E7A]",
+            iconBg: "bg-[#1B3A5C]/15 text-[#1B3A5C]",
+            active: categoryFilter === "all" && statusFilter === "all",
+            onClick: () => { setCategoryFilter("all"); setStatusFilter("all"); },
+          },
+          {
+            title: "Medicines",
+            value: metrics.medicines,
+            icon: Pill,
+            gradient: "from-[#1FA8A8] to-[#168585]",
+            iconBg: "bg-[#1FA8A8]/15 text-[#1FA8A8]",
+            active: categoryFilter === "medication",
+            onClick: () => { setCategoryFilter("medication"); setStatusFilter("all"); },
+          },
+          {
+            title: "Vaccines",
+            value: metrics.vaccines,
+            icon: Syringe,
+            gradient: "from-purple-500 to-indigo-600",
+            iconBg: "bg-purple-500/15 text-purple-600",
+            active: categoryFilter === "vaccine",
+            onClick: () => { setCategoryFilter("vaccine"); setStatusFilter("all"); },
+          },
+          {
+            title: "Deworming",
+            value: metrics.dewormers,
+            icon: ShieldCheck,
+            gradient: "from-emerald-500 to-teal-600",
+            iconBg: "bg-emerald-500/15 text-emerald-600",
+            active: categoryFilter === "dewormer",
+            onClick: () => { setCategoryFilter("dewormer"); setStatusFilter("all"); },
+          },
+          {
+            title: "Supplies",
+            value: metrics.supplies,
+            icon: Box,
+            gradient: "from-sky-500 to-blue-600",
+            iconBg: "bg-sky-500/15 text-sky-600",
+            active: categoryFilter === "supply",
+            onClick: () => { setCategoryFilter("supply"); setStatusFilter("all"); },
+          },
+          {
+            title: "Low Stock",
+            value: metrics.lowStock,
+            icon: AlertTriangle,
+            gradient: "from-amber-500 to-orange-500",
+            iconBg: "bg-amber-500/15 text-amber-600",
+            active: statusFilter === "low_stock",
+            onClick: () => { setStatusFilter("low_stock"); setCategoryFilter("all"); },
+          },
+          {
+            title: "Out of Stock",
+            value: metrics.outOfStock,
+            icon: PackageX,
+            gradient: "from-rose-500 to-red-600",
+            iconBg: "bg-rose-500/15 text-rose-600",
+            active: statusFilter === "out_of_stock",
+            onClick: () => { setStatusFilter("out_of_stock"); setCategoryFilter("all"); },
+          },
+          {
+            title: "Expiring Soon",
+            value: metrics.expiringSoon,
+            icon: Clock,
+            gradient: "from-orange-500 to-amber-600",
+            iconBg: "bg-orange-500/15 text-orange-600",
+            active: statusFilter === "expiring",
+            onClick: () => { setStatusFilter("expiring"); setCategoryFilter("all"); },
+          },
+        ].map((box) => {
+          const Icon = box.icon;
+          return (
+            <div
+              key={box.title}
+              onClick={box.onClick}
+              className={`relative overflow-hidden rounded-xl border transition-all duration-200 cursor-pointer p-3.5 flex flex-col justify-between group hover:-translate-y-1 hover:shadow-md ${
+                box.active
+                  ? "bg-white border-[#1FA8A8] ring-2 ring-[#1FA8A8]/30 shadow-md"
+                  : "bg-white/90 border-slate-200/90 hover:border-slate-300"
+              }`}
+            >
+              {/* Top Accent Bar */}
+              <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${box.gradient}`} />
+
+              <div className="flex items-center justify-between gap-1 mb-2">
+                <span className="text-[11px] font-bold text-slate-600 truncate group-hover:text-[#1B3A5C] transition-colors">
+                  {box.title}
+                </span>
+                <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${box.iconBg}`}>
+                  <Icon className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl sm:text-2xl font-extrabold font-heading text-[#1B3A5C]">
+                  {box.value}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-medium group-hover:text-[#1FA8A8] transition-colors">
+                  Filter →
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ALERT BANNER IF STOCK OR EXPIRATION ALERTS EXIST */}
@@ -1292,18 +1398,18 @@ export default function Inventory() {
                 <>
                   <div className="rounded-md border overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-muted/50">
-                        <TableRow>
-                          <TableHead className="w-[110px]">Item ID</TableHead>
-                          <TableHead>Item Name</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="w-[80px]">Unit</TableHead>
-                          <TableHead className="text-right">Unit Price</TableHead>
-                          <TableHead className="text-right">Total Qty</TableHead>
-                          <TableHead className="text-right">Reorder Level</TableHead>
-                          <TableHead>Earliest Expiry</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                      <TableHeader className="bg-[#E8EEF4]">
+                        <TableRow className="hover:bg-[#E8EEF4]">
+                          <TableHead className="w-[110px] text-[#1B3A5C] font-bold text-xs">Item ID</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Item Name</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Category</TableHead>
+                          <TableHead className="w-[80px] text-[#1B3A5C] font-bold text-xs">Unit</TableHead>
+                          <TableHead className="text-right text-[#1B3A5C] font-bold text-xs">Unit Price</TableHead>
+                          <TableHead className="text-right text-[#1B3A5C] font-bold text-xs">Total Qty</TableHead>
+                          <TableHead className="text-right text-[#1B3A5C] font-bold text-xs">Reorder Level</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Earliest Expiry</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Status</TableHead>
+                          <TableHead className="text-right whitespace-nowrap text-[#1B3A5C] font-bold text-xs">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

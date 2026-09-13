@@ -48,4 +48,13 @@ app.listen(port, () => {
   console.log(`Frontend URL: ${frontendUrl}`);
   const gemini = process.env.GEMINI_API_KEY?.trim();
   console.log(`Gemini AI: ${gemini ? "configured" : "not set (PawBot uses local fallback)"}`);
+
+  import("./services/message-dispatch.js")
+    .then(({ processPendingScheduledMessages }) => {
+      void processPendingScheduledMessages();
+      setInterval(() => {
+        void processPendingScheduledMessages();
+      }, 60_000);
+    })
+    .catch((err) => console.error("[messages] Scheduler failed to start:", err));
 });

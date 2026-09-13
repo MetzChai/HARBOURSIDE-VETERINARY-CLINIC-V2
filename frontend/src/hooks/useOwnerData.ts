@@ -10,7 +10,7 @@ export function useMyOwner() {
     queryFn: async () => {
       const { data, error } = await db.from("owners").select("*").eq("user_id", user!.id).maybeSingle();
       if (error) throw new Error(error.message);
-      return data as { name?: string; contact?: string } | null;
+      return data as { id: string; name?: string; contact?: string; email?: string } | null;
     },
   });
 }

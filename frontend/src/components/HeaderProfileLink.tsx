@@ -1,7 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 
 interface Props {
   href: string;
@@ -12,6 +12,11 @@ interface Props {
 
 export default function HeaderProfileLink({ href, displayName, subtitle, avatarUrl }: Props) {
   const initial = displayName[0]?.toUpperCase() ?? "?";
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
 
   return (
     <Link
@@ -20,14 +25,13 @@ export default function HeaderProfileLink({ href, displayName, subtitle, avatarU
       aria-label="View profile"
     >
       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-        {avatarUrl ? (
-          <Image
+        {avatarUrl && !imgError ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={avatarUrl}
             alt=""
-            width={32}
-            height={32}
             className="h-full w-full object-cover"
-            unoptimized={avatarUrl.startsWith("http")}
+            onError={() => setImgError(true)}
           />
         ) : (
           <span className="text-xs font-bold text-primary">{initial}</span>

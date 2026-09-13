@@ -171,6 +171,7 @@ model Pet {
   vaccinations Vaccination[]
   dewormings   Deworming[]
   careRecords  CareRecord[]
+  messages     Message[]
 
   @@map("pets")
 }
@@ -353,18 +354,23 @@ model LabTransactionItem {
 }
 
 model Message {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId   String?  @map("owner_id") @db.Uuid
-  phone     String?
-  body      String
-  status    String   @default("simulated")
-  channel   String   @default("sms")
-  subject   String?
-  email     String?
-  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId     String?   @map("owner_id") @db.Uuid
+  petId       String?   @map("pet_id") @db.Uuid
+  phone       String?
+  body        String
+  status      String    @default("simulated")
+  channel     String    @default("sms")
+  subject     String?
+  email       String?
+  messageType String    @default("Custom Message") @map("message_type")
+  sentBy      String?   @map("sent_by")
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  sentAt      DateTime? @default(now()) @map("sent_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   owner Owner? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  pet   Pet?   @relation(fields: [petId], references: [id], onDelete: SetNull)
 
   @@map("messages")
 }

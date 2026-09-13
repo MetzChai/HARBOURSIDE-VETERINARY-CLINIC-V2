@@ -37,7 +37,7 @@ export function BrandLogo({
         alt="Harbourside Veterinary Clinic"
         width={px}
         height={px}
-        className="object-contain shrink-0"
+        className="object-contain shrink-0 rounded-lg shadow-sm"
         priority
       />
       {showText && !collapsed && (

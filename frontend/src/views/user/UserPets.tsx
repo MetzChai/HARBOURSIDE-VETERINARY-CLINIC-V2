@@ -46,33 +46,76 @@ export default function UserPets() {
     const vaccs = vaccinesByPet(pet.id);
     const checkups = checkupsByPet(pet.id);
     const treatments = treatmentsByPet(pet.id);
+    const petRecords = careRecords.filter((c: any) => c.pet_id === pet.id).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
+
     const w = window.open("", "_blank");
     if (!w) return;
     w.document.write(`
-      <html><head><title>Pet Profile - ${pet.name}</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;color:#1a1a1a}
-      h1{color:#1B3A5C;margin-bottom:4px}h3{margin-top:24px;color:#1B3A5C}
-      table{width:100%;border-collapse:collapse;margin-top:8px}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}
-      .header{border-bottom:2px solid #1B3A5C;padding-bottom:12px;margin-bottom:20px}</style></head>
-      <body><div class="header"><h1>Harbourside Veterinary Clinic</h1><p>Pet Profile Report</p></div>
-      <h2 style="margin:0 0 8px">${pet.name}</h2>
-      <p><strong>Species:</strong> ${pet.species} | <strong>Breed:</strong> ${pet.breed ?? "—"} |
-      <strong>Gender:</strong> ${pet.gender ?? "—"} | <strong>Age:</strong> ${formatAge(pet.dob)}</p>
-      <p><strong>Owner:</strong> ${owner?.name ?? "—"} | <strong>Contact:</strong> ${owner?.contact ?? "—"}</p>
-      <h3>Vaccination Records</h3>
+      <html><head><title>Pet Medical Record - ${pet.name}</title>
+      <style>
+        @page { size: portrait; margin: 15mm; }
+        body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;line-height:1.4}
+        h1{color:#7F1D1D;margin:0;font-size:22px}
+        h2{margin:4px 0 12px;color:#333;font-size:16px}
+        .header{border-bottom:2px solid #7F1D1D;padding-bottom:12px;margin-bottom:16px}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;background:#f8fafc;padding:12px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#FEE2E2;color:#7F1D1D}
+        .timeline-card{border:1px solid #e2e8f0;border-left:4px solid #7F1D1D;padding:10px;margin-bottom:10px;border-radius:4px;background:#fff}
+        .timeline-date{font-weight:bold;color:#475569;font-size:11px}
+        .timeline-title{font-size:12px;font-weight:bold;color:#7F1D1D;margin:2px 0}
+        .timeline-detail{font-size:11px;color:#334155;margin-top:2px}
+      </style></head>
+      <body>
+      <div class="header" style="display:flex;align-items:center;gap:12px;">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <p style="margin:2px 0 0;font-size:12px;color:#666">Official Pet Medical Record & Care History</p>
+        </div>
+      </div>
+      <h2>${pet.name}</h2>
+      <div class="info-grid">
+        <div><strong>Species & Breed:</strong> ${pet.species} (${pet.breed ?? "Crossbreed"})</div>
+        <div><strong>Owner Name:</strong> ${owner?.name ?? "—"}</div>
+        <div><strong>Gender & Age:</strong> ${pet.gender ?? "—"} | ${formatAge(pet.dob)}</div>
+        <div><strong>Owner Contact:</strong> ${owner?.contact ?? "—"}</div>
+      </div>
+
+      <h3 style="color:#1B3A5C;margin-top:20px;border-bottom:1px solid #ddd;padding-bottom:4px">Care History Medical Timeline (${petRecords.length})</h3>
+      ${
+        petRecords.length
+          ? petRecords.map((r: any) => `
+            <div class="timeline-card">
+              <div class="timeline-date">Date: ${r.date ? formatDate(r.date) : "—"} | Type: ${r.record_type || "Visit"}</div>
+              <div class="timeline-title">${r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Service"}</div>
+              ${r.vet ? `<div class="timeline-detail"><strong>Vet/Staff:</strong> ${r.vet}</div>` : ""}
+              ${r.chief_complaint ? `<div class="timeline-detail"><strong>Reason:</strong> ${r.chief_complaint}</div>` : ""}
+              ${r.diagnosis ? `<div class="timeline-detail"><strong>Diagnosis:</strong> ${r.diagnosis}</div>` : ""}
+              ${r.treatment ? `<div class="timeline-detail"><strong>Treatment:</strong> ${r.treatment}</div>` : ""}
+              ${r.medication ? `<div class="timeline-detail"><strong>Medications:</strong> ${r.medication}</div>` : ""}
+              ${r.notes ? `<div class="timeline-detail"><strong>Notes:</strong> ${r.notes}</div>` : ""}
+            </div>
+          `).join("")
+          : "<p style='font-size:12px;color:#888'>No medical care history records logged.</p>"
+      }
+
+      <h3 style="color:#1B3A5C;margin-top:20px">Vaccination Records</h3>
       <table><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Notes</th></tr>
-      ${vaccs.map((v: any) => `<tr><td>${v.vaccine_type}</td><td>${v.date_given ?? ""}</td><td>${v.next_due ?? ""}</td><td>${v.notes ?? ""}</td></tr>`).join("")}
+      ${vaccs.map((v: any) => `<tr><td>${v.vaccine_type}</td><td>${v.date_given ? formatDate(v.date_given) : "—"}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
-      <h3>Check-up History</h3>
-      <table><tr><th>Date</th><th>Vet</th><th>Diagnosis</th></tr>
-      ${checkups.map((c: any) => `<tr><td>${c.date ?? ""}</td><td>${c.vet ?? ""}</td><td>${c.diagnosis ?? ""}</td></tr>`).join("")}
+
+      <h3 style="color:#1B3A5C;margin-top:20px">Check-up & Medical History</h3>
+      <table><tr><th>Date</th><th>Vet</th><th>Diagnosis</th><th>Treatment</th></tr>
+      ${checkups.map((c: any) => `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.vet ?? "—"}</td><td>${c.diagnosis ?? "—"}</td><td>${c.treatment ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
-      <h3>Treatment History</h3>
-      <table><tr><th>Treatment</th><th>Date</th><th>Notes</th></tr>
-      ${treatments.map((t: any) => `<tr><td>${t.treatment ?? ""}</td><td>${t.date ?? ""}</td><td>${t.notes ?? ""}</td></tr>`).join("")}
+
+      <h3 style="color:#1B3A5C;margin-top:20px">Treatment History</h3>
+      <table><tr><th>Treatment</th><th>Date</th><th>Diagnosis</th><th>Notes</th></tr>
+      ${treatments.map((t: any) => `<tr><td>${t.treatment ?? "—"}</td><td>${t.date ? formatDate(t.date) : "—"}</td><td>${t.diagnosis ?? "—"}</td><td>${t.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
-      <br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time)</p>
+
+      <br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</p>
       </body></html>
     `);
     w.document.close();
@@ -80,10 +123,10 @@ export default function UserPets() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container space-y-6 pb-10">
       <PageHeader
         title="My Pets"
-        description="View your pets’ details, upcoming visits, and care history"
+        description="Manage your pets' profiles, check upcoming clinic visits, and review full care history"
       />
       {pets.length === 0 && (
         <EmptyState
@@ -92,90 +135,115 @@ export default function UserPets() {
           description="Contact the clinic to add your pets to this account."
         />
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {pets.map((pet: any) => {
           const upcoming = upcomingForPet(pet.id);
           return (
-            <Card key={pet.id}>
+            <Card key={pet.id} className="group border border-border/80 shadow-sm hover:shadow-md hover:border-[#E5192C]/40 transition-all rounded-2xl overflow-hidden bg-card">
+              <div className="h-2 bg-gradient-to-r from-[#7F1D1D] to-[#E5192C]" />
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4 gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar className="h-16 w-16 rounded-lg">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <Avatar className="h-16 w-16 rounded-xl border-2 border-[#E5192C]/30 shadow-sm group-hover:scale-105 transition-transform">
                       <AvatarImage src={pet.image_url} className="object-cover" />
-                      <AvatarFallback className="rounded-lg bg-brand-navy-light text-brand-navy font-bold text-lg">
+                      <AvatarFallback className="rounded-xl bg-[#FEE2E2] text-[#7F1D1D] font-bold text-xl">
                         {pet.name?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="font-heading font-semibold text-brand-navy truncate">
-                        {pet.name}{" "}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="font-heading font-bold text-[#7F1D1D] text-lg truncate">
+                          {pet.name}
+                        </h3>
                         {pet.status === "deceased" && (
-                          <Badge variant="secondary" className="ml-1">Deceased</Badge>
+                          <Badge variant="secondary" className="bg-slate-200 text-slate-700 text-[10px]">Deceased</Badge>
                         )}
-                      </p>
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        {pet.species} · {pet.breed} · {pet.gender}
+                        {pet.species} · {pet.breed || "Crossbreed"} · {pet.gender || "—"}
                       </p>
-                      <p className="text-xs text-muted-foreground">Age: {formatAge(pet.dob)}</p>
+                      <p className="text-xs font-medium text-[#E5192C] mt-0.5">Age: {pet.dob ? formatAge(pet.dob) : "Not specified"}</p>
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" onClick={() => setViewPet(pet)} aria-label="View profile">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-[#7F1D1D] hover:bg-[#FEE2E2]" onClick={() => setViewPet(pet)} title="View profile">
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handlePrint(pet)} aria-label="Print profile">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-[#7F1D1D] hover:bg-[#FEE2E2]" onClick={() => handlePrint(pet)} title="Print Medical Record">
                       <Printer className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
+
                 {upcoming ? (
-                  <div className="mb-3 flex items-start gap-2 rounded-md border border-brand-teal/20 bg-brand-teal-light/60 p-2.5">
-                    <Calendar className="h-4 w-4 text-brand-teal mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-navy">
-                        Upcoming appointment
+                  <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-[#E5192C]/30 bg-[#FFF1F2]/80 p-3 shadow-xs">
+                    <Calendar className="h-4 w-4 text-[#E5192C] mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#7F1D1D]">
+                          Upcoming Visit
+                        </p>
+                        <Badge variant="outline" className={`${getStatusBadgeClass(upcoming.status)} text-[10px] py-0`}>
+                          {upcoming.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs font-semibold text-[#7F1D1D] mt-0.5">
+                        {formatDate(upcoming.date)} {upcoming.time ? `at ${upcoming.time}` : ""}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(upcoming.date)} {upcoming.time ? `· ${upcoming.time}` : ""}
-                      </p>
-                      <Badge variant="outline" className={`${getStatusBadgeClass(upcoming.status)} mt-1`}>
-                        {upcoming.status}
-                      </Badge>
                     </div>
                   </div>
                 ) : (
-                  <p className="mb-3 text-xs text-muted-foreground">No upcoming appointment</p>
+                  <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-muted-foreground flex items-center justify-between">
+                    <span>No upcoming appointment</span>
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs text-[#E5192C] font-semibold" asChild>
+                      <a href="/user/appointments">+ Book Visit</a>
+                    </Button>
+                  </div>
                 )}
-                <Button size="sm" className="w-full mb-3" onClick={() => setViewPet(pet)}>
-                  View Profile
+
+                <Button size="sm" className="w-full mb-3 bg-[#7F1D1D] hover:bg-[#5C1315] text-white font-semibold text-xs shadow-xs" onClick={() => setViewPet(pet)}>
+                  View Full Profile & Care History
                 </Button>
+
                 <Tabs defaultValue="vaccines" className="mt-2">
-                  <TabsList className="h-8">
-                    <TabsTrigger value="vaccines" className="text-xs">Vaccines</TabsTrigger>
-                    <TabsTrigger value="checkups" className="text-xs">Check-ups</TabsTrigger>
-                    <TabsTrigger value="treatments" className="text-xs">Treatments</TabsTrigger>
+                  <TabsList className="h-8 w-full bg-muted/60 p-0.5 grid grid-cols-3">
+                    <TabsTrigger value="vaccines" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Vaccines</TabsTrigger>
+                    <TabsTrigger value="checkups" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Check-ups</TabsTrigger>
+                    <TabsTrigger value="treatments" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Treatments</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="vaccines" className="mt-2">
-                    {vaccinesByPet(pet.id).map((v: any) => (
-                      <div key={v.id} className="text-xs flex justify-between py-1 border-b last:border-0">
-                        <span>{v.vaccine_type}</span>
-                        <span className="text-muted-foreground">{v.next_due}</span>
-                      </div>
-                    ))}
+                  <TabsContent value="vaccines" className="mt-2.5 space-y-1">
+                    {vaccinesByPet(pet.id).length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No vaccination history</p>
+                    ) : (
+                      vaccinesByPet(pet.id).slice(0, 3).map((v: any) => (
+                        <div key={v.id} className="text-xs flex justify-between py-1.5 border-b last:border-0">
+                          <span className="font-semibold text-[#1B3A5C]">{v.vaccine_type}</span>
+                          <span className="text-muted-foreground text-[11px]">Due: {v.next_due ? formatDate(v.next_due) : "—"}</span>
+                        </div>
+                      ))
+                    )}
                   </TabsContent>
-                  <TabsContent value="checkups" className="mt-2">
-                    {checkupsByPet(pet.id).map((c: any) => (
-                      <div key={c.id} className="text-xs py-1 border-b last:border-0">
-                        <span className="font-medium">{c.date}</span> — {c.diagnosis}
-                      </div>
-                    ))}
+                  <TabsContent value="checkups" className="mt-2.5 space-y-1">
+                    {checkupsByPet(pet.id).length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No check-up history</p>
+                    ) : (
+                      checkupsByPet(pet.id).slice(0, 3).map((c: any) => (
+                        <div key={c.id} className="text-xs py-1.5 border-b last:border-0">
+                          <span className="font-semibold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span> — {c.diagnosis || "Regular Visit"}
+                        </div>
+                      ))
+                    )}
                   </TabsContent>
-                  <TabsContent value="treatments" className="mt-2">
-                    {treatmentsByPet(pet.id).map((t: any) => (
-                      <div key={t.id} className="text-xs py-1 border-b last:border-0">
-                        <span className="font-medium">{t.treatment}</span> — {t.notes}
-                      </div>
-                    ))}
+                  <TabsContent value="treatments" className="mt-2.5 space-y-1">
+                    {treatmentsByPet(pet.id).length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No treatment history</p>
+                    ) : (
+                      treatmentsByPet(pet.id).slice(0, 3).map((t: any) => (
+                        <div key={t.id} className="text-xs py-1.5 border-b last:border-0">
+                          <span className="font-semibold text-[#1B3A5C]">{t.treatment || "Treatment"}</span> — {t.notes || "Completed"}
+                        </div>
+                      ))
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>
@@ -184,91 +252,95 @@ export default function UserPets() {
         })}
       </div>
 
+      {/* Pet Profile Detail Dialog */}
       <Dialog open={!!viewPet} onOpenChange={(open) => !open && setViewPet(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-heading">Pet Profile</DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="border-b pb-3">
+            <DialogTitle className="font-heading text-lg font-bold text-[#7F1D1D] flex items-center gap-2">
+              <PawPrint className="h-5 w-5 text-[#E5192C]" /> Pet Profile & Medical Records
+            </DialogTitle>
           </DialogHeader>
           {viewPet && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
+            <div className="space-y-5 pt-2">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-[#FEE2E2] to-[#FFF1F2] border border-[#E5192C]/20">
+                <Avatar className="h-20 w-20 border-2 border-white shadow-md">
                   <AvatarImage src={viewPet.image_url} />
-                  <AvatarFallback className="bg-brand-navy-light text-brand-navy text-2xl font-bold">
+                  <AvatarFallback className="bg-[#7F1D1D] text-white text-2xl font-bold">
                     {viewPet.name?.[0]}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <h3 className="font-heading text-lg font-bold text-brand-navy">{viewPet.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {viewPet.species} · {viewPet.breed} · {viewPet.gender}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <h3 className="font-heading text-xl font-extrabold text-[#7F1D1D]">{viewPet.name}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {viewPet.species} · {viewPet.breed || "Crossbreed"} · {viewPet.gender || "—"}
                   </p>
-                  <p className="text-sm text-muted-foreground">Age: {formatAge(viewPet.dob)}</p>
-                  {viewPet.weight && (
-                    <p className="text-sm text-muted-foreground">Weight: {viewPet.weight}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">Owner: {owner?.name}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700 pt-1">
+                    <span><strong>Age:</strong> {formatAge(viewPet.dob)}</span>
+                    {viewPet.weight && <span><strong>Weight:</strong> {viewPet.weight}</span>}
+                    <span><strong>Owner:</strong> {owner?.name}</span>
+                  </div>
                 </div>
               </div>
-              <Tabs defaultValue="timeline">
-                <TabsList className="w-full">
-                  <TabsTrigger value="timeline" className="flex-1 text-xs font-semibold">Care History Timeline</TabsTrigger>
-                  <TabsTrigger value="vaccines" className="flex-1 text-xs">Vaccines</TabsTrigger>
-                  <TabsTrigger value="checkups" className="flex-1 text-xs">Check-ups</TabsTrigger>
-                  <TabsTrigger value="treatments" className="flex-1 text-xs">Treatments</TabsTrigger>
+
+              <Tabs defaultValue="timeline" className="w-full">
+                <TabsList className="w-full bg-muted p-1 grid grid-cols-4">
+                  <TabsTrigger value="timeline" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Care History</TabsTrigger>
+                  <TabsTrigger value="vaccines" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Vaccines</TabsTrigger>
+                  <TabsTrigger value="checkups" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Check-ups</TabsTrigger>
+                  <TabsTrigger value="treatments" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Treatments</TabsTrigger>
                 </TabsList>
                 <TabsContent value="timeline" className="mt-3">
                   <PetCareHistoryTimeline petId={viewPet.id} />
                 </TabsContent>
-                <TabsContent value="vaccines" className="mt-3 space-y-1">
+                <TabsContent value="vaccines" className="mt-3 space-y-2">
                   {vaccinesByPet(viewPet.id).length === 0 && (
-                    <p className="text-sm text-muted-foreground">No records</p>
+                    <p className="text-sm text-muted-foreground text-center py-6">No vaccination records</p>
                   )}
                   {vaccinesByPet(viewPet.id).map((v: any) => (
-                    <div key={v.id} className="flex justify-between items-center text-sm py-2 border-b last:border-0">
+                    <div key={v.id} className="flex justify-between items-center text-sm p-3 rounded-lg border bg-card">
                       <div>
-                        <p className="font-medium">{v.vaccine_type}</p>
-                        <p className="text-xs text-muted-foreground">Given: {v.date_given}</p>
+                        <p className="font-bold text-[#1B3A5C]">{v.vaccine_type}</p>
+                        <p className="text-xs text-muted-foreground">Given: {v.date_given ? formatDate(v.date_given) : "—"}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Next due</p>
-                        <p className="text-sm font-medium">{v.next_due}</p>
+                        <p className="text-xs font-bold text-[#1FA8A8]">{v.next_due ? formatDate(v.next_due) : "—"}</p>
                       </div>
                     </div>
                   ))}
                 </TabsContent>
-                <TabsContent value="checkups" className="mt-3 space-y-1">
+                <TabsContent value="checkups" className="mt-3 space-y-2">
                   {checkupsByPet(viewPet.id).length === 0 && (
-                    <p className="text-sm text-muted-foreground">No records</p>
+                    <p className="text-sm text-muted-foreground text-center py-6">No check-up records</p>
                   )}
                   {checkupsByPet(viewPet.id).map((c: any) => (
-                    <div key={c.id} className="text-sm py-2 border-b last:border-0">
+                    <div key={c.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
                       <div className="flex justify-between">
-                        <span className="font-medium">{c.date}</span>
-                        <span className="text-muted-foreground">{c.vet}</span>
+                        <span className="font-bold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span>
+                        <span className="text-xs text-muted-foreground">{c.vet || "Clinic Vet"}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{c.diagnosis}</p>
+                      <p className="text-xs text-slate-700"><strong>Diagnosis:</strong> {c.diagnosis || "General Exam"}</p>
                     </div>
                   ))}
                 </TabsContent>
-                <TabsContent value="treatments" className="mt-3 space-y-1">
+                <TabsContent value="treatments" className="mt-3 space-y-2">
                   {treatmentsByPet(viewPet.id).length === 0 && (
-                    <p className="text-sm text-muted-foreground">No records</p>
+                    <p className="text-sm text-muted-foreground text-center py-6">No treatment records</p>
                   )}
                   {treatmentsByPet(viewPet.id).map((t: any) => (
-                    <div key={t.id} className="text-sm py-2 border-b last:border-0">
+                    <div key={t.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
                       <div className="flex justify-between">
-                        <span className="font-medium">{t.treatment}</span>
-                        <span className="text-muted-foreground">{t.date}</span>
+                        <span className="font-bold text-[#1B3A5C]">{t.treatment || "Treatment Procedure"}</span>
+                        <span className="text-xs text-muted-foreground">{t.date ? formatDate(t.date) : "—"}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{t.notes}</p>
+                      <p className="text-xs text-slate-700">{t.notes || "No notes provided"}</p>
                     </div>
                   ))}
                 </TabsContent>
               </Tabs>
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => handlePrint(viewPet)}>
-                  <Printer className="h-3 w-3 mr-1" /> Print Profile
+              <div className="flex justify-end pt-2 border-t">
+                <Button variant="outline" size="sm" className="border-[#1B3A5C] text-[#1B3A5C] hover:bg-[#E8EEF4]" onClick={() => handlePrint(viewPet)}>
+                  <Printer className="h-4 w-4 mr-1.5" /> Print Official Medical Record
                 </Button>
               </div>
             </div>

@@ -6,9 +6,15 @@ import { requireAuth } from "../middleware/auth.js";
 
 const uploadRoot = path.join(process.cwd(), "uploads");
 
+function getCleanFolder(req: any): string {
+  const raw = (req.query?.folder as string) || (req.body?.folder as string) || "pets";
+  const sanitized = raw.replace(/[^a-zA-Z0-9_-]/g, "");
+  return sanitized || "pets";
+}
+
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const folder = (req.body?.folder as string) || "pets";
+    const folder = getCleanFolder(req);
     const dir = path.join(uploadRoot, folder);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
@@ -36,7 +42,7 @@ const router = Router();
 router.post("/", requireAuth, upload.single("file"), (req, res) => {
   try {
     const file = req.file;
-    const folder = (req.body?.folder as string) || "pets";
+    const folder = getCleanFolder(req);
     if (!file) {
       res.status(400).json({ error: "Invalid image file" });
       return;

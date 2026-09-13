@@ -64,7 +64,7 @@ type ReportType =
   | "staff";
 
 const ITEMS_PER_PAGE = 8;
-const COLORS = ["#1B3A5C", "#1FA8A8", "#2E7D32", "#C62828", "#8E24AA", "#F57C00", "#0284C7"];
+const COLORS = ["#E5192C", "#7F1D1D", "#16A34A", "#D97706", "#8E24AA", "#F57C00", "#0284C7"];
 
 export default function Reports() {
   const router = useRouter();
@@ -230,18 +230,24 @@ export default function Reports() {
           <title>${title} - Harbourside Veterinary Clinic</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin: 0 0 4px; }
-            h2 { color: #1FA8A8; margin: 0 0 16px; font-size: 16px; border-bottom: 2px solid #1B3A5C; padding-bottom: 8px; }
+            h1 { color: #7F1D1D; margin: 0 0 2px; font-size: 22px; }
+            h2 { color: #E5192C; margin: 0 0 16px; font-size: 15px; border-bottom: 2px solid #7F1D1D; padding-bottom: 8px; }
+            .header-brand { display: flex; items-center; gap: 12px; margin-bottom: 16px; }
             .header-info { display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-bottom: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 11px; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
+            th { background: #FEE2E2; color: #7F1D1D; font-weight: bold; }
             .footer { margin-top: 30px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 10px; text-align: center; }
           </style>
         </head>
         <body>
-          <h1>🩺 Harbourside Veterinary Clinic</h1>
-          <h2>${title}</h2>
+          <div class="header-brand">
+            <img src="/logo.png" style="height: 48px; width: 48px; object-fit: contain; border-radius: 8px;" alt="HVS" />
+            <div>
+              <h1>Harbourside Veterinary Clinic</h1>
+              <h2>${title}</h2>
+            </div>
+          </div>
 
           <div class="header-info">
             <div>
@@ -449,6 +455,36 @@ export default function Reports() {
     return Object.keys(counts).map((name) => ({ name, value: counts[name] }));
   }, [filteredPets]);
 
+  const ownerChartData = useMemo(() => {
+    const counts = { "Registered Online": 0, "Walk-in Clients": 0 };
+    filteredOwners.forEach((o) => {
+      if (o.is_walk_in) counts["Walk-in Clients"]++;
+      else counts["Registered Online"]++;
+    });
+    return Object.keys(counts).map((name) => ({ name, value: counts[name as keyof typeof counts] }));
+  }, [filteredOwners]);
+
+  const inventoryChartData = useMemo(() => {
+    const counts: Record<string, number> = {
+      "In Stock": 0,
+      "Low Stock": 0,
+      "Out of Stock": 0,
+      "Expiring / Expired": 0,
+    };
+    filteredInventory.forEach((i) => {
+      const qty = Number(i.quantity ?? 0);
+      const reorder = Number(i.reorder_level ?? 5);
+      const days = i.expiration_date ? daysFromTodayPH(i.expiration_date) : null;
+      const isExp = days !== null && (days <= 30 || isBeforeTodayPH(i.expiration_date));
+
+      if (isExp) counts["Expiring / Expired"]++;
+      else if (qty <= 0) counts["Out of Stock"]++;
+      else if (qty <= reorder) counts["Low Stock"]++;
+      else counts["In Stock"]++;
+    });
+    return Object.keys(counts).map((name) => ({ name, count: counts[name] }));
+  }, [filteredInventory]);
+
   const txnChartData = useMemo(() => {
     const counts: Record<string, number> = { Cash: 0, GCash: 0 };
     filteredTransactions.forEach((t) => {
@@ -457,6 +493,30 @@ export default function Reports() {
     });
     return Object.keys(counts).map((name) => ({ name, Revenue: counts[name] }));
   }, [filteredTransactions]);
+
+  const communicationChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredMessages.forEach((m) => {
+      const ch = (m.channel || "System").toUpperCase();
+      counts[ch] = (counts[ch] || 0) + 1;
+    });
+    return Object.keys(counts).map((name) => ({ name, value: counts[name] }));
+  }, [filteredMessages]);
+
+  const staffChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    careRecords.forEach((c) => {
+      const v = c.vet || "Clinic Staff";
+      counts[v] = (counts[v] || 0) + 1;
+    });
+    if (Object.keys(counts).length === 0) {
+      filteredStaff.forEach((s) => {
+        const label = s.full_name || s.email?.split("@")[0] || "Staff";
+        counts[label] = 1;
+      });
+    }
+    return Object.keys(counts).map((name) => ({ name, count: counts[name] }));
+  }, [careRecords, filteredStaff]);
 
   if (isLoading) {
     return <PageSkeleton rows={8} showStats />;
@@ -737,6 +797,30 @@ export default function Reports() {
                           m.subject || m.body.slice(0, 30),
                         ])
                       );
+                    } else if (selectedReport === "owner") {
+                      printOfficialReport(
+                        "Owner Demographics & Account Report",
+                        ["Owner Code", "Name", "Contact", "Email", "Client Type", "Status"],
+                        filteredOwners.map((o) => [
+                          o.owner_code || o.id.slice(0, 6),
+                          o.name,
+                          o.contact || "—",
+                          o.email || "—",
+                          o.is_walk_in ? "Walk-in" : "Online",
+                          o.account_status || "Active",
+                        ])
+                      );
+                    } else if (selectedReport === "staff") {
+                      printOfficialReport(
+                        "Staff Activity & Account Report",
+                        ["Staff Name", "Email", "Role", "Registered Date"],
+                        filteredStaff.map((s) => [
+                          s.full_name || "Staff Member",
+                          s.email || "—",
+                          s.role || "staff",
+                          formatDate(s.created_at),
+                        ])
+                      );
                     }
                   }}
                 >
@@ -795,6 +879,32 @@ export default function Reports() {
                   </ResponsiveContainer>
                 )}
 
+                {selectedReport === "owner" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={ownerChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                        {ownerChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.name.includes("Walk-in") ? "#D97706" : "#1B3A5C"} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend fontSize={11} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+
+                {selectedReport === "inventory" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={inventoryChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#E5192C" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+
                 {selectedReport === "transaction" && (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={txnChartData}>
@@ -807,14 +917,31 @@ export default function Reports() {
                   </ResponsiveContainer>
                 )}
 
-                {selectedReport !== "appointment" &&
-                  selectedReport !== "care" &&
-                  selectedReport !== "pet" &&
-                  selectedReport !== "transaction" && (
-                    <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
-                      Visual chart breakdown prepared for current report dataset.
-                    </div>
-                  )}
+                {selectedReport === "communication" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={communicationChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                        {communicationChartData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend fontSize={11} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+
+                {selectedReport === "staff" && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={staffChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#1FA8A8" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
 

@@ -110,3 +110,56 @@ export async function sendPasswordResetEmail(email: string, userName: string, to
     console.log(`========================================\n`);
   }
 }
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendClinicNoticeEmail(
+  email: string,
+  userName: string,
+  subject: string,
+  body: string
+) {
+  const portalLink = `${getAppUrl()}/user/messages`;
+  const htmlBody = escapeHtml(body).replace(/\n/g, "<br />");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <h2 style="color: #7f1d1d; text-align: center;">Harbourside Veterinary Clinic</h2>
+      <h3 style="color: #1e293b;">${escapeHtml(subject)}</h3>
+      <p>Hello <strong>${escapeHtml(userName || "Valued Pet Owner")}</strong>,</p>
+      <div style="color: #334155; line-height: 1.6;">${htmlBody}</div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${portalLink}" style="background-color: #7f1d1d; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Open Messages</a>
+      </div>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="font-size: 12px; color: #94a3b8; text-align: center;">Harbourside Veterinary Clinic – Pet Record Management System</p>
+    </div>
+  `;
+
+  const transporter = getTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: `"Harbourside Veterinary Clinic" <${process.env.SMTP_USER || process.env.GMAIL_USER}>`,
+        to: email,
+        subject,
+        html,
+      });
+      console.log(`[EMAIL] Clinic notice sent to ${email}`);
+    } catch (e) {
+      console.error("[EMAIL ERROR] Failed to send clinic notice:", e);
+    }
+  } else {
+    console.log(`\n========================================`);
+    console.log(`[EMAIL SIMULATION] Clinic notice to: ${email}`);
+    console.log(`[EMAIL SIMULATION] Subject: ${subject}`);
+    console.log(`[EMAIL SIMULATION] Body:\n${body}`);
+    console.log(`========================================\n`);
+  }
+}

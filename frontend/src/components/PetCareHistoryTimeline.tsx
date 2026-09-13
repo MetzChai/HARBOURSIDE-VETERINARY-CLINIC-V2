@@ -25,14 +25,14 @@ function getCareTypeBadgeClass(type?: string | null) {
   switch (String(type ?? "").toLowerCase()) {
     case "vaccination":
     case "vaccine":
-      return "bg-brand-navy-light text-brand-navy border-brand-navy/20";
+      return "bg-[#E8EEF4] text-[#1B3A5C] border-[#1B3A5C]/30 font-semibold";
     case "treatment":
-      return "bg-brand-teal-light text-brand-teal border-brand-teal/30";
+      return "bg-[#E8F6F6] text-[#1FA8A8] border-[#1FA8A8]/30 font-semibold";
     case "deworming":
-      return "bg-amber-50 text-amber-800 border-amber-300";
+      return "bg-amber-50 text-amber-900 border-amber-300 font-semibold";
     case "checkup":
     default:
-      return "bg-brand-green-light text-brand-green border-brand-green/30";
+      return "bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold";
   }
 }
 
@@ -40,8 +40,8 @@ function TimelineField({ label, value }: { label: string; value?: string | null 
   if (!value) return null;
   return (
     <div className="space-y-0.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-xs text-foreground whitespace-pre-wrap">{value}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-xs text-slate-800 whitespace-pre-wrap">{value}</p>
     </div>
   );
 }
@@ -56,8 +56,8 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-6">
-        <Loader2 className="h-5 w-5 animate-spin text-brand-teal" />
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-[#1FA8A8]" />
       </div>
     );
   }
@@ -73,7 +73,7 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
   }
 
   return (
-    <div className="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-brand-navy/15">
+    <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-[#1FA8A8] before:to-[#1B3A5C]/20">
       {petRecords.map((r) => {
         const title =
           r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Service";
@@ -86,26 +86,26 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
         }
 
         return (
-          <div key={r.id} className="relative">
-            <div className="absolute -left-[23px] top-1.5 h-4 w-4 rounded-full border-2 border-brand-teal bg-card flex items-center justify-center">
-              <div className="h-1.5 w-1.5 rounded-full bg-brand-teal" />
+          <div key={r.id} className="relative group">
+            <div className="absolute -left-[23px] top-1.5 h-4 w-4 rounded-full border-2 border-[#1FA8A8] bg-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+              <div className="h-1.5 w-1.5 rounded-full bg-[#1FA8A8]" />
             </div>
 
-            <div className="bg-card p-4 rounded-lg border border-border/60 shadow-sm space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> {r.date ? formatDate(r.date) : "—"}
+            <div className="bg-card p-4 rounded-xl border border-border/80 shadow-xs hover:shadow-md hover:border-[#1FA8A8]/40 transition-all space-y-3">
+              <div className="flex items-center justify-between gap-2 border-b pb-2">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-[#1FA8A8]" /> {r.date ? formatDate(r.date) : "—"}
                 </span>
                 <Badge variant="outline" className={getCareTypeBadgeClass(r.record_type)}>
                   {formatCareTypeLabel(r.record_type)}
                 </Badge>
               </div>
 
-              <p className="font-heading font-semibold text-sm text-brand-navy">{title}</p>
+              <p className="font-heading font-bold text-sm text-[#1B3A5C]">{title}</p>
 
               {r.vet && (
                 <p className="text-xs text-muted-foreground">
-                  Veterinarian / Staff: <span className="text-foreground font-medium">{r.vet}</span>
+                  Attending Vet / Staff: <span className="text-[#1B3A5C] font-semibold">{r.vet}</span>
                 </p>
               )}
 
@@ -119,20 +119,20 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
               </div>
 
               {r.medication && (
-                <p className="text-xs text-muted-foreground">
-                  Medicine prescribed: <span className="text-foreground">{r.medication}</span>
+                <p className="text-xs text-muted-foreground bg-slate-50 p-2 rounded-lg border">
+                  Medicine prescribed: <span className="text-[#1B3A5C] font-semibold">{r.medication}</span>
                   {r.medication_qty ? ` (Qty: ${r.medication_qty})` : ""}
                 </p>
               )}
 
               {parsedMeds.length > 0 && (
-                <div className="rounded-md bg-brand-navy-light/50 p-2.5 space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-navy">
-                    Medication / Products
+                <div className="rounded-lg bg-[#E8EEF4]/70 p-3 space-y-1.5 border border-[#1B3A5C]/10">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#1B3A5C]">
+                    Prescribed Medications & Products
                   </p>
                   {parsedMeds.map((med, i) => (
-                    <p key={i} className="text-xs">
-                      {med.name || "Product"} — {med.quantity ?? 1} {med.unit || "unit"}
+                    <p key={i} className="text-xs text-slate-800 font-medium">
+                      • {med.name || "Product"} — {med.quantity ?? 1} {med.unit || "unit"}
                       {med.notes ? ` · ${med.notes}` : ""}
                     </p>
                   ))}
@@ -140,13 +140,13 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
               )}
 
               {r.next_vax_due && (
-                <p className="text-xs text-brand-navy font-medium">
+                <p className="text-xs text-[#1FA8A8] font-bold">
                   Next vaccination due: {formatDate(r.next_vax_due)}
                 </p>
               )}
 
               {r.next_deworming_due && (
-                <p className="text-xs text-amber-800 font-medium">
+                <p className="text-xs text-amber-800 font-bold">
                   Next deworming due: {formatDate(r.next_deworming_due)}
                 </p>
               )}

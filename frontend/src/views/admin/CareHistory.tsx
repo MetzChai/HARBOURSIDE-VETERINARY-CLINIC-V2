@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar } from "lucide-react";
+import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar, MessageSquare } from "lucide-react";
+import Link from "next/link";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH, isBeforeTodayPH } from "@/lib/datetime";
@@ -517,17 +518,22 @@ export default function CareHistory() {
           <title>Harbourside Veterinary Clinic - Care History Report</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 4px; }
-            h2 { color: #555; font-weight: normal; margin-top: 0; font-size: 16px; }
+            h1 { color: #7F1D1D; margin-bottom: 2px; }
+            h2 { color: #E5192C; font-weight: normal; margin-top: 0; font-size: 15px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
             th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
+            th { background: #FEE2E2; color: #7F1D1D; font-weight: bold; }
             .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
           </style>
         </head>
         <body>
-          <h1>Harbourside Veterinary Clinic</h1>
-          <h2>Care History & Medical Records</h2>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+            <div>
+              <h1 style="margin:0;font-size:20px;color:#7F1D1D;">Harbourside Veterinary Clinic</h1>
+              <h2 style="margin:2px 0 0;font-size:14px;color:#E5192C;">Care History & Medical Records</h2>
+            </div>
+          </div>
           <table>
             <thead>
               <tr>
@@ -692,14 +698,14 @@ export default function CareHistory() {
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Visit Date</TableHead>
-                <TableHead>Pet</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Care Type</TableHead>
-                <TableHead>Veterinarian / Staff</TableHead>
-                <TableHead>Status / Details</TableHead>
-                <TableHead className="text-right pr-6">Actions</TableHead>
+              <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Visit Date</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Pet</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Owner</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Care Type</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Veterinarian / Staff</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs">Status / Details</TableHead>
+                <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -742,6 +748,27 @@ export default function CareHistory() {
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
+
+                          {pet?.owner_id && (
+                            <Link
+                              href={`/admin/messages?ownerId=${pet.owner_id}&petId=${r.pet_id}&type=${
+                                String(r.record_type).toLowerCase().includes("vax") || String(r.record_type).toLowerCase().includes("vaccin")
+                                  ? "Vaccination+Reminder"
+                                  : String(r.record_type).toLowerCase().includes("deworm")
+                                  ? "Deworming+Reminder"
+                                  : "Custom+Message"
+                              }`}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
+                                title="Send Care Reminder"
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                          )}
                           {isAdmin && (
                             <Button
                               variant="ghost"

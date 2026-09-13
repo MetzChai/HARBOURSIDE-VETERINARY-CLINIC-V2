@@ -37,15 +37,19 @@ export default function UserTransactions() {
   const petMap = useMemo(() => new Map(myPets.map((p: any) => [p.id, p])), [myPets]);
 
   const totalSpent = useMemo(() => {
-    return userTransactions
-      .filter((t: any) => (t.payment_status || t.status) === "Paid")
-      .reduce((sum: number, t: any) => sum + Number(t.total_amount || t.total || 0), 0);
+    return userTransactions.reduce((sum: number, t: any) => {
+      const tot = Number(t.total_amount || t.total || 0);
+      const paid = Number(t.amount_paid ?? ((t.payment_status || t.status) === "Paid" ? tot : 0));
+      return sum + paid;
+    }, 0);
   }, [userTransactions]);
 
   const pendingAmount = useMemo(() => {
-    return userTransactions
-      .filter((t: any) => (t.payment_status || t.status) !== "Paid")
-      .reduce((sum: number, t: any) => sum + Number(t.total_amount || t.total || 0), 0);
+    return userTransactions.reduce((sum: number, t: any) => {
+      const tot = Number(t.total_amount || t.total || 0);
+      const paid = Number(t.amount_paid ?? ((t.payment_status || t.status) === "Paid" ? tot : 0));
+      return sum + Math.max(0, tot - paid);
+    }, 0);
   }, [userTransactions]);
 
   const handlePrintReceipt = (t: any) => {
@@ -58,19 +62,23 @@ export default function UserTransactions() {
         <head>
           <title>Clinic Receipt - ${t.transaction_number || "TXN"}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 2px; }
-            .badge { background: #e8eef4; color: #1B3A5C; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+            h1 { color: #7F1D1D; margin-bottom: 2px; }
+            .badge { background: #fee2e2; color: #7F1D1D; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; }
+            th { background: #FEE2E2; color: #7F1D1D; }
             .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; }
             .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
           </style>
         </head>
         <body>
-          <h1>Harbourside Veterinary Clinic</h1>
-          <h2>Payment Statement</h2>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+            <div>
+              <h1 style="margin:0;font-size:20px;color:#7F1D1D;">Harbourside Veterinary Clinic</h1>
+              <h2 style="margin:2px 0 0;font-size:14px;color:#E5192C;">Payment Statement</h2>
+            </div>
+          </div>
           <div class="info-grid">
             <div><strong>Transaction #:</strong> ${t.transaction_number || `TXN-${t.id.slice(0, 6)}`}</div>
             <div><strong>Date:</strong> ${formatDate(t.date || t.created_at)}</div>
@@ -93,7 +101,7 @@ export default function UserTransactions() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container space-y-6 pb-10">
       <PageHeader
         title="My Transactions"
         description="Clinic payment history, services rendered, and payment status"
@@ -114,45 +122,45 @@ export default function UserTransactions() {
         />
       </div>
 
-      <Card>
+      <Card className="border border-border/80 shadow-sm rounded-xl overflow-hidden">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-12 flex justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-brand-navy" />
+              <Loader2 className="h-6 w-6 animate-spin text-[#E5192C]" />
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Txn #</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Pet</TableHead>
-                  <TableHead>Services Rendered</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right pr-6">Receipt</TableHead>
+                <TableRow className="bg-[#FEE2E2] hover:bg-[#FEE2E2]">
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Txn #</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Date</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Pet</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Services Rendered</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Amount</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Method</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs">Status</TableHead>
+                  <TableHead className="text-[#7F1D1D] font-bold text-xs text-right pr-6">Receipt</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {userTransactions.length ? (
                   userTransactions.map((t: any) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-mono text-xs font-bold text-brand-navy">
+                    <TableRow key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                      <TableCell className="font-mono text-xs font-bold text-[#7F1D1D]">
                         {t.transaction_number || `TXN-${t.id.slice(0, 6)}`}
                       </TableCell>
                       <TableCell className="text-xs">{formatDate(t.date || t.created_at)}</TableCell>
-                      <TableCell className="font-semibold text-xs">
+                      <TableCell className="font-semibold text-xs text-[#7F1D1D]">
                         {petMap.get(t.pet_id)?.name || "Pet"}
                       </TableCell>
                       <TableCell className="text-xs max-w-[200px] truncate">
                         {t.services_rendered || "Veterinary Medical Service"}
                       </TableCell>
-                      <TableCell className="font-bold text-xs">
+                      <TableCell className="font-bold text-xs text-[#7F1D1D]">
                         ₱{Number(t.total_amount || t.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs border-[#E5192C]/30 text-[#7F1D1D] bg-[#FFF1F2]">
                           {t.payment_method || "Cash"}
                         </Badge>
                       </TableCell>
@@ -161,8 +169,8 @@ export default function UserTransactions() {
                           variant="outline"
                           className={
                             (t.payment_status || t.status) === "Paid"
-                              ? "bg-brand-green-light text-brand-green border-brand-green/30"
-                              : "bg-amber-50 text-amber-800 border-amber-300"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold text-xs"
+                              : "bg-amber-50 text-amber-900 border-amber-300 font-semibold text-xs"
                           }
                         >
                           {t.payment_status || t.status || "Pending"}
@@ -172,11 +180,11 @@ export default function UserTransactions() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0"
+                          className="h-8 w-8 p-0 text-[#7F1D1D] hover:bg-[#FEE2E2]"
                           onClick={() => handlePrintReceipt(t)}
                           title="Print Receipt"
                         >
-                          <Printer className="h-3.5 w-3.5" />
+                          <Printer className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>

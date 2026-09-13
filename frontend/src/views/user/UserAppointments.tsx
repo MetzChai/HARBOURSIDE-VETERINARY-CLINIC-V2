@@ -173,11 +173,11 @@ export default function UserAppointments() {
   );
 
   const renderTable = (rows: any[]) => (
-    <Card>
+    <Card className="border border-border/80 shadow-sm rounded-xl overflow-hidden">
       <CardContent className="p-0">
         {isLoading ? (
           <div className="p-12 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-navy" />
+            <Loader2 className="h-6 w-6 animate-spin text-[#1B3A5C]" />
           </div>
         ) : rows.length === 0 ? (
           <EmptyState
@@ -189,34 +189,34 @@ export default function UserAppointments() {
           <div className="data-table-wrap border-0 shadow-none">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Apt Number</TableHead>
-                  <TableHead>Pet</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time (PHT)</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Veterinarian</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right pr-6">Actions</TableHead>
+                <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Apt Number</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Pet</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Date</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Time (PHT)</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Type</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Veterinarian</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Reason</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Status</TableHead>
+                  <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((a: any) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-mono text-xs font-bold text-brand-navy">
+                  <TableRow key={a.id} className="hover:bg-slate-50/80 transition-colors">
+                    <TableCell className="font-mono text-xs font-bold text-[#1B3A5C]">
                       {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
                     </TableCell>
-                    <TableCell className="font-semibold">{a.pets?.name ?? "—"}</TableCell>
-                    <TableCell>{a.date ? formatDate(a.date) : "—"}</TableCell>
-                    <TableCell className="font-semibold">{a.time}</TableCell>
+                    <TableCell className="font-semibold text-xs text-[#1B3A5C]">{a.pets?.name ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{a.date ? formatDate(a.date) : "—"}</TableCell>
+                    <TableCell className="font-semibold text-xs">{a.time}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs border-[#1FA8A8]/30 text-[#1B3A5C] bg-[#E8F6F6]">
                         {a.appointment_type || a.care_type || "Check-up"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{a.vet ?? (a.status === "Pending" || a.status === "Requested" ? "Unassigned" : "—")}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{a.reason ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{a.vet ?? (a.status === "Pending" || a.status === "Requested" ? "Unassigned" : "—")}</TableCell>
+                    <TableCell className="max-w-[200px] truncate text-xs">{a.reason ?? "—"}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={getStatusBadgeClass(a.status)}>
                         {a.status}
@@ -227,7 +227,7 @@ export default function UserAppointments() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0"
+                          className="h-8 w-8 p-0 text-[#1B3A5C] hover:bg-[#E8EEF4]"
                           onClick={() => {
                             setSelectedAppointment(a);
                             setShowDetails(true);
@@ -241,7 +241,7 @@ export default function UserAppointments() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 text-xs text-destructive hover:text-destructive hover:bg-red-50"
+                            className="h-8 text-xs text-destructive hover:text-destructive hover:bg-red-50 font-medium"
                             onClick={() => cancelPendingRequest(a.id)}
                             disabled={cancellingId === a.id}
                           >

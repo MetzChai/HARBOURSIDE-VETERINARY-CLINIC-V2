@@ -1,24 +1,25 @@
 /** Harbourside brand palette derived from the clinic logo */
 export const BRAND = {
-  navy: "#1B3A5C",
-  teal: "#1FA8A8",
-  green: "#3CB043",
+  red: "#E5192C",
+  crimson: "#7F1D1D",
+  navy: "#7F1D1D",
+  teal: "#E5192C",
+  green: "#16A34A",
   charcoal: "#2D3436",
-  navyLight: "#E8EEF4",
-  tealLight: "#E8F6F6",
+  navyLight: "#FEE2E2",
+  tealLight: "#FFF1F2",
   greenLight: "#EDF7ED",
   amber: "#E65100",
-  red: "#C62828",
 } as const;
 
 /** Chart palette for Recharts and analytics */
 export const CHART_COLORS = [
-  BRAND.navy,
-  BRAND.teal,
+  BRAND.red,
+  BRAND.crimson,
   BRAND.green,
   "#8E24AA",
   BRAND.amber,
-  BRAND.red,
+  "#D97706",
 ] as const;
 
 /** Inventory status badge classes */

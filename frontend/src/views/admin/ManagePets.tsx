@@ -30,6 +30,10 @@ import {
   Syringe,
   FileText,
   AlertTriangle,
+  Stethoscope,
+  CheckCircle2,
+  Bug,
+  Package,
 } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
 import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
@@ -37,7 +41,8 @@ import { toast } from "sonner";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatAge, formatDate } from "@/lib/age";
-import { formatNowPH, todayPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, isBeforeTodayPH } from "@/lib/datetime";
+import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -81,8 +86,34 @@ export default function ManagePets() {
   const { data: careRecords = [] } = useRows<any>("care_records", { orderBy: "date", ascending: false });
   const { data: vaccinations = [] } = useRows<any>("vaccinations", { orderBy: "date_given", ascending: false });
   const { data: dewormings = [] } = useRows<any>("dewormings", { orderBy: "date_given", ascending: false });
+  const { data: inventoryItems = [] } = useRows<any>("inventory_items", { orderBy: "name" });
+  const { data: dbBatches = [] } = useRows<any>("inventory_batches");
 
   const invalidate = useInvalidate();
+
+  // Stock Map for Inventory Validation
+  const availableStockMap = useMemo(() => {
+    const map: Record<string, { totalQty: number; name: string; category: string; unit: string; unitPrice: number }> = {};
+    inventoryItems.forEach((item: any) => {
+      const itemBatches = dbBatches.filter((b: any) => b.inventory_item_id === item.id);
+      const activeBatches = itemBatches.filter((b: any) => {
+        const remQty = Number(b.remaining_quantity ?? 0);
+        if (remQty <= 0) return false;
+        if (!b.expiration_date) return true;
+        const expStr = String(b.expiration_date).slice(0, 10);
+        return !isBeforeTodayPH(expStr);
+      });
+      const totalQty = activeBatches.reduce((acc: number, b: any) => acc + Number(b.remaining_quantity ?? 0), 0);
+      map[item.id] = {
+        totalQty,
+        name: item.name,
+        category: item.category || "supply",
+        unit: item.unit || "unit",
+        unitPrice: Number(item.unit_price ?? item.purchase_price ?? 0),
+      };
+    });
+    return map;
+  }, [inventoryItems, dbBatches]);
 
   // Search, Filter & Pagination
   const [search, setSearch] = useState("");
@@ -99,7 +130,41 @@ export default function ManagePets() {
   const [deletePetTarget, setDeletePetTarget] = useState<PetRow | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Form State
+  // Record Form Modal State
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [savingRecord, setSavingRecord] = useState(false);
+
+  const emptyRecordForm = {
+    record_type: "checkup" as "checkup" | "vaccination" | "treatment" | "deworming",
+    date: todayPH(),
+    vet: VET_OPTIONS[0] || "Alfredo B. Badiola, Jr., DVM",
+    chief_complaint: "",
+    symptoms: "",
+    diagnosis: "",
+    findings: "",
+    treatment: "",
+    medication: "",
+    vaccine_used: "",
+    next_vax_due: "",
+    dewormer_used: "",
+    next_deworming_due: "",
+    outcome: "Completed",
+    notes: "",
+  };
+
+  const [recordForm, setRecordForm] = useState(emptyRecordForm);
+  const [medicationsList, setMedicationsList] = useState<
+    Array<{
+      inventory_item_id: string;
+      name: string;
+      quantity: number;
+      unit: string;
+      notes?: string;
+    }>
+  >([]);
+
+  // Form State for Pet Creation/Edit
   const emptyForm = {
     pet_code: "",
     owner_id: "",
@@ -158,6 +223,173 @@ export default function ManagePets() {
       cause_of_death: pet.cause_of_death || "",
       deceased_date: pet.deceased_date || "",
     });
+  };
+
+  const openAddRecordModal = (type: "checkup" | "vaccination" | "treatment" | "deworming" = "checkup") => {
+    setEditingRecordId(null);
+    setRecordForm({
+      ...emptyRecordForm,
+      record_type: type,
+      date: todayPH(),
+      vet: VET_OPTIONS[0] || "Alfredo B. Badiola, Jr., DVM",
+    });
+    setMedicationsList([]);
+    setShowRecordModal(true);
+  };
+
+  const openEditRecordModal = (record: any) => {
+    setEditingRecordId(record.id);
+    const recType = String(record.record_type || record.type || "checkup").toLowerCase();
+    const normType = (recType === "vaccine" ? "vaccination" : recType) as any;
+    setRecordForm({
+      record_type: normType,
+      date: record.date ? String(record.date).slice(0, 10) : record.date_given ? String(record.date_given).slice(0, 10) : todayPH(),
+      vet: record.vet || VET_OPTIONS[0] || "",
+      chief_complaint: record.chief_complaint || "",
+      symptoms: record.symptoms || "",
+      diagnosis: record.diagnosis || "",
+      findings: record.findings || "",
+      treatment: record.treatment || "",
+      medication: record.medication || "",
+      vaccine_used: record.vaccine_used || record.vaccine_type || "",
+      next_vax_due: record.next_vax_due ? String(record.next_vax_due).slice(0, 10) : record.next_due ? String(record.next_due).slice(0, 10) : "",
+      dewormer_used: record.dewormer_used || record.product || "",
+      next_deworming_due: record.next_deworming_due ? String(record.next_deworming_due).slice(0, 10) : record.next_due ? String(record.next_due).slice(0, 10) : "",
+      outcome: record.outcome || "Completed",
+      notes: record.notes || "",
+    });
+
+    let medList: any[] = [];
+    if (record.medications_json) {
+      try {
+        medList = JSON.parse(record.medications_json);
+      } catch {
+        medList = [];
+      }
+    }
+    if (!medList.length && record.medication) {
+      const matchedItem = inventoryItems.find(
+        (i: any) => i.name.toLowerCase().trim() === String(record.medication).toLowerCase().trim()
+      );
+      if (matchedItem) {
+        medList = [
+          {
+            inventory_item_id: matchedItem.id,
+            name: matchedItem.name,
+            quantity: Number(record.medication_qty) || 1,
+            unit: matchedItem.unit || "unit",
+          },
+        ];
+      }
+    }
+    setMedicationsList(medList);
+    setShowRecordModal(true);
+  };
+
+  const handleSaveRecord = async () => {
+    if (!viewPet) return;
+    if (!recordForm.date || !recordForm.vet.trim()) {
+      toast.error("Visit date and veterinarian/staff are required.");
+      return;
+    }
+
+    for (const med of medicationsList) {
+      if (!med.inventory_item_id) {
+        toast.error("Please select an inventory product for all medication rows.");
+        return;
+      }
+      if (!med.quantity || med.quantity <= 0 || isNaN(med.quantity)) {
+        toast.error(`Quantity for "${med.name || "selected product"}" must be greater than zero.`);
+        return;
+      }
+      const stockInfo = availableStockMap[med.inventory_item_id];
+      if (!stockInfo || stockInfo.totalQty < med.quantity) {
+        toast.error(`Insufficient available stock for ${med.name || "selected item"}.`);
+        return;
+      }
+    }
+
+    const itemIds = medicationsList.map((m) => m.inventory_item_id).filter(Boolean);
+    if (new Set(itemIds).size !== itemIds.length) {
+      toast.error("Please remove duplicate inventory products from the same care record.");
+      return;
+    }
+
+    const medSummary = medicationsList.length
+      ? medicationsList
+          .map((m) => `${m.name} — ${m.quantity} ${m.unit}${m.notes ? ` (${m.notes})` : ""}`)
+          .join("; ")
+      : recordForm.medication.trim() || null;
+
+    setSavingRecord(true);
+
+    const payload = {
+      pet_id: viewPet.id,
+      date: recordForm.date,
+      vet: recordForm.vet,
+      record_type: recordForm.record_type,
+      chief_complaint: recordForm.chief_complaint.trim() || null,
+      symptoms: recordForm.symptoms.trim() || null,
+      diagnosis: recordForm.diagnosis.trim() || null,
+      findings: recordForm.findings.trim() || null,
+      treatment: recordForm.treatment.trim() || null,
+      medication: medSummary,
+      medication_qty: medicationsList.length ? medicationsList.reduce((acc, m) => acc + m.quantity, 0) : 1,
+      medications_json: medicationsList.length ? JSON.stringify(medicationsList) : null,
+      vaccine_used: recordForm.record_type === "vaccination" ? recordForm.vaccine_used.trim() || null : null,
+      next_vax_due: recordForm.record_type === "vaccination" ? recordForm.next_vax_due || null : null,
+      dewormer_used: recordForm.record_type === "deworming" ? recordForm.dewormer_used.trim() || null : null,
+      next_deworming_due: recordForm.record_type === "deworming" ? recordForm.next_deworming_due || null : null,
+      outcome: recordForm.outcome.trim() || null,
+      notes: recordForm.notes.trim() || null,
+    };
+
+    const { error } = editingRecordId
+      ? await db.from("care_records").update(payload as any).eq("id", editingRecordId)
+      : await db.from("care_records").insert(payload as any);
+
+    if (error) {
+      setSavingRecord(false);
+      toast.error(error.message);
+      return;
+    }
+
+    if (recordForm.record_type === "vaccination" && recordForm.vaccine_used.trim()) {
+      await db.from("vaccinations").insert({
+        pet_id: viewPet.id,
+        vaccine_type: recordForm.vaccine_used.trim(),
+        date_given: recordForm.date,
+        next_due: recordForm.next_vax_due || null,
+        vet: recordForm.vet,
+        notes: recordForm.notes || null,
+      } as any);
+    }
+
+    if (recordForm.record_type === "deworming" && recordForm.dewormer_used.trim()) {
+      await db.from("dewormings").insert({
+        pet_id: viewPet.id,
+        product: recordForm.dewormer_used.trim(),
+        date_given: recordForm.date,
+        next_due: recordForm.next_deworming_due || null,
+        vet: recordForm.vet,
+        status: "Completed",
+        notes: recordForm.notes || null,
+      } as any);
+    }
+
+    setSavingRecord(false);
+    toast.success(
+      editingRecordId
+        ? "Medical record updated successfully."
+        : `${recordForm.record_type.toUpperCase()} record saved to Care History.`
+    );
+
+    setShowRecordModal(false);
+    invalidate("care_records");
+    invalidate("vaccinations");
+    invalidate("dewormings");
+    invalidate("inventory_items");
+    invalidate("inventory_batches");
   };
 
   const handleSavePet = async () => {
@@ -237,18 +469,12 @@ export default function ManagePets() {
       const speciesStr = (p.species || "").toLowerCase();
       const breedStr = (p.breed || "").toLowerCase();
 
-      // Search Query
       if (q && !codeStr.includes(q) && !petNameStr.includes(q) && !ownerNameStr.includes(q) && !speciesStr.includes(q) && !breedStr.includes(q)) {
         return false;
       }
 
-      // Species Filter
       if (filterSpecies !== "all" && speciesStr !== filterSpecies.toLowerCase()) return false;
-
-      // Status Filter
       if (filterStatus !== "all" && (p.health_status || p.status || "Healthy").toLowerCase().replace(/\s+/g, "_") !== filterStatus.toLowerCase().replace(/\s+/g, "_")) return false;
-
-      // Owner Filter
       if (filterOwnerId !== "all" && p.owner_id !== filterOwnerId) return false;
 
       return true;
@@ -265,7 +491,7 @@ export default function ManagePets() {
   const petAppointments = (petId: string) => appointments.filter((a) => a.pet_id === petId);
   const petVaccinations = (petId: string) => vaccinations.filter((v) => v.pet_id === petId);
   const petDewormings = (petId: string) => dewormings.filter((d) => d.pet_id === petId);
-  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && c.care_type === "treatment");
+  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && String(c.record_type).toLowerCase() === "treatment");
 
   const getPetStatusBadge = (status?: string | null) => {
     const s = (status ?? "Healthy").toLowerCase();
@@ -284,53 +510,163 @@ export default function ManagePets() {
 
   const handlePrintPetProfile = (pet: PetRow) => {
     const owner = ownerMap.get(pet.owner_id) || pet.owners;
-    const vax = petVaccinations(pet.id);
-    const appts = petAppointments(pet.id);
+    const vaxList = petVaccinations(pet.id);
+    const treatList = petTreatments(pet.id);
+    const dewormList = petDewormings(pet.id);
+    const careHistory = careRecords.filter((c: any) => c.pet_id === pet.id).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
 
     const w = window.open("", "_blank");
     if (!w) return;
+
+    const formatRecordTypeBadge = (type?: string | null) => {
+      switch (String(type ?? "").toLowerCase()) {
+        case "vaccination":
+        case "vaccine":
+          return `<span style="background:#E8EEF4;color:#1B3A5C;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Vaccination</span>`;
+        case "treatment":
+          return `<span style="background:#E6F4F1;color:#0F766E;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Treatment</span>`;
+        case "deworming":
+          return `<span style="background:#FEF3C7;color:#92400E;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Deworming</span>`;
+        default:
+          return `<span style="background:#DCFCE7;color:#166534;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Check-up</span>`;
+      }
+    };
 
     w.document.write(`
       <html>
         <head>
           <title>Pet Medical Record - ${pet.name}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 2px; }
-            .badge { background: #e8eef4; color: #1B3A5C; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
+            @page { size: portrait; margin: 15mm; }
+            body { font-family: Arial, sans-serif; padding: 20px; color: #222; background: #fff; line-height: 1.4; }
+            .header-banner { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1B3A5C; padding-bottom: 12px; margin-bottom: 20px; }
+            h1 { color: #1B3A5C; margin: 0; font-size: 24px; font-weight: bold; }
+            h2 { color: #555; margin: 4px 0 0 0; font-size: 14px; font-weight: normal; }
+            .badge { background: #1B3A5C; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace; }
+            .section-title { color: #1B3A5C; font-size: 16px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 6px; margin-top: 24px; margin-bottom: 12px; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
+            .info-item { display: flex; flex-direction: column; }
+            .info-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+            .info-val { font-size: 12px; color: #0f172a; font-weight: 500; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; vertical-align: top; }
+            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
+            .timeline-card { border: 1px solid #e2e8f0; border-left: 4px solid #1B3A5C; background: #fff; padding: 12px; margin-bottom: 12px; border-radius: 4px; }
+            .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+            .timeline-date { font-weight: bold; color: #475569; font-size: 11px; }
+            .timeline-title { font-size: 13px; font-weight: bold; color: #1B3A5C; margin: 4px 0; }
+            .timeline-detail { font-size: 11px; color: #334155; margin-top: 4px; }
+            .med-pill { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 3px 6px; border-radius: 3px; font-size: 10px; display: inline-block; margin-right: 4px; margin-top: 3px; }
+            .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; }
           </style>
         </head>
         <body>
-          <h1>Harbourside Veterinary Clinic</h1>
-          <h2>Pet Medical Profile: ${pet.name} <span class="badge">${pet.pet_code || "PET"}</span></h2>
+          <div class="header-banner">
+            <div>
+              <h1>Harbourside Veterinary Clinic</h1>
+              <h2>Comprehensive Pet Medical Profile & Care History Timeline</h2>
+            </div>
+            <div>
+              <span class="badge">${pet.pet_code || "PET"}</span>
+            </div>
+          </div>
           
           <div class="info-grid">
-            <div><strong>Species & Breed:</strong> ${pet.species || "—"} (${pet.breed || "Crossbreed"})</div>
-            <div><strong>Owner Name:</strong> ${owner?.name || "—"}</div>
-            <div><strong>Gender & Age:</strong> ${pet.gender || "—"} | ${pet.dob ? formatAge(pet.dob) : pet.estimated_age || "—"}</div>
-            <div><strong>Weight & Color:</strong> ${pet.weight || "—"} | ${pet.color || "—"}</div>
-            <div><strong>Microchip #:</strong> ${pet.microchip_number || "—"}</div>
-            <div><strong>Health Status:</strong> ${pet.status || "Healthy"}</div>
-            <div><strong>Allergies:</strong> ${pet.allergies || "None"}</div>
-            <div><strong>Existing Conditions:</strong> ${pet.existing_conditions || "None"}</div>
+            <div class="info-item"><span class="info-label">Pet Name</span><span class="info-val">${pet.name} (${pet.gender || "—"})</span></div>
+            <div class="info-item"><span class="info-label">Owner Name</span><span class="info-val">${owner?.name || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Species & Breed</span><span class="info-val">${pet.species || "—"} (${pet.breed || "Crossbreed"})</span></div>
+            <div class="info-item"><span class="info-label">Owner Contact & Email</span><span class="info-val">${owner?.contact || "—"} | ${owner?.email || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Age / DOB</span><span class="info-val">${pet.dob ? formatDate(pet.dob) : pet.estimated_age || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Owner Address</span><span class="info-val">${owner?.address || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Weight & Color</span><span class="info-val">${pet.weight || "—"} | ${pet.color || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Microchip # & Blood Type</span><span class="info-val">${pet.microchip_number || "None"} | ${pet.blood_type || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Current Health Status</span><span class="info-val">${pet.health_status || pet.status || "Healthy"}</span></div>
+            <div class="info-item"><span class="info-label">Allergies & Existing Conditions</span><span class="info-val">Allergies: ${pet.allergies || "None"} | Conditions: ${pet.existing_conditions || "None"}</span></div>
           </div>
 
-          <h3>Vaccination Records (${vax.length})</h3>
+          <div class="section-title">Care History Timeline (${careHistory.length} Records)</div>
+          ${
+            careHistory.length
+              ? careHistory
+                  .map((r) => {
+                    const title = r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Visit";
+                    let medsText = "";
+                    if (r.medications_json) {
+                      try {
+                        const parsed = JSON.parse(r.medications_json);
+                        medsText = parsed.map((m: any) => `${m.name || "Item"} (${m.quantity ?? 1} ${m.unit || "unit"}${m.notes ? ` - ${m.notes}` : ""})`).join(", ");
+                      } catch {
+                        medsText = r.medication || "";
+                      }
+                    } else if (r.medication) {
+                      medsText = r.medication;
+                    }
+
+                    return `
+                      <div class="timeline-card">
+                        <div class="timeline-header">
+                          <span class="timeline-date">Date: ${r.date ? formatDate(r.date) : "—"}</span>
+                          ${formatRecordTypeBadge(r.record_type)}
+                        </div>
+                        <div class="timeline-title">${title}</div>
+                        ${r.vet ? `<div class="timeline-detail"><strong>Attending Veterinarian / Staff:</strong> ${r.vet}</div>` : ""}
+                        ${r.chief_complaint ? `<div class="timeline-detail"><strong>Reason / Chief Complaint:</strong> ${r.chief_complaint}</div>` : ""}
+                        ${r.symptoms ? `<div class="timeline-detail"><strong>Symptoms:</strong> ${r.symptoms}</div>` : ""}
+                        ${r.diagnosis ? `<div class="timeline-detail"><strong>Diagnosis:</strong> ${r.diagnosis}</div>` : ""}
+                        ${r.findings ? `<div class="timeline-detail"><strong>Clinical Findings:</strong> ${r.findings}</div>` : ""}
+                        ${r.treatment ? `<div class="timeline-detail"><strong>Treatment / Procedure:</strong> ${r.treatment}</div>` : ""}
+                        ${medsText ? `<div class="timeline-detail"><strong>Medications / Products Used:</strong> <span class="med-pill">${medsText}</span></div>` : ""}
+                        ${r.next_vax_due ? `<div class="timeline-detail"><strong>Next Vaccination Due:</strong> ${formatDate(r.next_vax_due)}</div>` : ""}
+                        ${r.next_deworming_due ? `<div class="timeline-detail"><strong>Next Deworming Due:</strong> ${formatDate(r.next_deworming_due)}</div>` : ""}
+                        ${r.notes ? `<div class="timeline-detail"><strong>Notes:</strong> ${r.notes}</div>` : ""}
+                      </div>
+                    `;
+                  })
+                  .join("")
+              : "<p style='font-size:12px;color:#666;'>No medical care history records logged for this pet.</p>"
+          }
+
+          <div class="section-title">Vaccination Records (${vaxList.length})</div>
           <table>
-            <thead><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Veterinarian</th></tr></thead>
+            <thead><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Veterinarian</th><th>Notes</th></tr></thead>
             <tbody>
               ${
-                vax
+                vaxList
                   .map(
                     (v) =>
-                      `<tr><td>${v.vaccine_type}</td><td>${formatDate(v.date_given)}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.vet || "Clinic Staff"}</td></tr>`
+                      `<tr><td>${v.vaccine_type}</td><td>${v.date_given ? formatDate(v.date_given) : "—"}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.vet || "Clinic Staff"}</td><td>${v.notes || "—"}</td></tr>`
                   )
-                  .join("") || "<tr><td colSpan='4'>No vaccination records logged</td></tr>"
+                  .join("") || "<tr><td colSpan='5'>No vaccination records logged</td></tr>"
+              }
+            </tbody>
+          </table>
+
+          <div class="section-title">Treatment Records (${treatList.length})</div>
+          <table>
+            <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Treatment / Procedure</th><th>Veterinarian</th></tr></thead>
+            <tbody>
+              ${
+                treatList
+                  .map(
+                    (t) =>
+                      `<tr><td>${t.date ? formatDate(t.date) : "—"}</td><td>${t.chief_complaint || "—"}</td><td>${t.diagnosis || "—"}</td><td>${t.treatment || "—"}</td><td>${t.vet || "Clinic Staff"}</td></tr>`
+                  )
+                  .join("") || "<tr><td colSpan='5'>No treatment records logged</td></tr>"
+              }
+            </tbody>
+          </table>
+
+          <div class="section-title">Deworming Records (${dewormList.length})</div>
+          <table>
+            <thead><tr><th>Product</th><th>Date Given</th><th>Next Due</th><th>Status</th><th>Veterinarian</th></tr></thead>
+            <tbody>
+              ${
+                dewormList
+                  .map(
+                    (d) =>
+                      `<tr><td>${d.product || "Deworming"}</td><td>${d.date_given ? formatDate(d.date_given) : "—"}</td><td>${d.next_due ? formatDate(d.next_due) : "—"}</td><td>${d.status || "Completed"}</td><td>${d.vet || "Clinic Staff"}</td></tr>`
+                  )
+                  .join("") || "<tr><td colSpan='5'>No deworming records logged</td></tr>"
               }
             </tbody>
           </table>
@@ -363,7 +699,6 @@ export default function ManagePets() {
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Search */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label className="text-xs">Search Pets</Label>
               <div className="relative">
@@ -380,7 +715,6 @@ export default function ManagePets() {
               </div>
             </div>
 
-            {/* Species Filter */}
             <div className="space-y-1.5">
               <Label className="text-xs">Species</Label>
               <Select
@@ -404,7 +738,6 @@ export default function ManagePets() {
               </Select>
             </div>
 
-            {/* Status Filter */}
             <div className="space-y-1.5">
               <Label className="text-xs">Current Health Status</Label>
               <Select
@@ -442,14 +775,14 @@ export default function ManagePets() {
             <>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Pet Code</TableHead>
-                    <TableHead>Pet</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Species & Breed</TableHead>
-                    <TableHead>Gender / Age</TableHead>
-                    <TableHead>Health Status</TableHead>
-                    <TableHead className="text-right pr-6">Actions</TableHead>
+                  <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Pet Code</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Pet</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Owner</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Species & Breed</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Gender / Age</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Health Status</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -812,13 +1145,13 @@ export default function ManagePets() {
           }
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {viewPet && (
             <>
               <DialogHeader>
                 <div className="flex items-center justify-between pr-6">
                   <DialogTitle className="font-heading text-lg font-bold flex items-center gap-2">
-                    <PawPrint className="h-5 w-5 text-primary" /> {viewPet.name}'s Profile
+                    <PawPrint className="h-5 w-5 text-primary" /> {viewPet.name}'s Medical Profile
                   </DialogTitle>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-mono text-xs">
@@ -830,7 +1163,7 @@ export default function ManagePets() {
               </DialogHeader>
 
               <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4 pt-2">
-                <TabsList className="bg-muted p-1">
+                <TabsList className="bg-muted p-1 grid grid-cols-5 w-full">
                   <TabsTrigger value="info" className="text-xs">Pet & Owner Info</TabsTrigger>
                   <TabsTrigger value="timeline" className="text-xs">Care History Timeline</TabsTrigger>
                   <TabsTrigger value="vaccinations" className="text-xs">Vaccinations ({petVaccinations(viewPet.id).length})</TabsTrigger>
@@ -841,20 +1174,13 @@ export default function ManagePets() {
                 {/* Tab 1: Pet & Owner Info */}
                 <TabsContent value="info" className="space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" asChild>
+                    <Button size="sm" variant="outline" asChild>
                       <Link href={`/admin/schedule?petId=${viewPet.id}&new=1`}>
-                        <Calendar className="h-4 w-4" /> Schedule Appointment
+                        <Calendar className="h-4 w-4 mr-1.5" /> Schedule Appointment
                       </Link>
-                    </Button>
-                    <Button size="sm" variant="secondary" asChild>
-                      <Link href={`/admin/care-history?petId=${viewPet.id}&new=1`}>
-                        <FileText className="h-4 w-4" /> Add Care Record
-                      </Link>
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setProfileTab("timeline")}>
-                      <Syringe className="h-4 w-4" /> View Care History
                     </Button>
                   </div>
+
                   <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
                     <Avatar className="h-20 w-20">
                       <AvatarImage src={viewPet.image_url ?? undefined} alt={viewPet.name} />
@@ -884,73 +1210,138 @@ export default function ManagePets() {
                 </TabsContent>
 
                 {/* Tab 2: Care History Timeline */}
-                <TabsContent value="timeline">
-                  <div className="max-h-[350px] overflow-y-auto pr-1">
+                <TabsContent value="timeline" className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">Care History Medical Timeline</span>
+                  </div>
+                  <div className="max-h-[400px] overflow-y-auto pr-1">
                     <PetCareHistoryTimeline petId={viewPet.id} />
                   </div>
                 </TabsContent>
 
                 {/* Tab 3: Vaccinations */}
-                <TabsContent value="vaccinations">
+                <TabsContent value="vaccinations" className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">Vaccination Records ({petVaccinations(viewPet.id).length})</span>
+                  </div>
                   <Table>
                     <TableHeader>
-                      <TableRow><TableHead>Vaccine</TableHead><TableHead>Date Given</TableHead><TableHead>Next Due</TableHead><TableHead>Vet</TableHead></TableRow>
+                      <TableRow>
+                        <TableHead>Vaccine / Type</TableHead>
+                        <TableHead>Date Given</TableHead>
+                        <TableHead>Next Due Date</TableHead>
+                        <TableHead>Attending Vet</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
                     </TableHeader>
                     <TableBody>
                       {petVaccinations(viewPet.id).map((v) => (
                         <TableRow key={v.id}>
-                          <TableCell className="font-semibold text-xs">{v.vaccine_type}</TableCell>
-                          <TableCell className="text-xs">{formatDate(v.date_given)}</TableCell>
-                          <TableCell className="text-xs">{v.next_due ? formatDate(v.next_due) : "—"}</TableCell>
+                          <TableCell className="font-semibold text-xs text-brand-navy">{v.vaccine_type}</TableCell>
+                          <TableCell className="text-xs">{v.date_given ? formatDate(v.date_given) : "—"}</TableCell>
+                          <TableCell className="text-xs font-medium text-brand-teal">{v.next_due ? formatDate(v.next_due) : "—"}</TableCell>
                           <TableCell className="text-xs">{v.vet || "Clinic Staff"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{v.notes || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditRecordModal(v)} title="Edit Record">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {petVaccinations(viewPet.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No vaccination records logged.</TableCell></TableRow>
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-xs py-8 text-muted-foreground">
+                            No vaccination records logged yet for this pet.
+                          </TableCell>
+                        </TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </TabsContent>
 
                 {/* Tab 4: Treatments */}
-                <TabsContent value="treatments">
+                <TabsContent value="treatments" className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">Treatment Records ({petTreatments(viewPet.id).length})</span>
+                  </div>
                   <Table>
                     <TableHeader>
-                      <TableRow><TableHead>Date</TableHead><TableHead>Chief Complaint</TableHead><TableHead>Diagnosis</TableHead><TableHead>Outcome</TableHead></TableRow>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Reason / Complaint</TableHead>
+                        <TableHead>Diagnosis</TableHead>
+                        <TableHead>Treatment / Procedure</TableHead>
+                        <TableHead>Medications / Products</TableHead>
+                        <TableHead>Outcome</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
                     </TableHeader>
                     <TableBody>
                       {petTreatments(viewPet.id).map((t) => (
                         <TableRow key={t.id}>
-                          <TableCell className="text-xs">{formatDate(t.date)}</TableCell>
+                          <TableCell className="text-xs font-medium">{t.date ? formatDate(t.date) : "—"}</TableCell>
                           <TableCell className="text-xs">{t.chief_complaint || "—"}</TableCell>
-                          <TableCell className="text-xs font-medium">{t.diagnosis || "—"}</TableCell>
-                          <TableCell className="text-xs">{t.outcome || "Ongoing"}</TableCell>
+                          <TableCell className="text-xs font-semibold text-brand-navy">{t.diagnosis || "—"}</TableCell>
+                          <TableCell className="text-xs">{t.treatment || "—"}</TableCell>
+                          <TableCell className="text-xs">{t.medication || "—"}</TableCell>
+                          <TableCell className="text-xs">{t.outcome || "Completed"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditRecordModal(t)} title="Edit Record">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {petTreatments(viewPet.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No treatment records logged.</TableCell></TableRow>
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">
+                            No treatment records logged yet for this pet.
+                          </TableCell>
+                        </TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </TabsContent>
 
                 {/* Tab 5: Dewormings */}
-                <TabsContent value="dewormings">
+                <TabsContent value="dewormings" className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">Deworming Records ({petDewormings(viewPet.id).length})</span>
+                  </div>
                   <Table>
                     <TableHeader>
-                      <TableRow><TableHead>Product</TableHead><TableHead>Date Given</TableHead><TableHead>Next Due</TableHead><TableHead>Vet</TableHead></TableRow>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Date Given</TableHead>
+                        <TableHead>Next Due Date</TableHead>
+                        <TableHead>Attending Vet</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
                     </TableHeader>
                     <TableBody>
                       {petDewormings(viewPet.id).map((d) => (
                         <TableRow key={d.id}>
-                          <TableCell className="font-semibold text-xs">{d.product || "Deworming"}</TableCell>
-                          <TableCell className="text-xs">{formatDate(d.date_given)}</TableCell>
-                          <TableCell className="text-xs">{d.next_due ? formatDate(d.next_due) : "—"}</TableCell>
+                          <TableCell className="font-semibold text-xs text-amber-900">{d.product || "Deworming"}</TableCell>
+                          <TableCell className="text-xs">{d.date_given ? formatDate(d.date_given) : "—"}</TableCell>
+                          <TableCell className="text-xs font-medium text-amber-700">{d.next_due ? formatDate(d.next_due) : "—"}</TableCell>
                           <TableCell className="text-xs">{d.vet || "Clinic Staff"}</TableCell>
+                          <TableCell className="text-xs">{d.status || "Completed"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditRecordModal(d)} title="Edit Record">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {petDewormings(viewPet.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No deworming records logged.</TableCell></TableRow>
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-xs py-8 text-muted-foreground">
+                            No deworming records logged yet for this pet.
+                          </TableCell>
+                        </TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -959,12 +1350,305 @@ export default function ManagePets() {
 
               <DialogFooter className="pt-4 border-t">
                 <Button variant="outline" onClick={() => setViewPet(null)}>Close</Button>
-                <Button variant="outline" onClick={() => handlePrintPetProfile(viewPet)}>
-                  <Printer className="h-4 w-4 mr-1" /> Print Profile
+                <Button variant="default" onClick={() => handlePrintPetProfile(viewPet)}>
+                  <Printer className="h-4 w-4 mr-1.5" /> Print Profile with Timeline
                 </Button>
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Add/Edit Dialog inside Pet Profile */}
+      <Dialog open={showRecordModal} onOpenChange={setShowRecordModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-primary" />
+              {editingRecordId ? "Edit Medical Care Record" : "Add Medical Care Record for " + (viewPet?.name || "Pet")}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2 max-h-[500px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Record Type *</Label>
+                <Select
+                  value={recordForm.record_type}
+                  onValueChange={(v: any) => setRecordForm({ ...recordForm, record_type: v })}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="checkup">Check-up</SelectItem>
+                    <SelectItem value="vaccination">Vaccination</SelectItem>
+                    <SelectItem value="treatment">Treatment</SelectItem>
+                    <SelectItem value="deworming">Deworming</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Visit Date *</Label>
+                <Input
+                  type="date"
+                  className="h-9 text-xs"
+                  value={recordForm.date}
+                  onChange={(e) => setRecordForm({ ...recordForm, date: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Attending Vet / Staff *</Label>
+                <Select
+                  value={recordForm.vet}
+                  onValueChange={(v) => setRecordForm({ ...recordForm, vet: v })}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Select vet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VET_OPTIONS.map((vet) => (
+                      <SelectItem key={vet} value={vet}>
+                        {vet}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Type Specific Fields */}
+            {recordForm.record_type === "vaccination" && (
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-brand-navy-light/40 border border-brand-navy/20">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-brand-navy">Vaccine Used / Type *</Label>
+                  <Input
+                    className="h-9 text-xs"
+                    placeholder="e.g. DHPP, Rabies, 5-in-1"
+                    value={recordForm.vaccine_used}
+                    onChange={(e) => setRecordForm({ ...recordForm, vaccine_used: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-brand-navy">Next Vaccination Due Date</Label>
+                  <Input
+                    type="date"
+                    className="h-9 text-xs"
+                    value={recordForm.next_vax_due}
+                    onChange={(e) => setRecordForm({ ...recordForm, next_vax_due: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+
+            {recordForm.record_type === "deworming" && (
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-amber-900">Dewormer Product Used *</Label>
+                  <Input
+                    className="h-9 text-xs"
+                    placeholder="e.g. Drontal Plus, Caniverm"
+                    value={recordForm.dewormer_used}
+                    onChange={(e) => setRecordForm({ ...recordForm, dewormer_used: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-amber-900">Next Deworming Due Date</Label>
+                  <Input
+                    type="date"
+                    className="h-9 text-xs"
+                    value={recordForm.next_deworming_due}
+                    onChange={(e) => setRecordForm({ ...recordForm, next_deworming_due: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Reason / Chief Complaint</Label>
+                <Input
+                  className="h-9 text-xs"
+                  placeholder="e.g. Annual vaccine, Lethargy, Vomiting"
+                  value={recordForm.chief_complaint}
+                  onChange={(e) => setRecordForm({ ...recordForm, chief_complaint: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Symptoms</Label>
+                <Input
+                  className="h-9 text-xs"
+                  placeholder="e.g. Loss of appetite, Fever"
+                  value={recordForm.symptoms}
+                  onChange={(e) => setRecordForm({ ...recordForm, symptoms: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Diagnosis</Label>
+                <Input
+                  className="h-9 text-xs"
+                  placeholder="e.g. Mild Gastroenteritis, Healthy"
+                  value={recordForm.diagnosis}
+                  onChange={(e) => setRecordForm({ ...recordForm, diagnosis: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Outcome / Status</Label>
+                <Input
+                  className="h-9 text-xs"
+                  placeholder="e.g. Completed, Recovered, Follow-up in 1 wk"
+                  value={recordForm.outcome}
+                  onChange={(e) => setRecordForm({ ...recordForm, outcome: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Treatment / Procedure Performed</Label>
+              <Textarea
+                rows={2}
+                className="text-xs"
+                placeholder="Details of procedure or care given..."
+                value={recordForm.treatment}
+                onChange={(e) => setRecordForm({ ...recordForm, treatment: e.target.value })}
+              />
+            </div>
+
+            {/* Inventory / Medications Selection (FEFO Integrated) */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5 text-primary" /> Medications / Products Used (Inventory Deduction)
+                </Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    setMedicationsList((prev) => [
+                      ...prev,
+                      { inventory_item_id: "", name: "", quantity: 1, unit: "unit", notes: "" },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add Product
+                </Button>
+              </div>
+
+              {medicationsList.map((med, index) => {
+                const stockInfo = med.inventory_item_id ? availableStockMap[med.inventory_item_id] : null;
+                return (
+                  <div key={index} className="flex items-center gap-2 p-2 rounded border bg-muted/30">
+                    <div className="flex-1">
+                      <Select
+                        value={med.inventory_item_id}
+                        onValueChange={(val) => {
+                          const targetItem = inventoryItems.find((i: any) => i.id === val);
+                          setMedicationsList((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? {
+                                    ...row,
+                                    inventory_item_id: val,
+                                    name: targetItem?.name || "",
+                                    unit: targetItem?.unit || "unit",
+                                  }
+                                : row
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select inventory product" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inventoryItems.map((item: any) => {
+                            const info = availableStockMap[item.id];
+                            const qty = info?.totalQty ?? 0;
+                            return (
+                              <SelectItem key={item.id} value={item.id} disabled={qty <= 0}>
+                                {item.name} ({qty} {item.unit || "unit"}{qty <= 0 ? " - Out of stock" : ""})
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      {stockInfo && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Available Stock: {stockInfo.totalQty} {stockInfo.unit}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="w-20">
+                      <Input
+                        type="number"
+                        min={1}
+                        className="h-8 text-xs"
+                        placeholder="Qty"
+                        value={med.quantity}
+                        onChange={(e) => {
+                          const q = parseInt(e.target.value) || 1;
+                          setMedicationsList((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, quantity: Math.max(1, q) } : row))
+                          );
+                        }}
+                      />
+                    </div>
+
+                    <div className="w-28">
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="Dose notes"
+                        value={med.notes || ""}
+                        onChange={(e) => {
+                          const n = e.target.value;
+                          setMedicationsList((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, notes: n } : row))
+                          );
+                        }}
+                      />
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700"
+                      onClick={() => setMedicationsList((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Special Instructions / Additional Notes</Label>
+              <Textarea
+                rows={2}
+                className="text-xs"
+                placeholder="Follow-up instructions or general notes..."
+                value={recordForm.notes}
+                onChange={(e) => setRecordForm({ ...recordForm, notes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t">
+            <Button variant="outline" onClick={() => setShowRecordModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveRecord} disabled={savingRecord}>
+              {savingRecord ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              {editingRecordId ? "Save Changes" : "Save Record"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -991,3 +1675,4 @@ export default function ManagePets() {
     </div>
   );
 }
+

@@ -57,10 +57,10 @@ export default function ImageUpload({
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
       formData.append("folder", folder);
+      formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
+      const res = await fetch(`/api/upload?folder=${encodeURIComponent(folder)}`, {
         method: "POST",
         credentials: "include",
         body: formData,

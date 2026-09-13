@@ -47,8 +47,8 @@ export function AdminSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="p-4 border-b border-sidebar-border/50">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-[#3F080D] text-white shadow-xl">
+      <SidebarHeader className="p-4 border-b border-white/10 bg-gradient-to-b from-[#4A0A10] to-[#37060A]">
         <BrandLogo
           size="sm"
           showText
@@ -58,12 +58,12 @@ export function AdminSidebar() {
         />
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="bg-[#3F080D]">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] tracking-wider">
-            Management
+          <SidebarGroupLabel className="text-brand-red/90 uppercase text-[10px] tracking-wider font-bold px-3">
+            Clinic Management
           </SidebarGroupLabel>
-          <SidebarGroupContent>
+          <SidebarGroupContent className="px-1.5 pt-1">
             <SidebarMenu>
               {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
@@ -71,10 +71,10 @@ export function AdminSidebar() {
                     <NavLink
                       href={item.url}
                       end={item.url === "/admin"}
-                      className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium border-l-2 border-sidebar-primary"
+                      className="text-slate-300 hover:bg-white/10 hover:text-white transition-all rounded-lg my-0.5 px-3 py-2 text-sm flex items-center gap-3"
+                      activeClassName="bg-[#E5192C]/20 text-rose-300 font-semibold border-l-4 border-[#E5192C] shadow-sm"
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
+                      <item.icon className="h-4 w-4 shrink-0 text-brand-red" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
@@ -85,23 +85,23 @@ export function AdminSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-2">
-        <SidebarMenu>
+      <SidebarFooter className="p-3 border-t border-white/10 bg-[#37060A]">
+        <SidebarMenu className="space-y-1">
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="text-slate-300 hover:bg-[#1FA8A8]/20 hover:text-[#1FA8A8] rounded-lg transition-colors"
               onClick={() => {
                 const chatBtn = document.querySelector('[data-chat-toggle="true"]') as HTMLButtonElement | null;
                 chatBtn?.click();
               }}
             >
-              <Bot className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>PawBot</span>}
+              <Bot className="h-4 w-4 shrink-0 text-brand-teal" />
+              {!collapsed && <span className="font-medium">PawBot AI</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground">
-              <LogOut className="h-4 w-4 shrink-0" />
+            <SidebarMenuButton onClick={handleLogout} className="text-slate-300 hover:bg-rose-500/20 hover:text-rose-300 rounded-lg transition-colors">
+              <LogOut className="h-4 w-4 shrink-0 text-rose-400" />
               {!collapsed && <span>Logout</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>

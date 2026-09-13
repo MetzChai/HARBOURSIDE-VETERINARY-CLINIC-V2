@@ -25,7 +25,9 @@ import {
   XCircle,
   AlertTriangle,
   RotateCcw,
+  MessageSquare,
 } from "lucide-react";
+import Link from "next/link";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
@@ -549,15 +551,15 @@ export default function Schedule() {
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Apt Number</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time (PHT)</TableHead>
-                    <TableHead>Pet</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right pr-6">Actions</TableHead>
+                  <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Apt Number</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Date</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Time (PHT)</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Pet</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Owner</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Type</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Status</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -613,6 +615,19 @@ export default function Schedule() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
+
+                            {a.owner_id && (
+                              <Link href={`/admin/messages?ownerId=${a.owner_id}&petId=${a.pet_id || "NONE"}&type=Appointment+Reminder`}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
+                                  title="Send Appointment Reminder"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                            )}
 
                             {(a.status === "Pending" || a.status === "Requested") && (
                               <Button

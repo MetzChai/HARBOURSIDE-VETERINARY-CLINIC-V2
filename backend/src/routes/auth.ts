@@ -294,6 +294,15 @@ router.patch("/profile", async (req, res) => {
       currentPassword: body.currentPassword,
       newPassword: body.newPassword,
     });
+    if (profile) {
+      const token = await createSessionToken({
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.fullName,
+        role: profile.role,
+      });
+      setSessionCookie(res, token);
+    }
     res.json({ profile: profile ?? profileFromSession(session) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update profile";

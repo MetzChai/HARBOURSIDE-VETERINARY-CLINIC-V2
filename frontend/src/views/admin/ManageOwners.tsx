@@ -34,7 +34,9 @@ import {
   FileText,
   DollarSign,
   AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
+import Link from "next/link";
 import ImageUpload from "@/components/ImageUpload";
 import { toast } from "sonner";
 import { db } from "@/lib/db-client";
@@ -425,15 +427,15 @@ export default function ManageOwners() {
             <>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Owner Code</TableHead>
-                    <TableHead>Full Name</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Pets</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right pr-6">Actions</TableHead>
+                  <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Owner Code</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Full Name</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Contact</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Email</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Pets</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Type</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Status</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -516,6 +518,17 @@ export default function ManageOwners() {
                             >
                               <Printer className="h-3.5 w-3.5" />
                             </Button>
+
+                            <Link href={`/admin/messages?ownerId=${owner.id}`}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
+                                title="Send Message"
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
 
                             {isAdmin && (
                               <Button
@@ -883,11 +896,16 @@ export default function ManageOwners() {
                 </TabsContent>
               </Tabs>
 
-              <DialogFooter className="pt-4 border-t">
+              <DialogFooter className="pt-4 border-t flex items-center justify-between sm:justify-end gap-2">
                 <Button variant="outline" onClick={() => setViewOwner(null)}>Close</Button>
                 <Button variant="outline" onClick={() => handlePrintOwner(viewOwner)}>
                   <Printer className="h-4 w-4 mr-1" /> Print Profile
                 </Button>
+                <Link href={`/admin/messages?ownerId=${viewOwner.id}`}>
+                  <Button className="bg-[#1B3A5C] hover:bg-[#152e4a] text-white">
+                    <MessageSquare className="h-4 w-4 mr-1 text-[#1FA8A8]" /> Send Message
+                  </Button>
+                </Link>
               </DialogFooter>
             </>
           )}

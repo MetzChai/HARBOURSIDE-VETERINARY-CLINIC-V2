@@ -414,6 +414,11 @@ ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_method text NOT NU
 ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT 'Pending';
 ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS services_rendered text;
 ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS total_amount numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS amount_paid numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS subtotal numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS discount numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS additional_fees numeric DEFAULT 0;
+ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS processed_by text;
 ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS notes text;
 
 DROP TRIGGER IF EXISTS trg_lab_updated ON lab_transactions;
@@ -424,15 +429,26 @@ CREATE TABLE IF NOT EXISTS lab_records (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   lab_record_number text UNIQUE,
   appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
+  care_record_id uuid REFERENCES care_records(id) ON DELETE SET NULL,
   pet_id uuid REFERENCES pets(id) ON DELETE CASCADE,
   owner_id uuid REFERENCES owners(id) ON DELETE CASCADE,
   test_type text NOT NULL,
   result text,
   remarks text,
   date_conducted date NOT NULL DEFAULT CURRENT_DATE,
+  status text NOT NULL DEFAULT 'Completed',
+  lab_fee numeric DEFAULT 0,
+  performed_by text,
+  notes text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE lab_records ADD COLUMN IF NOT EXISTS care_record_id uuid REFERENCES care_records(id) ON DELETE SET NULL;
+ALTER TABLE lab_records ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Completed';
+ALTER TABLE lab_records ADD COLUMN IF NOT EXISTS lab_fee numeric DEFAULT 0;
+ALTER TABLE lab_records ADD COLUMN IF NOT EXISTS performed_by text;
+ALTER TABLE lab_records ADD COLUMN IF NOT EXISTS notes text;
 
 DROP TRIGGER IF EXISTS trg_lab_records_updated ON lab_records;
 CREATE TRIGGER trg_lab_records_updated BEFORE UPDATE ON lab_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -449,6 +465,8 @@ CREATE TABLE IF NOT EXISTS lab_transaction_items (
 
 ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS category text;
 ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS source text;
+ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS item_id uuid REFERENCES inventory_items(id) ON DELETE SET NULL;
+ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS batch_no text;
 ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS inventory_transaction_id uuid REFERENCES inventory_transactions(id) ON DELETE SET NULL;
 
 -- ===== messages =====
@@ -461,7 +479,7 @@ CREATE TABLE IF NOT EXISTS messages (
   channel text NOT NULL DEFAULT 'sms',
   subject text,
   email text,
-  sent_at timestamptz NOT NULL DEFAULT now(),
+  sent_at timestamptz DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -469,6 +487,7 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS pet_id uuid REFERENCES pets(id) ON
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type text NOT NULL DEFAULT 'Custom Message';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS sent_by text;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS scheduled_at timestamptz;
+ALTER TABLE messages ALTER COLUMN sent_at DROP NOT NULL;
 
 -- ===== inventory transaction trigger =====
 CREATE OR REPLACE FUNCTION apply_inventory_transaction()

@@ -196,8 +196,23 @@ export function buildOwnerNotifications(data: {
   vaccinations: any[];
   appointments: any[];
   dewormings: any[];
+  messages?: any[];
 }): NotificationItem[] {
+  const messageNotices = (data.messages ?? [])
+    .filter((m) => String(m.sent_by || "").toLowerCase() !== "owner" && String(m.status || "").toUpperCase() !== "PENDING")
+    .slice(0, 8)
+    .map((m) => ({
+      id: `msg-${m.id}`,
+      title: m.subject || m.message_type || "Clinic message",
+      description: String(m.body || "").slice(0, 120),
+      type: "alert" as const,
+      time: formatDate(m.sent_at || m.created_at),
+      sortKey: -400,
+      link: "/user/messages",
+    }));
+
   return sortNotifications([
+    ...messageNotices,
     ...vaccineNotifications(data.vaccinations, "/user/vaccinations"),
     ...appointmentNotifications(data.appointments, "/user/appointments"),
     ...requestedAppointmentNotifications(data.appointments, "/user/appointments").map((n) => ({
@@ -216,8 +231,23 @@ export function buildAdminNotifications(data: {
   appointments: any[];
   inventory: any[];
   dewormings: any[];
+  messages?: any[];
 }): NotificationItem[] {
+  const ownerReplies = (data.messages ?? [])
+    .filter((m) => String(m.sent_by || "").toLowerCase() === "owner")
+    .slice(0, 8)
+    .map((m) => ({
+      id: `msg-${m.id}`,
+      title: m.subject || "Owner message",
+      description: String(m.body || "").slice(0, 120),
+      type: "alert" as const,
+      time: formatDate(m.sent_at || m.created_at),
+      sortKey: -450,
+      link: "/admin/messages",
+    }));
+
   return sortNotifications([
+    ...ownerReplies,
     ...requestedAppointmentNotifications(data.appointments, "/admin/schedule"),
     ...vaccineNotifications(data.vaccinations, "/admin/care-history"),
     ...appointmentNotifications(data.appointments, "/admin/schedule", true),

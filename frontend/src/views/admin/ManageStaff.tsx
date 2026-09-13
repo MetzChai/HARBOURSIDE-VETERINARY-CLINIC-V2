@@ -231,13 +231,13 @@ export default function ManageStaff() {
                   ) : (
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>User</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Last Login (PST)</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                        <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">User</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Email</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Role</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Status</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs">Last Login (PHT)</TableHead>
+                          <TableHead className="text-[#1B3A5C] font-bold text-xs text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

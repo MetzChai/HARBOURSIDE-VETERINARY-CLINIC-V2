@@ -21,5 +21,11 @@ export function useRows<T = any>(
 
 export function useInvalidate() {
   const qc = useQueryClient();
-  return (table: string) => qc.invalidateQueries({ queryKey: [table] });
+  return (table: string) => {
+    qc.invalidateQueries({ queryKey: [table] });
+    if (table === "messages") {
+      qc.invalidateQueries({ queryKey: ["notif-messages"] });
+      qc.invalidateQueries({ queryKey: ["admin-notif-messages"] });
+    }
+  };
 }

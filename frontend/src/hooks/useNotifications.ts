@@ -56,11 +56,22 @@ export function useOwnerNotifications(): { notifications: NotificationItem[]; is
     },
   });
 
-  const notifications = buildOwnerNotifications({ vaccinations, appointments, dewormings });
+  const { data: messages = [], isLoading: msgLoading } = useQuery({
+    queryKey: ["notif-messages", user?.id],
+    enabled: !!user,
+    refetchInterval: REFETCH_MS,
+    queryFn: async () => {
+      const { data, error } = await db.from("messages").select("*").order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as any[];
+    },
+  });
+
+  const notifications = buildOwnerNotifications({ vaccinations, appointments, dewormings, messages });
 
   return {
     notifications,
-    isLoading: vaxLoading || aptLoading || dewLoading,
+    isLoading: vaxLoading || aptLoading || dewLoading || msgLoading,
   };
 }
 
@@ -107,15 +118,26 @@ export function useAdminNotifications(): { notifications: NotificationItem[]; is
     },
   });
 
+  const { data: messages = [], isLoading: msgLoading } = useQuery({
+    queryKey: ["admin-notif-messages"],
+    enabled: !!user,
+    refetchInterval: REFETCH_MS,
+    queryFn: async () => {
+      const { data } = await db.from("messages").select("*").order("created_at", { ascending: false });
+      return (data ?? []) as any[];
+    },
+  });
+
   const notifications = buildAdminNotifications({
     vaccinations,
     appointments,
     inventory,
     dewormings,
+    messages,
   });
 
   return {
     notifications,
-    isLoading: vaxLoading || aptLoading || invLoading || dewLoading,
+    isLoading: vaxLoading || aptLoading || invLoading || dewLoading || msgLoading,
   };
 }

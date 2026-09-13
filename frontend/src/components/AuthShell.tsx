@@ -53,7 +53,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
             {highlights.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3 text-white/80 text-sm">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
-                  <Icon className="h-4 w-4 text-brand-teal" />
+                  <Icon className="h-4 w-4 text-rose-300" />
                 </span>
                 {text}
               </li>
