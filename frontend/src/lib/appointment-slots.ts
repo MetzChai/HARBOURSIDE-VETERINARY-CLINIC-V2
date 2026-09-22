@@ -15,6 +15,29 @@ export const APPOINTMENT_SLOTS = [
   "16:30",
 ] as const;
 
+export function formatTimeSlot(timeStr?: string | null): string {
+  if (!timeStr) return "—";
+  const str = String(timeStr).trim();
+  if (!str) return "—";
+  if (str.toUpperCase().includes("AM") || str.toUpperCase().includes("PM")) {
+    return str;
+  }
+
+  const match = str.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return str;
+
+  let hour = parseInt(match[1], 10);
+  const min = match[2];
+
+  if (isNaN(hour)) return str;
+
+  const ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+
+  return `${hour}:${min} ${ampm}`;
+}
+
 export const VET_OPTIONS: string[] = ["Alfredo B. Badiola, Jr., DVM"];
 
 export const APPOINTMENT_STATUSES = [

@@ -91,14 +91,13 @@ export default function UserMessages() {
 
   const getChannelBadge = (ch: string) => {
     switch (ch) {
+      case "EMAIL_INAPP":
       case "ALL":
-        return <Badge className="bg-[#1B3A5C] text-white">Email + SMS + In-App</Badge>;
       case "EMAIL_SMS":
-        return <Badge className="bg-[#1FA8A8] text-white">Email + SMS</Badge>;
+      case "SMS_INAPP":
+        return <Badge className="bg-[#1FA8A8] text-white">Email + In-App</Badge>;
       case "EMAIL":
         return <Badge variant="outline" className="bg-[#E8EEF4] text-[#1B3A5C] border-[#1B3A5C]/20">Email</Badge>;
-      case "SMS":
-        return <Badge variant="outline" className="bg-[#E8F6F6] text-[#1FA8A8] border-[#1FA8A8]/30">SMS</Badge>;
       default:
         return <Badge variant="secondary">In-App Notice</Badge>;
     }
@@ -117,7 +116,7 @@ export default function UserMessages() {
               My Messages & Notices 💬
             </h1>
             <p className="text-sm text-slate-200/90 leading-relaxed">
-              Read clinic notices and send a message to Harbourside staff. Email and SMS copies are sent when the clinic chooses those channels.
+              Read clinic notices and send a message to Harbourside staff. Email copies are sent when the clinic chooses that channel.
             </p>
           </div>
 

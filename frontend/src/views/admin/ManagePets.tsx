@@ -44,6 +44,7 @@ import { formatAge, formatDate } from "@/lib/age";
 import { formatNowPH, todayPH, isBeforeTodayPH } from "@/lib/datetime";
 import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
+import { processPrescribedMedications } from "@/lib/careHistoryStock";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 
@@ -77,7 +78,7 @@ const SPECIES_OPTIONS = ["Dog", "Cat", "Bird", "Rabbit", "Reptile", "Other"];
 const STATUS_OPTIONS = ["Healthy", "Under Treatment", "Recovered", "Deceased"];
 
 export default function ManagePets() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === "admin";
 
   const { data: pets = [], isLoading } = useRows<PetRow>("pets", { orderBy: "created_at", ascending: false });
@@ -344,15 +345,39 @@ export default function ManagePets() {
       notes: recordForm.notes.trim() || null,
     };
 
-    const { error } = editingRecordId
-      ? await db.from("care_records").update(payload as any).eq("id", editingRecordId)
-      : await db.from("care_records").insert(payload as any);
+    let savedRecord: any = null;
+    let error: any = null;
+
+    if (editingRecordId) {
+      const res = await db.from("care_records").update(payload as any).eq("id", editingRecordId);
+      error = res.error;
+    } else {
+      const res = await db.from("care_records").insert(payload as any).select("id").single();
+      savedRecord = res.data;
+      error = res.error;
+    }
 
     if (error) {
       setSavingRecord(false);
       toast.error(error.message);
       return;
     }
+
+    const careRecordId = (savedRecord as any)?.id || editingRecordId;
+    const staffName = user?.user_metadata?.full_name || user?.email || recordForm.vet || "Clinic Staff";
+
+    await processPrescribedMedications({
+      medicationsList,
+      availableStockMap,
+      dbBatches,
+      petId: viewPet.id,
+      petName: viewPet.name,
+      ownerId: viewPet.owner_id || null,
+      careRecordId,
+      recordDate: recordForm.date,
+      recordType: recordForm.record_type,
+      staffName,
+    });
 
     if (recordForm.record_type === "vaccination" && recordForm.vaccine_used.trim()) {
       await db.from("vaccinations").insert({
@@ -362,6 +387,7 @@ export default function ManagePets() {
         next_due: recordForm.next_vax_due || null,
         vet: recordForm.vet,
         notes: recordForm.notes || null,
+        skip_stock_deduction: true,
       } as any);
     }
 
@@ -374,6 +400,7 @@ export default function ManagePets() {
         vet: recordForm.vet,
         status: "Completed",
         notes: recordForm.notes || null,
+        skip_stock_deduction: true,
       } as any);
     }
 
@@ -390,6 +417,9 @@ export default function ManagePets() {
     invalidate("dewormings");
     invalidate("inventory_items");
     invalidate("inventory_batches");
+    invalidate("inventory_transactions");
+    invalidate("lab_transactions");
+    invalidate("lab_transaction_items");
   };
 
   const handleSavePet = async () => {
@@ -491,7 +521,8 @@ export default function ManagePets() {
   const petAppointments = (petId: string) => appointments.filter((a) => a.pet_id === petId);
   const petVaccinations = (petId: string) => vaccinations.filter((v) => v.pet_id === petId);
   const petDewormings = (petId: string) => dewormings.filter((d) => d.pet_id === petId);
-  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && String(c.record_type).toLowerCase() === "treatment");
+  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && String(c.record_type || "").toLowerCase() === "treatment");
+  const petCheckups = (petId: string) => careRecords.filter((c) => c.pet_id === petId && (String(c.record_type || "").toLowerCase() === "checkup" || String(c.record_type || "").toLowerCase() === "check-up" || !c.record_type));
 
   const getPetStatusBadge = (status?: string | null) => {
     const s = (status ?? "Healthy").toLowerCase();
@@ -510,27 +541,13 @@ export default function ManagePets() {
 
   const handlePrintPetProfile = (pet: PetRow) => {
     const owner = ownerMap.get(pet.owner_id) || pet.owners;
+    const checkupList = petCheckups(pet.id);
     const vaxList = petVaccinations(pet.id);
     const treatList = petTreatments(pet.id);
     const dewormList = petDewormings(pet.id);
-    const careHistory = careRecords.filter((c: any) => c.pet_id === pet.id).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
 
     const w = window.open("", "_blank");
     if (!w) return;
-
-    const formatRecordTypeBadge = (type?: string | null) => {
-      switch (String(type ?? "").toLowerCase()) {
-        case "vaccination":
-        case "vaccine":
-          return `<span style="background:#E8EEF4;color:#1B3A5C;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Vaccination</span>`;
-        case "treatment":
-          return `<span style="background:#E6F4F1;color:#0F766E;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Treatment</span>`;
-        case "deworming":
-          return `<span style="background:#FEF3C7;color:#92400E;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Deworming</span>`;
-        default:
-          return `<span style="background:#DCFCE7;color:#166534;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:bold;">Check-up</span>`;
-      }
-    };
 
     w.document.write(`
       <html>
@@ -543,20 +560,14 @@ export default function ManagePets() {
             h1 { color: #1B3A5C; margin: 0; font-size: 24px; font-weight: bold; }
             h2 { color: #555; margin: 4px 0 0 0; font-size: 14px; font-weight: normal; }
             .badge { background: #1B3A5C; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace; }
-            .section-title { color: #1B3A5C; font-size: 16px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 6px; margin-top: 24px; margin-bottom: 12px; }
+            .section-title { color: #1B3A5C; font-size: 15px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 6px; margin-top: 24px; margin-bottom: 10px; }
             .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
             .info-item { display: flex; flex-direction: column; }
             .info-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
             .info-val { font-size: 12px; color: #0f172a; font-weight: 500; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
             th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; vertical-align: top; }
             th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
-            .timeline-card { border: 1px solid #e2e8f0; border-left: 4px solid #1B3A5C; background: #fff; padding: 12px; margin-bottom: 12px; border-radius: 4px; }
-            .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-            .timeline-date { font-weight: bold; color: #475569; font-size: 11px; }
-            .timeline-title { font-size: 13px; font-weight: bold; color: #1B3A5C; margin: 4px 0; }
-            .timeline-detail { font-size: 11px; color: #334155; margin-top: 4px; }
-            .med-pill { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 3px 6px; border-radius: 3px; font-size: 10px; display: inline-block; margin-right: 4px; margin-top: 3px; }
             .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; }
           </style>
         </head>
@@ -564,7 +575,7 @@ export default function ManagePets() {
           <div class="header-banner">
             <div>
               <h1>Harbourside Veterinary Clinic</h1>
-              <h2>Comprehensive Pet Medical Profile & Care History Timeline</h2>
+              <h2>Official Pet Medical Profile</h2>
             </div>
             <div>
               <span class="badge">${pet.pet_code || "PET"}</span>
@@ -584,47 +595,20 @@ export default function ManagePets() {
             <div class="info-item"><span class="info-label">Allergies & Existing Conditions</span><span class="info-val">Allergies: ${pet.allergies || "None"} | Conditions: ${pet.existing_conditions || "None"}</span></div>
           </div>
 
-          <div class="section-title">Care History Timeline (${careHistory.length} Records)</div>
-          ${
-            careHistory.length
-              ? careHistory
-                  .map((r) => {
-                    const title = r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Visit";
-                    let medsText = "";
-                    if (r.medications_json) {
-                      try {
-                        const parsed = JSON.parse(r.medications_json);
-                        medsText = parsed.map((m: any) => `${m.name || "Item"} (${m.quantity ?? 1} ${m.unit || "unit"}${m.notes ? ` - ${m.notes}` : ""})`).join(", ");
-                      } catch {
-                        medsText = r.medication || "";
-                      }
-                    } else if (r.medication) {
-                      medsText = r.medication;
-                    }
-
-                    return `
-                      <div class="timeline-card">
-                        <div class="timeline-header">
-                          <span class="timeline-date">Date: ${r.date ? formatDate(r.date) : "—"}</span>
-                          ${formatRecordTypeBadge(r.record_type)}
-                        </div>
-                        <div class="timeline-title">${title}</div>
-                        ${r.vet ? `<div class="timeline-detail"><strong>Attending Veterinarian / Staff:</strong> ${r.vet}</div>` : ""}
-                        ${r.chief_complaint ? `<div class="timeline-detail"><strong>Reason / Chief Complaint:</strong> ${r.chief_complaint}</div>` : ""}
-                        ${r.symptoms ? `<div class="timeline-detail"><strong>Symptoms:</strong> ${r.symptoms}</div>` : ""}
-                        ${r.diagnosis ? `<div class="timeline-detail"><strong>Diagnosis:</strong> ${r.diagnosis}</div>` : ""}
-                        ${r.findings ? `<div class="timeline-detail"><strong>Clinical Findings:</strong> ${r.findings}</div>` : ""}
-                        ${r.treatment ? `<div class="timeline-detail"><strong>Treatment / Procedure:</strong> ${r.treatment}</div>` : ""}
-                        ${medsText ? `<div class="timeline-detail"><strong>Medications / Products Used:</strong> <span class="med-pill">${medsText}</span></div>` : ""}
-                        ${r.next_vax_due ? `<div class="timeline-detail"><strong>Next Vaccination Due:</strong> ${formatDate(r.next_vax_due)}</div>` : ""}
-                        ${r.next_deworming_due ? `<div class="timeline-detail"><strong>Next Deworming Due:</strong> ${formatDate(r.next_deworming_due)}</div>` : ""}
-                        ${r.notes ? `<div class="timeline-detail"><strong>Notes:</strong> ${r.notes}</div>` : ""}
-                      </div>
-                    `;
-                  })
-                  .join("")
-              : "<p style='font-size:12px;color:#666;'>No medical care history records logged for this pet.</p>"
-          }
+          <div class="section-title">Check-up & Exam Records (${checkupList.length})</div>
+          <table>
+            <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Clinical Findings</th><th>Medications / Products</th><th>Veterinarian</th></tr></thead>
+            <tbody>
+              ${
+                checkupList
+                  .map(
+                    (c) =>
+                      `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.chief_complaint || "—"}</td><td>${c.diagnosis || "General Exam"}</td><td>${c.findings || "—"}</td><td>${c.medication || "—"}</td><td>${c.vet || "Clinic Staff"}</td></tr>`
+                  )
+                  .join("") || "<tr><td colSpan='6'>No check-up records logged</td></tr>"
+              }
+            </tbody>
+          </table>
 
           <div class="section-title">Vaccination Records (${vaxList.length})</div>
           <table>
@@ -664,7 +648,7 @@ export default function ManagePets() {
                 dewormList
                   .map(
                     (d) =>
-                      `<tr><td>${d.product || "Deworming"}</td><td>${d.date_given ? formatDate(d.date_given) : "—"}</td><td>${d.next_due ? formatDate(d.next_due) : "—"}</td><td>${d.status || "Completed"}</td><td>${d.vet || "Clinic Staff"}</td></tr>`
+                      `<tr><td>${d.product || d.dewormer_used || "Deworming"}</td><td>${d.date_given ? formatDate(d.date_given) : d.date ? formatDate(d.date) : "—"}</td><td>${d.next_due ? formatDate(d.next_due) : d.next_deworming_due ? formatDate(d.next_deworming_due) : "—"}</td><td>${d.status || "Completed"}</td><td>${d.vet || "Clinic Staff"}</td></tr>`
                   )
                   .join("") || "<tr><td colSpan='5'>No deworming records logged</td></tr>"
               }
@@ -1163,10 +1147,11 @@ export default function ManagePets() {
               </DialogHeader>
 
               <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4 pt-2">
-                <TabsList className="bg-muted p-1 grid grid-cols-5 w-full">
-                  <TabsTrigger value="info" className="text-xs">Pet & Owner Info</TabsTrigger>
-                  <TabsTrigger value="timeline" className="text-xs">Care History Timeline</TabsTrigger>
-                  <TabsTrigger value="vaccinations" className="text-xs">Vaccinations ({petVaccinations(viewPet.id).length})</TabsTrigger>
+                <TabsList className="bg-muted p-1 grid grid-cols-6 w-full">
+                  <TabsTrigger value="info" className="text-xs">Info</TabsTrigger>
+                  <TabsTrigger value="timeline" className="text-xs">Care History</TabsTrigger>
+                  <TabsTrigger value="checkups" className="text-xs">Check-ups ({petCheckups(viewPet.id).length})</TabsTrigger>
+                  <TabsTrigger value="vaccinations" className="text-xs">Vaccines ({petVaccinations(viewPet.id).length})</TabsTrigger>
                   <TabsTrigger value="treatments" className="text-xs">Treatments ({petTreatments(viewPet.id).length})</TabsTrigger>
                   <TabsTrigger value="dewormings" className="text-xs">Dewormings ({petDewormings(viewPet.id).length})</TabsTrigger>
                 </TabsList>
@@ -1217,6 +1202,53 @@ export default function ManagePets() {
                   <div className="max-h-[400px] overflow-y-auto pr-1">
                     <PetCareHistoryTimeline petId={viewPet.id} />
                   </div>
+                </TabsContent>
+
+                {/* Tab: Check-ups */}
+                <TabsContent value="checkups" className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">Check-up & Exam Records ({petCheckups(viewPet.id).length})</span>
+                    <Button size="sm" className="h-7 text-xs bg-[#1FA8A8] hover:bg-[#198a8a] text-white" onClick={() => openAddRecordModal("checkup")}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Check-up
+                    </Button>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Reason / Complaint</TableHead>
+                        <TableHead>Diagnosis</TableHead>
+                        <TableHead>Clinical Findings</TableHead>
+                        <TableHead>Medications / Products</TableHead>
+                        <TableHead>Attending Vet</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {petCheckups(viewPet.id).map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell className="text-xs font-medium">{c.date ? formatDate(c.date) : "—"}</TableCell>
+                          <TableCell className="text-xs">{c.chief_complaint || "—"}</TableCell>
+                          <TableCell className="text-xs font-semibold text-brand-navy">{c.diagnosis || "General Exam"}</TableCell>
+                          <TableCell className="text-xs">{c.findings || "—"}</TableCell>
+                          <TableCell className="text-xs">{c.medication || "—"}</TableCell>
+                          <TableCell className="text-xs">{c.vet || "Clinic Staff"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditRecordModal(c)} title="Edit Record">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {petCheckups(viewPet.id).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">
+                            No check-up records logged yet for this pet.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
                 </TabsContent>
 
                 {/* Tab 3: Vaccinations */}
@@ -1351,7 +1383,7 @@ export default function ManagePets() {
               <DialogFooter className="pt-4 border-t">
                 <Button variant="outline" onClick={() => setViewPet(null)}>Close</Button>
                 <Button variant="default" onClick={() => handlePrintPetProfile(viewPet)}>
-                  <Printer className="h-4 w-4 mr-1.5" /> Print Profile with Timeline
+                  <Printer className="h-4 w-4 mr-1.5" /> Print Medical Profile
                 </Button>
               </DialogFooter>
             </>

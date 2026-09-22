@@ -72,13 +72,9 @@ const MESSAGE_TYPES = [
 ];
 
 const DELIVERY_CHANNELS = [
-  { value: "ALL", label: "Email + SMS + In-App (All Channels)" },
-  { value: "EMAIL_SMS", label: "Email + SMS" },
-  { value: "EMAIL_INAPP", label: "Email + In-App" },
-  { value: "SMS_INAPP", label: "SMS + In-App" },
+  { value: "EMAIL_INAPP", label: "Email + In-App Notification (Recommended)" },
   { value: "IN_APP", label: "In-App Notification Only" },
   { value: "EMAIL", label: "Email Only" },
-  { value: "SMS", label: "SMS Only" },
 ];
 
 export default function Messaging() {
@@ -102,7 +98,7 @@ export default function Messaging() {
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [selectedPetId, setSelectedPetId] = useState("NONE");
   const [messageType, setMessageType] = useState("Custom Message");
-  const [deliveryChannel, setDeliveryChannel] = useState("ALL");
+  const [deliveryChannel, setDeliveryChannel] = useState("EMAIL_INAPP");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
@@ -327,20 +323,16 @@ export default function Messaging() {
 
   const getChannelBadge = (ch: string) => {
     switch (ch) {
-      case "ALL":
-        return <Badge className="bg-brand-navy text-white">Email + SMS + In-App</Badge>;
-      case "EMAIL_SMS":
-        return <Badge className="bg-brand-navy text-white">Email + SMS</Badge>;
       case "EMAIL_INAPP":
-        return <Badge className="bg-brand-teal text-white">Email + In-App</Badge>;
+      case "ALL":
+      case "EMAIL_SMS":
       case "SMS_INAPP":
-        return <Badge className="bg-brand-teal text-white">SMS + In-App</Badge>;
+        return <Badge className="bg-[#1FA8A8] text-white">Email + In-App</Badge>;
       case "EMAIL":
-        return <Badge variant="outline" className="bg-brand-navy-light text-brand-navy border-brand-navy/20">Email Only</Badge>;
-      case "SMS":
-        return <Badge variant="outline" className="bg-brand-teal-light text-brand-teal border-brand-teal/30">SMS Only</Badge>;
+        return <Badge variant="outline" className="bg-[#E8EEF4] text-[#1B3A5C] border-[#1B3A5C]/20">Email Only</Badge>;
+      case "IN_APP":
       default:
-        return <Badge variant="secondary">In-App Only</Badge>;
+        return <Badge variant="secondary" className="bg-slate-100 text-slate-700">In-App Only</Badge>;
     }
   };
 
@@ -358,7 +350,7 @@ export default function Messaging() {
               Communications & Client Outreach 💬
             </h1>
             <p className="text-sm text-slate-200/90 leading-relaxed">
-              Dispatch multi-channel automated notices, appointment reminders, vaccination alerts, and custom broadcast messages to pet owners.
+              Dispatch Email & In-App automated notices, appointment reminders, vaccination alerts, and custom broadcast messages to pet owners.
             </p>
           </div>
 
@@ -367,9 +359,9 @@ export default function Messaging() {
               <p className="text-2xl font-extrabold text-white">{messages.length}</p>
               <p className="text-[11px] text-slate-200 font-medium">Dispatched Logs</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/20 text-center">
-              <p className="text-2xl font-extrabold text-brand-teal">{owners.length}</p>
-              <p className="text-[11px] text-slate-200 font-medium">Active Pet Owners</p>
+            <div className="bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl border-2 border-white/40 text-center shadow-lg bg-gradient-to-b from-white/20 to-white/10">
+              <p className="text-3xl font-black text-white drop-shadow-md">{owners.length}</p>
+              <p className="text-[11px] font-bold text-rose-100 uppercase tracking-wide">Active Pet Owners</p>
             </div>
           </div>
         </div>
@@ -611,9 +603,8 @@ export default function Messaging() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Channels</SelectItem>
-                      <SelectItem value="ALL">Email + SMS + In-App</SelectItem>
+                      <SelectItem value="EMAIL_INAPP">Email + In-App</SelectItem>
                       <SelectItem value="EMAIL">Email</SelectItem>
-                      <SelectItem value="SMS">SMS</SelectItem>
                       <SelectItem value="IN_APP">In-App</SelectItem>
                     </SelectContent>
                   </Select>
@@ -768,10 +759,10 @@ export default function Messaging() {
 
       {/* View Message Modal */}
       <Dialog open={!!viewMessage} onOpenChange={() => setViewMessage(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
           {viewMessage && (
             <>
-              <DialogHeader>
+              <DialogHeader className="p-6 pb-2 border-b">
                 <div className="flex items-center justify-between pr-6">
                   <DialogTitle className="font-heading text-base font-bold">
                     Communication Log Details
@@ -780,7 +771,7 @@ export default function Messaging() {
                 </div>
               </DialogHeader>
 
-              <div className="space-y-3 pt-2 text-xs">
+              <div className="p-6 overflow-y-auto space-y-3 text-xs">
                 <div className="flex justify-between py-1 border-b">
                   <span className="text-muted-foreground">Recipient Owner:</span>
                   <span className="font-bold">{ownerMap.get(viewMessage.owner_id || "")?.name || viewMessage.owners?.name || "—"}</span>
@@ -808,7 +799,7 @@ export default function Messaging() {
                 </div>
               </div>
 
-              <DialogFooter className="pt-4 border-t gap-2">
+              <DialogFooter className="p-4 border-t bg-muted/30 gap-2">
                 {viewMessage.owner_id && String(viewMessage.sent_by || "").toLowerCase() === "owner" && (
                   <Button
                     className="bg-[#1B3A5C] text-white"

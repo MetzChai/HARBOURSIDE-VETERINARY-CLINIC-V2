@@ -26,7 +26,7 @@ import {
 } from "@/hooks/useOwnerData";
 import { formatAge, formatDate } from "@/lib/age";
 import { isWithinDaysFromTodayPH, daysFromTodayPH } from "@/lib/datetime";
-import { getStatusBadgeClass } from "@/lib/appointment-slots";
+import { getStatusBadgeClass, formatTimeSlot } from "@/lib/appointment-slots";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -217,7 +217,7 @@ export default function UserDashboard() {
                   </TableCell>
                   <TableCell className="font-semibold text-xs">{a.pets?.name || "Pet"}</TableCell>
                   <TableCell className="text-xs">
-                    {formatDate(a.date)} at {a.time}
+                    {formatDate(a.date)} at {formatTimeSlot(a.time)}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs border-[#E5192C]/40 text-[#7F1D1D]">

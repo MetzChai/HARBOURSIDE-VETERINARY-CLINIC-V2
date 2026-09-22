@@ -15,6 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 import {
   APPOINTMENT_SLOTS,
+  formatTimeSlot,
   APPOINTMENT_TYPES,
   getStatusBadgeClass,
 } from "@/lib/appointment-slots";
@@ -209,7 +210,7 @@ export default function UserAppointments() {
                     </TableCell>
                     <TableCell className="font-semibold text-xs text-[#1B3A5C]">{a.pets?.name ?? "—"}</TableCell>
                     <TableCell className="text-xs">{a.date ? formatDate(a.date) : "—"}</TableCell>
-                    <TableCell className="font-semibold text-xs">{a.time}</TableCell>
+                    <TableCell className="font-semibold text-xs">{formatTimeSlot(a.time)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs border-[#1FA8A8]/30 text-[#1B3A5C] bg-[#E8F6F6]">
                         {a.appointment_type || a.care_type || "Check-up"}
@@ -372,7 +373,7 @@ export default function UserAppointments() {
                                   : "bg-background hover:bg-accent border-border"
                               }`}
                             >
-                              {s}
+                              {formatTimeSlot(s)}
                             </button>
                           );
                         })}
@@ -448,7 +449,7 @@ export default function UserAppointments() {
                   <div className="flex justify-between">
                     <span className="text-xs text-muted-foreground">Date & Time</span>
                     <span className="font-medium">
-                      {formatDate(selectedAppointment.date)} at {selectedAppointment.time}
+                      {formatDate(selectedAppointment.date)} at {formatTimeSlot(selectedAppointment.time)}
                     </span>
                   </div>
                   <div className="flex justify-between">

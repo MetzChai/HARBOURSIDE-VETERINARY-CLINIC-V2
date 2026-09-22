@@ -19,6 +19,7 @@ import { formatNowPH, isBeforeTodayPH } from "@/lib/datetime";
 import { db } from "@/lib/db-client";
 import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
+import { processPrescribedMedications } from "@/lib/careHistoryStock";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -59,7 +60,7 @@ function getCareTypeBadgeClass(type?: string | null) {
 }
 
 export default function CareHistory() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === "admin";
 
   const { data: pets = [], isLoading: petsLoading } = useRows<any>("pets", { orderBy: "name" });
@@ -444,16 +445,44 @@ export default function CareHistory() {
       }
     }
 
-    const { error } = targetId
-      ? await db.from("care_records").update(payload as any).eq("id", targetId)
-      : await db.from("care_records").insert(payload as any);
+    let savedRecord: any = null;
+    let error: any = null;
 
-    setSaving(false);
+    if (targetId) {
+      const res = await db.from("care_records").update(payload as any).eq("id", targetId);
+      error = res.error;
+    } else {
+      const res = await db.from("care_records").insert(payload as any).select("id").single();
+      savedRecord = res.data;
+      error = res.error;
+    }
 
     if (error) {
+      setSaving(false);
       toast.error(error.message);
       return;
     }
+
+    const careRecordId = (savedRecord as any)?.id || targetId;
+    const petObj = petMap.get(form.pet_id);
+    const petName = petObj?.name || "Pet";
+    const ownerId = petObj?.owner_id || null;
+    const staffName = user?.user_metadata?.full_name || user?.email || form.vet || "Clinic Staff";
+
+    await processPrescribedMedications({
+      medicationsList,
+      availableStockMap,
+      dbBatches,
+      petId: form.pet_id,
+      petName,
+      ownerId,
+      careRecordId,
+      recordDate: form.date,
+      recordType: form.record_type,
+      staffName,
+    });
+
+    setSaving(false);
 
     toast.success(targetId ? "Care History record updated." : "Care History record saved successfully.");
     setShowEditModal(false);

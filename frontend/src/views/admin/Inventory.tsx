@@ -1681,14 +1681,14 @@ export default function Inventory() {
 
       {/* DIALOG 1: ADD ITEM (ADMIN ONLY) */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg">Add Inventory Item</DialogTitle>
             <DialogDescription className="text-xs">
               Add a new medicine, vaccine, dewormer, or medical supply item to clinic inventory.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-3 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-1">
               <Label className="text-xs">
                 Item Name <span className="text-destructive">*</span>
@@ -1794,7 +1794,7 @@ export default function Inventory() {
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t bg-muted/30">
             <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>
               Cancel
             </Button>
@@ -1807,14 +1807,14 @@ export default function Inventory() {
 
       {/* DIALOG 2: EDIT ITEM METADATA (ADMIN ONLY - QUANTITY READ-ONLY) */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg">Edit Inventory Item</DialogTitle>
             <DialogDescription className="text-xs">
               Update item metadata and reorder level. Quantity changes are managed via Stock In / Out.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-3 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-1">
               <Label className="text-xs">Item Name</Label>
               <Input
@@ -1900,7 +1900,7 @@ export default function Inventory() {
               Note: Current Total Quantity is automatically calculated from active batches. Use Stock In / Out to update quantities.
             </p>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t bg-muted/30">
             <Button variant="outline" size="sm" onClick={() => setShowEditModal(false)}>
               Cancel
             </Button>
@@ -1913,8 +1913,8 @@ export default function Inventory() {
 
       {/* DIALOG 3: VIEW ITEM DETAILS & BATCHES BREAKDOWN */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg flex items-center justify-between">
               <span>Item Details: {viewingItem?.name}</span>
               {viewingItem && (
@@ -1934,7 +1934,7 @@ export default function Inventory() {
           {viewingItem && (() => {
             const summary = itemSummaries[viewingItem.id] || getItemSummary(viewingItem, dbBatches, txns);
             return (
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
                 {/* METADATA GRID */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-muted/40 p-3 rounded-lg border text-xs">
                   <div>
@@ -2128,7 +2128,7 @@ export default function Inventory() {
             );
           })()}
 
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 justify-between">
+          <DialogFooter className="p-4 border-t bg-muted/30 flex flex-col sm:flex-row gap-2 justify-between">
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -2162,8 +2162,8 @@ export default function Inventory() {
 
       {/* DIALOG 4: STOCK IN MODAL */}
       <Dialog open={showStockInModal} onOpenChange={setShowStockInModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg flex items-center gap-2">
               <ArrowDownToLine className="h-5 w-5 text-brand-green" /> Stock In
             </DialogTitle>
@@ -2175,7 +2175,7 @@ export default function Inventory() {
           {targetItem && (() => {
             const summary = itemSummaries[targetItem.id] || getItemSummary(targetItem, txns);
             return (
-              <div className="space-y-3 py-2">
+              <div className="space-y-3 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
                 {/* READ-ONLY ITEM SUMMARY */}
                 <div className="grid grid-cols-2 gap-3 bg-muted/40 p-2.5 rounded-md border text-xs">
                   <div>
@@ -2291,7 +2291,7 @@ export default function Inventory() {
             );
           })()}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-0">
             <Button variant="outline" size="sm" onClick={() => setShowStockInModal(false)}>
               Cancel
             </Button>
@@ -2309,8 +2309,8 @@ export default function Inventory() {
 
       {/* DIALOG 5: STOCK OUT MODAL (WITH BATCH DROPDOWN SELECTION) */}
       <Dialog open={showStockOutModal} onOpenChange={setShowStockOutModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg flex items-center gap-2">
               <ArrowUpFromLine className="h-5 w-5 text-rose-600" /> Stock Out
             </DialogTitle>
@@ -2327,7 +2327,7 @@ export default function Inventory() {
             );
 
             return (
-              <div className="space-y-3 py-2">
+              <div className="space-y-3 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
                 {/* READ-ONLY ITEM SUMMARY */}
                 <div className="grid grid-cols-2 gap-3 bg-muted/40 p-2.5 rounded-md border text-xs">
                   <div>
@@ -2462,7 +2462,7 @@ export default function Inventory() {
             );
           })()}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-0">
             <Button variant="outline" size="sm" onClick={() => setShowStockOutModal(false)}>
               Cancel
             </Button>
@@ -2480,8 +2480,8 @@ export default function Inventory() {
 
       {/* DIALOG 7: EDIT BATCH MODAL (ADMIN ONLY) */}
       <Dialog open={showEditBatchModal} onOpenChange={setShowEditBatchModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg flex items-center gap-2">
               <Pencil className="h-5 w-5 text-primary" /> Edit Batch & Quantity Adjustment
             </DialogTitle>
@@ -2491,7 +2491,7 @@ export default function Inventory() {
           </DialogHeader>
 
           {editingBatch && (
-            <div className="space-y-3 py-2 text-xs">
+            <div className="space-y-3 p-6 overflow-y-auto max-h-[calc(90vh-8rem)] text-xs">
               <div className="grid grid-cols-2 gap-3 bg-muted/40 p-2.5 rounded-md border">
                 <div>
                   <span className="text-muted-foreground block text-[11px]">Item Name</span>
@@ -2577,7 +2577,7 @@ export default function Inventory() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-0">
             <Button variant="outline" size="sm" onClick={() => setShowEditBatchModal(false)}>
               Cancel
             </Button>
@@ -2595,16 +2595,21 @@ export default function Inventory() {
 
       {/* DIALOG 6: CONFIRM DELETE ITEM (ADMIN ONLY) */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+        <DialogContent className="max-w-sm max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading text-lg text-destructive flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" /> Delete Inventory Item
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              Are you sure you want to delete <strong>"{deleteTarget?.name}"</strong>? This action will permanently remove the item and its batches.
-            </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <div className="p-6 overflow-y-auto text-xs text-muted-foreground space-y-2">
+            <p>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+            </p>
+            <p className="text-[11px] text-destructive/90 font-medium">
+              This action cannot be undone and will delete all associated batches and stock movement records.
+            </p>
+          </div>
+          <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-0">
             <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>

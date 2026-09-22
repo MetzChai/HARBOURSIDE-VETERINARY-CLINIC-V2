@@ -32,19 +32,30 @@ export function BrandLogo({
 
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <Image
-        src="/logo.png"
-        alt="Harbourside Veterinary Clinic"
-        width={px}
-        height={px}
-        className="object-contain shrink-0 rounded-lg shadow-sm"
-        priority
-      />
+      <div
+        className={cn(
+          "relative flex items-center justify-center shrink-0 rounded-2xl transition-all duration-300 hover:scale-105",
+          size === "xl"
+            ? "p-3.5 bg-gradient-to-br from-white/25 via-white/15 to-white/5 border border-white/30 shadow-2xl backdrop-blur-xl ring-4 ring-white/15 shadow-rose-950/50"
+            : size === "lg"
+            ? "p-2 bg-white/15 border border-white/20 shadow-md backdrop-blur-md"
+            : "p-1 bg-white/10 border border-white/15"
+        )}
+      >
+        <Image
+          src="/logo.png"
+          alt="Harbourside Veterinary Clinic"
+          width={px}
+          height={px}
+          className="object-contain shrink-0 rounded-xl"
+          priority
+        />
+      </div>
       {showText && !collapsed && (
         <div>
           <h2
             className={cn(
-              "font-heading font-bold leading-tight",
+              "font-heading font-bold leading-tight tracking-tight",
               variant === "sidebar" ? "text-sidebar-accent-foreground" : "text-foreground",
               size === "xl" ? "text-2xl" : "text-sm",
             )}

@@ -14,7 +14,7 @@ import { daysFromTodayPH, formatNowPH } from "@/lib/datetime";
 import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { getStatusBadgeClass } from "@/lib/appointment-slots";
+import { getStatusBadgeClass, formatTimeSlot } from "@/lib/appointment-slots";
 
 export default function UserPets() {
   const { data: owner } = useMyOwner();
@@ -38,14 +38,17 @@ export default function UserPets() {
 
   const vaccinesByPet = (petId: string) => vaccinations.filter((v: any) => v.pet_id === petId);
   const checkupsByPet = (petId: string) =>
-    careRecords.filter((c: any) => c.pet_id === petId && c.record_type !== "treatment");
+    careRecords.filter((c: any) => c.pet_id === petId && (c.record_type === "checkup" || c.record_type === "check-up" || !c.record_type));
   const treatmentsByPet = (petId: string) =>
     careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "treatment");
+  const dewormingsByPet = (petId: string) =>
+    careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "deworming");
 
   const handlePrint = (pet: any) => {
     const vaccs = vaccinesByPet(pet.id);
     const checkups = checkupsByPet(pet.id);
     const treatments = treatmentsByPet(pet.id);
+    const dewormingsList = dewormingsByPet(pet.id);
     const petRecords = careRecords.filter((c: any) => c.pet_id === pet.id).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
 
     const w = window.open("", "_blank");
@@ -100,19 +103,24 @@ export default function UserPets() {
           : "<p style='font-size:12px;color:#888'>No medical care history records logged.</p>"
       }
 
+      <h3 style="color:#1B3A5C;margin-top:20px">Check-up Records</h3>
+      <table><tr><th>Date</th><th>Vet</th><th>Diagnosis</th><th>Treatment</th></tr>
+      ${checkups.map((c: any) => `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.vet ?? "—"}</td><td>${c.diagnosis ?? "—"}</td><td>${c.treatment ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
+      </table>
+
       <h3 style="color:#1B3A5C;margin-top:20px">Vaccination Records</h3>
       <table><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Notes</th></tr>
       ${vaccs.map((v: any) => `<tr><td>${v.vaccine_type}</td><td>${v.date_given ? formatDate(v.date_given) : "—"}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
 
-      <h3 style="color:#1B3A5C;margin-top:20px">Check-up & Medical History</h3>
-      <table><tr><th>Date</th><th>Vet</th><th>Diagnosis</th><th>Treatment</th></tr>
-      ${checkups.map((c: any) => `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.vet ?? "—"}</td><td>${c.diagnosis ?? "—"}</td><td>${c.treatment ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
-      </table>
-
       <h3 style="color:#1B3A5C;margin-top:20px">Treatment History</h3>
       <table><tr><th>Treatment</th><th>Date</th><th>Diagnosis</th><th>Notes</th></tr>
       ${treatments.map((t: any) => `<tr><td>${t.treatment ?? "—"}</td><td>${t.date ? formatDate(t.date) : "—"}</td><td>${t.diagnosis ?? "—"}</td><td>${t.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
+      </table>
+
+      <h3 style="color:#1B3A5C;margin-top:20px">Deworming Records</h3>
+      <table><tr><th>Product / Treatment</th><th>Date Given</th><th>Next Due</th><th>Notes</th></tr>
+      ${dewormingsList.map((d: any) => `<tr><td>${d.dewormer_used || d.product || "Deworming"}</td><td>${d.date ? formatDate(d.date) : d.date_given ? formatDate(d.date_given) : "—"}</td><td>${d.next_deworming_due ? formatDate(d.next_deworming_due) : d.next_due ? formatDate(d.next_due) : "—"}</td><td>${d.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
 
       <br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</p>
@@ -188,7 +196,7 @@ export default function UserPets() {
                         </Badge>
                       </div>
                       <p className="text-xs font-semibold text-[#7F1D1D] mt-0.5">
-                        {formatDate(upcoming.date)} {upcoming.time ? `at ${upcoming.time}` : ""}
+                        {formatDate(upcoming.date)} {upcoming.time ? `at ${formatTimeSlot(upcoming.time)}` : ""}
                       </p>
                     </div>
                   </div>
@@ -205,12 +213,24 @@ export default function UserPets() {
                   View Full Profile & Care History
                 </Button>
 
-                <Tabs defaultValue="vaccines" className="mt-2">
-                  <TabsList className="h-8 w-full bg-muted/60 p-0.5 grid grid-cols-3">
-                    <TabsTrigger value="vaccines" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Vaccines</TabsTrigger>
-                    <TabsTrigger value="checkups" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Check-ups</TabsTrigger>
-                    <TabsTrigger value="treatments" className="text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Treatments</TabsTrigger>
+                <Tabs defaultValue="checkups" className="mt-2">
+                  <TabsList className="h-8 w-full bg-muted/60 p-0.5 grid grid-cols-4">
+                    <TabsTrigger value="checkups" className="text-[10px] sm:text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Check-ups</TabsTrigger>
+                    <TabsTrigger value="vaccines" className="text-[10px] sm:text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Vaccines</TabsTrigger>
+                    <TabsTrigger value="treatments" className="text-[10px] sm:text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Treatments</TabsTrigger>
+                    <TabsTrigger value="dewormings" className="text-[10px] sm:text-xs py-1 data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D] data-[state=active]:font-bold">Dewormings</TabsTrigger>
                   </TabsList>
+                  <TabsContent value="checkups" className="mt-2.5 space-y-1">
+                    {checkupsByPet(pet.id).length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No check-up history</p>
+                    ) : (
+                      checkupsByPet(pet.id).slice(0, 3).map((c: any) => (
+                        <div key={c.id} className="text-xs py-1.5 border-b last:border-0">
+                          <span className="font-semibold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span> — {c.diagnosis || "Regular Visit"}
+                        </div>
+                      ))
+                    )}
+                  </TabsContent>
                   <TabsContent value="vaccines" className="mt-2.5 space-y-1">
                     {vaccinesByPet(pet.id).length === 0 ? (
                       <p className="text-xs text-muted-foreground py-2 text-center">No vaccination history</p>
@@ -223,17 +243,6 @@ export default function UserPets() {
                       ))
                     )}
                   </TabsContent>
-                  <TabsContent value="checkups" className="mt-2.5 space-y-1">
-                    {checkupsByPet(pet.id).length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2 text-center">No check-up history</p>
-                    ) : (
-                      checkupsByPet(pet.id).slice(0, 3).map((c: any) => (
-                        <div key={c.id} className="text-xs py-1.5 border-b last:border-0">
-                          <span className="font-semibold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span> — {c.diagnosis || "Regular Visit"}
-                        </div>
-                      ))
-                    )}
-                  </TabsContent>
                   <TabsContent value="treatments" className="mt-2.5 space-y-1">
                     {treatmentsByPet(pet.id).length === 0 ? (
                       <p className="text-xs text-muted-foreground py-2 text-center">No treatment history</p>
@@ -241,6 +250,18 @@ export default function UserPets() {
                       treatmentsByPet(pet.id).slice(0, 3).map((t: any) => (
                         <div key={t.id} className="text-xs py-1.5 border-b last:border-0">
                           <span className="font-semibold text-[#1B3A5C]">{t.treatment || "Treatment"}</span> — {t.notes || "Completed"}
+                        </div>
+                      ))
+                    )}
+                  </TabsContent>
+                  <TabsContent value="dewormings" className="mt-2.5 space-y-1">
+                    {dewormingsByPet(pet.id).length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2 text-center">No deworming history</p>
+                    ) : (
+                      dewormingsByPet(pet.id).slice(0, 3).map((d: any) => (
+                        <div key={d.id} className="text-xs flex justify-between py-1.5 border-b last:border-0">
+                          <span className="font-semibold text-amber-900">{d.dewormer_used || d.product || "Deworming"}</span>
+                          <span className="text-muted-foreground text-[11px]">Due: {d.next_deworming_due ? formatDate(d.next_deworming_due) : d.next_due ? formatDate(d.next_due) : "—"}</span>
                         </div>
                       ))
                     )}
@@ -283,14 +304,31 @@ export default function UserPets() {
               </div>
 
               <Tabs defaultValue="timeline" className="w-full">
-                <TabsList className="w-full bg-muted p-1 grid grid-cols-4">
+                <TabsList className="w-full bg-muted p-1 grid grid-cols-5">
                   <TabsTrigger value="timeline" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Care History</TabsTrigger>
-                  <TabsTrigger value="vaccines" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Vaccines</TabsTrigger>
                   <TabsTrigger value="checkups" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Check-ups</TabsTrigger>
+                  <TabsTrigger value="vaccines" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Vaccines</TabsTrigger>
                   <TabsTrigger value="treatments" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Treatments</TabsTrigger>
+                  <TabsTrigger value="dewormings" className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#7F1D1D]">Dewormings</TabsTrigger>
                 </TabsList>
                 <TabsContent value="timeline" className="mt-3">
                   <PetCareHistoryTimeline petId={viewPet.id} />
+                </TabsContent>
+                <TabsContent value="checkups" className="mt-3 space-y-2">
+                  {checkupsByPet(viewPet.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">No check-up records</p>
+                  )}
+                  {checkupsByPet(viewPet.id).map((c: any) => (
+                    <div key={c.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
+                      <div className="flex justify-between">
+                        <span className="font-bold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span>
+                        <span className="text-xs text-muted-foreground">{c.vet || "Clinic Vet"}</span>
+                      </div>
+                      <p className="text-xs text-slate-700"><strong>Diagnosis:</strong> {c.diagnosis || "General Exam"}</p>
+                      {c.treatment && <p className="text-xs text-slate-700"><strong>Treatment:</strong> {c.treatment}</p>}
+                      {c.medication && <p className="text-xs text-slate-700"><strong>Medications:</strong> {c.medication}</p>}
+                    </div>
+                  ))}
                 </TabsContent>
                 <TabsContent value="vaccines" className="mt-3 space-y-2">
                   {vaccinesByPet(viewPet.id).length === 0 && (
@@ -309,20 +347,6 @@ export default function UserPets() {
                     </div>
                   ))}
                 </TabsContent>
-                <TabsContent value="checkups" className="mt-3 space-y-2">
-                  {checkupsByPet(viewPet.id).length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6">No check-up records</p>
-                  )}
-                  {checkupsByPet(viewPet.id).map((c: any) => (
-                    <div key={c.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
-                      <div className="flex justify-between">
-                        <span className="font-bold text-[#1B3A5C]">{c.date ? formatDate(c.date) : "—"}</span>
-                        <span className="text-xs text-muted-foreground">{c.vet || "Clinic Vet"}</span>
-                      </div>
-                      <p className="text-xs text-slate-700"><strong>Diagnosis:</strong> {c.diagnosis || "General Exam"}</p>
-                    </div>
-                  ))}
-                </TabsContent>
                 <TabsContent value="treatments" className="mt-3 space-y-2">
                   {treatmentsByPet(viewPet.id).length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-6">No treatment records</p>
@@ -334,6 +358,23 @@ export default function UserPets() {
                         <span className="text-xs text-muted-foreground">{t.date ? formatDate(t.date) : "—"}</span>
                       </div>
                       <p className="text-xs text-slate-700">{t.notes || "No notes provided"}</p>
+                    </div>
+                  ))}
+                </TabsContent>
+                <TabsContent value="dewormings" className="mt-3 space-y-2">
+                  {dewormingsByPet(viewPet.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">No deworming records</p>
+                  )}
+                  {dewormingsByPet(viewPet.id).map((d: any) => (
+                    <div key={d.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-amber-900">{d.dewormer_used || d.product || "Deworming Procedure"}</span>
+                        <span className="text-xs text-muted-foreground">{d.date ? formatDate(d.date) : d.date_given ? formatDate(d.date_given) : "—"}</span>
+                      </div>
+                      {d.next_deworming_due || d.next_due ? (
+                        <p className="text-xs text-amber-800 font-medium">Next due: {formatDate(d.next_deworming_due || d.next_due)}</p>
+                      ) : null}
+                      <p className="text-xs text-slate-700">{d.notes || "No notes provided"}</p>
                     </div>
                   ))}
                 </TabsContent>

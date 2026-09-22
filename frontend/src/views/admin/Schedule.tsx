@@ -34,6 +34,7 @@ import { formatDate } from "@/lib/age";
 import { formatNowPH, todayPH, isBeforeTodayPH } from "@/lib/datetime";
 import {
   APPOINTMENT_SLOTS,
+  formatTimeSlot,
   VET_OPTIONS,
   APPOINTMENT_STATUSES,
   APPOINTMENT_TYPES,
@@ -570,7 +571,7 @@ export default function Schedule() {
                           {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
                         </TableCell>
                         <TableCell>{formatDate(a.date)}</TableCell>
-                        <TableCell className="font-semibold">{a.time}</TableCell>
+                        <TableCell className="font-semibold">{formatTimeSlot(a.time)}</TableCell>
                         <TableCell className="font-semibold text-primary">{getPetName(a)}</TableCell>
                         <TableCell>{getOwnerName(a)}</TableCell>
                         <TableCell>
@@ -670,12 +671,12 @@ export default function Schedule() {
 
       {/* Book / Edit Appointment Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle>{editingId ? "Edit / Reschedule Appointment" : "Book New Appointment"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Appointment Number</Label>
@@ -770,7 +771,7 @@ export default function Schedule() {
                             : "bg-background hover:bg-accent border-border"
                         }`}
                       >
-                        {s}
+                        {formatTimeSlot(s)}
                       </button>
                     );
                   })}
@@ -832,7 +833,7 @@ export default function Schedule() {
             </div>
           </div>
 
-          <DialogFooter className="pt-4 border-t">
+          <DialogFooter className="p-4 border-t bg-muted/30">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
               Cancel
             </Button>
@@ -845,10 +846,10 @@ export default function Schedule() {
 
       {/* Appointment Details Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
           {selectedAppointment && (
             <>
-              <DialogHeader>
+              <DialogHeader className="p-6 pb-2 border-b">
                 <div className="flex items-center justify-between pr-6">
                   <DialogTitle className="font-mono text-sm font-bold text-primary">
                     {selectedAppointment.appointment_number || `APT-${selectedAppointment.id.slice(0, 6)}`}
@@ -859,7 +860,7 @@ export default function Schedule() {
                 </div>
               </DialogHeader>
 
-              <div className="space-y-4 pt-2 text-sm">
+              <div className="space-y-4 p-6 overflow-y-auto text-sm">
                 <div className="bg-muted/40 p-3 rounded-lg space-y-2">
                   <div className="flex justify-between">
                     <span className="text-xs text-muted-foreground">Pet</span>
@@ -872,7 +873,7 @@ export default function Schedule() {
                   <div className="flex justify-between">
                     <span className="text-xs text-muted-foreground">Date & Time</span>
                     <span className="font-medium">
-                      {formatDate(selectedAppointment.date)} at {selectedAppointment.time}
+                      {formatDate(selectedAppointment.date)} at {formatTimeSlot(selectedAppointment.time)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -898,7 +899,7 @@ export default function Schedule() {
                 )}
               </div>
 
-              <DialogFooter className="pt-4 border-t">
+              <DialogFooter className="p-4 border-t bg-muted/30">
                 <Button variant="outline" onClick={() => setShowViewModal(false)}>
                   Close
                 </Button>

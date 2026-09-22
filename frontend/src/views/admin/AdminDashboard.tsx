@@ -50,7 +50,7 @@ import {
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH, toDateOnly } from "@/lib/datetime";
-import { getStatusBadgeClass, CARE_TYPE_LABELS, normalizeCareType } from "@/lib/appointment-slots";
+import { getStatusBadgeClass, CARE_TYPE_LABELS, normalizeCareType, formatTimeSlot } from "@/lib/appointment-slots";
 import { useAdminNotifications } from "@/hooks/useNotifications";
 import { type NotificationItem } from "@/lib/notifications";
 import { useAuth } from "@/hooks/useAuth";
@@ -595,7 +595,7 @@ export default function AdminDashboard() {
                             <TableCell className="font-semibold">{petName(a.pet_id)}</TableCell>
                             <TableCell>{ownerName(a.owner_id)}</TableCell>
                             <TableCell className="text-xs">
-                              {formatDate(a.date)} at {a.time}
+                              {formatDate(a.date)} at {formatTimeSlot(a.time)}
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className={getStatusBadgeClass(a.status)}>

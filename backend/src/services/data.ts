@@ -457,9 +457,49 @@ async function ensureInventorySchema(poolOrClient: any) {
   await poolOrClient.query(`UPDATE inventory_items SET unit_price = 0 WHERE unit_price IS NULL`);
   await poolOrClient.query(`UPDATE inventory_transactions SET unit_price = 0 WHERE unit_price IS NULL`);
   await poolOrClient.query(`UPDATE inventory_transactions SET total_amount = 0 WHERE total_amount IS NULL`);
+
+  // Ensure lab_transactions columns exist
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS transaction_number text`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS care_record_id uuid REFERENCES care_records(id) ON DELETE SET NULL`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_method text NOT NULL DEFAULT 'Cash'`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT 'Pending'`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS services_rendered text`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS total_amount numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS amount_paid numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS subtotal numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS discount numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS additional_fees numeric DEFAULT 0`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS processed_by text`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS notes text`);
+  await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS balance numeric DEFAULT 0`);
+
+  // Ensure lab_transaction_items columns exist
   await poolOrClient.query(`ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS category text`);
   await poolOrClient.query(`ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS source text`);
+  await poolOrClient.query(`ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS item_id uuid REFERENCES inventory_items(id) ON DELETE SET NULL`);
+  await poolOrClient.query(`ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS batch_no text`);
   await poolOrClient.query(`ALTER TABLE lab_transaction_items ADD COLUMN IF NOT EXISTS inventory_transaction_id uuid REFERENCES inventory_transactions(id) ON DELETE SET NULL`);
+
+  // Ensure lab_records table exists
+  await poolOrClient.query(`CREATE TABLE IF NOT EXISTS lab_records (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    lab_record_number text,
+    pet_id uuid REFERENCES pets(id) ON DELETE CASCADE,
+    owner_id uuid REFERENCES owners(id) ON DELETE SET NULL,
+    appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
+    care_record_id uuid REFERENCES care_records(id) ON DELETE SET NULL,
+    test_type text NOT NULL,
+    result text,
+    remarks text,
+    status text NOT NULL DEFAULT 'Completed',
+    lab_fee numeric DEFAULT 0,
+    performed_by text,
+    notes text,
+    date_conducted date DEFAULT CURRENT_DATE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
 
   // LEGACY backfill migration script for missing batches
   await poolOrClient.query(`
@@ -499,6 +539,15 @@ async function ensureInventorySchema(poolOrClient: any) {
       END LOOP;
     END $$;
   `);
+
+  try {
+    const { rows: records } = await poolOrClient.query(`SELECT id, pet_id, date FROM care_records`);
+    for (const rec of records) {
+      await syncCareLabTransaction(poolOrClient, String(rec.id), rec.pet_id ? String(rec.pet_id) : null, rec.date);
+    }
+  } catch (err) {
+    console.error("Error backfilling care lab transactions:", err);
+  }
 }
 
 async function applyCareInventoryAdjustment(
@@ -509,7 +558,34 @@ async function applyCareInventoryAdjustment(
   petId?: string | null
 ) {
   if (!["care_records", "vaccinations", "dewormings"].includes(table)) return;
+  if (payload.skip_stock_deduction || payload.skip_inventory_deduction) return;
   await ensureInventorySchema(poolOrClient);
+
+  if (recordId) {
+    const txnPrefix = `CARE-${recordId.slice(0, 8)}`;
+    const { rows: oldTxns } = await poolOrClient.query(
+      `SELECT id, inventory_batch_id, item_id, quantity FROM inventory_transactions WHERE transaction_no = $1 AND type = 'out'`,
+      [txnPrefix]
+    );
+    if (oldTxns.length > 0) {
+      for (const oldTxn of oldTxns) {
+        if (oldTxn.inventory_batch_id) {
+          await poolOrClient.query(
+            `UPDATE inventory_batches SET remaining_quantity = remaining_quantity + $1, updated_at = now() WHERE id = $2`,
+            [Number(oldTxn.quantity ?? 0), oldTxn.inventory_batch_id]
+          );
+        }
+        await poolOrClient.query(
+          `UPDATE inventory_items SET quantity = COALESCE((SELECT SUM(remaining_quantity) FROM inventory_batches WHERE inventory_item_id = $1), 0), updated_at = now() WHERE id = $1`,
+          [oldTxn.item_id]
+        );
+      }
+      await poolOrClient.query(
+        `DELETE FROM inventory_transactions WHERE transaction_no = $1 AND type = 'out'`,
+        [txnPrefix]
+      );
+    }
+  }
 
   const { rows: itemRows } = await poolOrClient.query(
     "SELECT id, name, category, quantity, expiration_date, status, COALESCE(unit_price, purchase_price, 0) AS unit_price FROM inventory_items"
@@ -716,17 +792,103 @@ async function syncCareLabTransaction(
     );
   }
 
-  // 8. Insert Medication line items from inventory transactions (lock in historical unit_price!)
+  // 8. Insert Medication line items from medications_json and inventory transactions (lock in accurate unit_price!)
+  let rawMeds = careRecord.medications_json;
+  if (typeof rawMeds === "string" && rawMeds.trim().startsWith("[")) {
+    try {
+      rawMeds = JSON.parse(rawMeds);
+    } catch {
+      rawMeds = null;
+    }
+  }
+
+  const processedItemIds = new Set<string>();
+
+  if (Array.isArray(rawMeds) && rawMeds.length > 0) {
+    for (const med of rawMeds) {
+      if (!med || typeof med !== "object") continue;
+      const itemId = String(med.inventory_item_id || med.itemId || med.id || "").trim();
+      const name = String(med.name || med.item_name || "Prescribed Medication").trim();
+      const qty = Math.max(1, Number(med.quantity || med.qty || 1));
+      const unit = String(med.unit || "unit").trim();
+
+      const invMatch = itemId ? invTxns.find((i: any) => String(i.item_id) === itemId) : null;
+
+      let unitPrice = Number(invMatch?.unit_price ?? 0);
+      if (unitPrice <= 0 && itemId) {
+        const { rows: pRows } = await poolOrClient.query(
+          `SELECT COALESCE(unit_price, purchase_price, 0) AS price FROM inventory_items WHERE id = $1`,
+          [itemId]
+        );
+        unitPrice = Number(pRows[0]?.price ?? 0);
+      }
+      if (unitPrice <= 0 && Number(med.unit_price) > 0) {
+        unitPrice = Number(med.unit_price);
+      }
+
+      const lineTotal = Number((qty * unitPrice).toFixed(2));
+
+      await poolOrClient.query(
+        `INSERT INTO lab_transaction_items (
+          transaction_id, description, quantity, unit_price, line_total, category, source, item_id, batch_no, inventory_transaction_id
+        ) VALUES ($1, $2, $3, $4, $5, 'Medication Used', 'Care History', $6, $7, $8)`,
+        [
+          labTxnId,
+          `${name} (${qty} ${unit})`,
+          qty,
+          unitPrice,
+          lineTotal,
+          itemId || null,
+          invMatch?.batch_no || "DEFAULT",
+          invMatch?.id || null,
+        ]
+      );
+
+      if (itemId) processedItemIds.add(itemId);
+    }
+  }
+
   for (const inv of invTxns) {
+    if (processedItemIds.has(String(inv.item_id))) continue;
     const qty = Number(inv.quantity ?? 0);
-    const unitPrice = Number(inv.unit_price ?? 0);
-    const lineTotal = Number(inv.total_amount ?? Number((qty * unitPrice).toFixed(2)));
+    let unitPrice = Number(inv.unit_price ?? 0);
+    if (unitPrice <= 0 && inv.item_id) {
+      const { rows: pRows } = await poolOrClient.query(
+        `SELECT COALESCE(unit_price, purchase_price, 0) AS price FROM inventory_items WHERE id = $1`,
+        [inv.item_id]
+      );
+      unitPrice = Number(pRows[0]?.price ?? 0);
+    }
+    const lineTotal = Number((qty * unitPrice).toFixed(2));
     await poolOrClient.query(
       `INSERT INTO lab_transaction_items (
         transaction_id, description, quantity, unit_price, line_total, category, source, item_id, batch_no, inventory_transaction_id
       ) VALUES ($1, $2, $3, $4, $5, 'Medication Used', 'Care History', $6, $7, $8)`,
       [labTxnId, inv.item_name, qty, unitPrice, lineTotal, inv.item_id, inv.batch_no, inv.id]
     );
+    if (inv.item_id) processedItemIds.add(String(inv.item_id));
+  }
+
+  // Fallback: match plain text medication in care record against inventory items
+  if (processedItemIds.size === 0 && careRecord.medication) {
+    const medText = String(careRecord.medication).trim();
+    if (medText) {
+      const { rows: items } = await poolOrClient.query(
+        `SELECT id, name, COALESCE(unit_price, purchase_price, 0) AS price FROM inventory_items`
+      );
+      for (const item of items) {
+        if (item.name && medText.toLowerCase().includes(item.name.toLowerCase())) {
+          const unitPrice = Number(item.price ?? 0);
+          await poolOrClient.query(
+            `INSERT INTO lab_transaction_items (
+              transaction_id, description, quantity, unit_price, line_total, category, source, item_id
+            ) VALUES ($1, $2, 1, $3, $3, 'Medication Used', 'Care History', $4)`,
+            [labTxnId, item.name, unitPrice, item.id]
+          );
+          processedItemIds.add(item.id);
+        }
+      }
+    }
   }
 
   // 9. Calculate subtotal & total amount
@@ -746,6 +908,7 @@ async function syncCareLabTransaction(
   const fees = Number(txnDetails[0]?.additional_fees ?? 0);
   const amountPaid = Number(txnDetails[0]?.amount_paid ?? currentAmountPaid);
   const totalAmount = Number((subtotal - discount + fees).toFixed(2));
+  const balance = Number(Math.max(0, totalAmount - amountPaid).toFixed(2));
 
   let paymentStatus = "Pending";
   if (amountPaid >= totalAmount && totalAmount > 0) {
@@ -758,9 +921,9 @@ async function syncCareLabTransaction(
 
   await poolOrClient.query(
     `UPDATE lab_transactions
-     SET subtotal = $1, total_amount = $2, total = $2, services_rendered = $3, payment_status = $4, status = $4, updated_at = now()
-     WHERE id = $5`,
-    [subtotal, totalAmount, servicesSummary.slice(0, 255), paymentStatus, labTxnId]
+     SET subtotal = $1, total_amount = $2, total = $2, amount_paid = $3, balance = $4, services_rendered = $5, payment_status = $6, status = $6, updated_at = now()
+     WHERE id = $7`,
+    [subtotal, totalAmount, amountPaid, balance, servicesSummary.slice(0, 255), paymentStatus, labTxnId]
   );
 }
 
@@ -776,8 +939,12 @@ export async function queryInsert(opts: {
   const pool = getPool();
   const rows = Array.isArray(opts.data) ? opts.data : [opts.data];
   const results: Record<string, unknown>[] = [];
-  const useTransaction = ["care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions"].includes(table);
+  const useTransaction = ["care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions", "lab_transactions", "lab_transaction_items"].includes(table);
   const client = useTransaction ? await pool.connect() : null;
+
+  if (["lab_transactions", "lab_transaction_items", "care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions"].includes(table)) {
+    await ensureInventorySchema(client ?? pool);
+  }
 
   try {
     if (client) await client.query("BEGIN");
@@ -1046,6 +1213,43 @@ export async function queryInsert(opts: {
         }
       }
 
+      if (table === "lab_records" && inserted[0]?.id) {
+        const fee = Number(payload.lab_fee ?? payload.labFee ?? 500);
+        const code = String(payload.lab_record_number || `LAB-${Date.now().toString().slice(-6)}`);
+        const testType = String(payload.test_type || "Laboratory Test");
+        
+        const txnNumber = `TXN-${Date.now().toString().slice(-6)}`;
+        const { rows: insertedTxn } = await (client ?? pool).query(
+          `INSERT INTO lab_transactions (
+            transaction_number, pet_id, owner_id, appointment_id, care_record_id, date, vet,
+            services_rendered, subtotal, total_amount, total, amount_paid, balance, payment_method, payment_status, status, notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $9, 0, $9, 'Cash', 'Pending', 'Pending', $10)
+          RETURNING id`,
+          [
+            txnNumber,
+            payload.pet_id || null,
+            payload.owner_id || null,
+            payload.appointment_id || null,
+            payload.care_record_id || null,
+            payload.date_conducted || new Date().toISOString().slice(0, 10),
+            payload.performed_by || "Clinic Staff",
+            `Laboratory Test (${testType})`,
+            fee,
+            `Auto-generated billing transaction for Lab Record ${code}`,
+          ]
+        );
+
+        if (insertedTxn.length) {
+          const txnId = insertedTxn[0].id;
+          await (client ?? pool).query(
+            `INSERT INTO lab_transaction_items (
+              transaction_id, description, quantity, unit_price, line_total, category, source
+            ) VALUES ($1, $2, 1, $3, $3, 'Laboratory', 'Lab Record')`,
+            [txnId, `Laboratory Test: ${testType} (${code})`, fee]
+          );
+        }
+      }
+
       if (table === "appointments" && inserted[0]?.id && isClinicUser(opts.user.role)) {
         const status = String(payload.status || "Scheduled");
         if (["Scheduled"].includes(status)) {
@@ -1136,6 +1340,10 @@ export async function queryUpdate(opts: {
 
   const pool = getPool();
   const data = { ...opts.data };
+
+  if (["lab_transactions", "lab_transaction_items", "care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions"].includes(table)) {
+    await ensureInventorySchema(pool);
+  }
 
   if (table === "appointments") {
     if (data.date !== undefined) {

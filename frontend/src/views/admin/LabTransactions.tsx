@@ -220,7 +220,23 @@ export default function LabTransactions() {
   // Normalize transactions dataset with monetary precision
   const transactions = useMemo(() => {
     return rawTransactions.map((t) => {
-      const subtotal = Number(t.subtotal ?? t.total_amount ?? t.total ?? 0);
+      const items = itemsByTxnId.get(t.id) || [];
+      const itemsSum = items.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
+      const rawSub = Number(t.subtotal ?? t.total_amount ?? t.total ?? 0);
+
+      // Fallback service price estimation if rawSub and itemsSum are 0
+      let fallbackFee = 0;
+      if (rawSub === 0 && itemsSum === 0) {
+        const serviceText = String(t.services_rendered || "").toLowerCase();
+        if (serviceText.includes("deworming")) fallbackFee = 150;
+        else if (serviceText.includes("vaccin")) fallbackFee = 350;
+        else if (serviceText.includes("check-up") || serviceText.includes("consult")) fallbackFee = 300;
+        else if (serviceText.includes("treatment")) fallbackFee = 400;
+        else if (serviceText.includes("lab") || serviceText.includes("diagnostic")) fallbackFee = 500;
+        else fallbackFee = 300;
+      }
+
+      const subtotal = itemsSum > 0 ? itemsSum : rawSub > 0 ? rawSub : fallbackFee;
       const discount = Number(t.discount ?? 0);
       const fees = Number(t.additional_fees ?? 0);
       const totalAmount = Number((subtotal - discount + fees).toFixed(2));
@@ -246,7 +262,7 @@ export default function LabTransactions() {
         services_rendered: t.services_rendered || "Veterinary Medical Service",
       };
     });
-  }, [rawTransactions]);
+  }, [rawTransactions, itemsByTxnId]);
 
   // Metric Totals
   const metrics = useMemo(() => {
@@ -1533,36 +1549,49 @@ export default function LabTransactions() {
                 </div>
 
                 {/* 4. Payment Summary Breakdown */}
-                <div className="bg-[#E8EEF4]/60 p-4 rounded-xl space-y-2 border border-[#1B3A5C]/10">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Subtotal Amount:</span>
-                    <span className="font-mono font-bold">{formatPeso(viewTxn.subtotal)}</span>
-                  </div>
-                  {Number(viewTxn.discount ?? 0) > 0 && (
-                    <div className="flex justify-between text-emerald-700">
-                      <span>Discount Applied:</span>
-                      <span className="font-mono font-bold">-{formatPeso(viewTxn.discount)}</span>
+                {(() => {
+                  const modalItems = itemsByTxnId.get(viewTxn.id) ?? [];
+                  const modalItemsSum = modalItems.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
+                  const modalSub = modalItemsSum > 0 ? modalItemsSum : Number(viewTxn.subtotal || viewTxn.total_amount || 0);
+                  const modalDisc = Number(viewTxn.discount || 0);
+                  const modalFees = Number(viewTxn.additional_fees || 0);
+                  const modalTotal = Number((modalSub - modalDisc + modalFees).toFixed(2));
+                  const modalPaid = Number(viewTxn.amount_paid ?? (viewTxn.payment_status === "Paid" ? modalTotal : 0));
+                  const modalBal = Math.max(0, Number((modalTotal - modalPaid).toFixed(2)));
+
+                  return (
+                    <div className="bg-[#E8EEF4]/60 p-4 rounded-xl space-y-2 border border-[#1B3A5C]/10">
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Subtotal Amount:</span>
+                        <span className="font-mono font-bold">{formatPeso(modalSub)}</span>
+                      </div>
+                      {modalDisc > 0 && (
+                        <div className="flex justify-between text-emerald-700">
+                          <span>Discount Applied:</span>
+                          <span className="font-mono font-bold">-{formatPeso(modalDisc)}</span>
+                        </div>
+                      )}
+                      {modalFees > 0 && (
+                        <div className="flex justify-between text-slate-700">
+                          <span>Additional Fees:</span>
+                          <span className="font-mono font-bold">+{formatPeso(modalFees)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm font-bold text-[#1B3A5C] border-t pt-2">
+                        <span>Total Amount Due:</span>
+                        <span className="font-mono">{formatPeso(modalTotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-emerald-800 font-semibold">
+                        <span>Amount Paid:</span>
+                        <span className="font-mono font-bold">{formatPeso(modalPaid)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-amber-800 font-bold border-t pt-1">
+                        <span>Remaining Balance:</span>
+                        <span className="font-mono">{formatPeso(modalBal)}</span>
+                      </div>
                     </div>
-                  )}
-                  {Number(viewTxn.additional_fees ?? 0) > 0 && (
-                    <div className="flex justify-between text-slate-700">
-                      <span>Additional Fees:</span>
-                      <span className="font-mono font-bold">+{formatPeso(viewTxn.additional_fees)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-bold text-[#1B3A5C] border-t pt-2">
-                    <span>Total Amount Due:</span>
-                    <span className="font-mono">{formatPeso(viewTxn.total_amount)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-emerald-800 font-semibold">
-                    <span>Amount Paid:</span>
-                    <span className="font-mono font-bold">{formatPeso(viewTxn.amount_paid)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-amber-800 font-bold border-t pt-1">
-                    <span>Remaining Balance:</span>
-                    <span className="font-mono">{formatPeso(viewTxn.balance)}</span>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 5. Record Payment Form */}
                 {viewTxn.payment_status !== "Paid" && (

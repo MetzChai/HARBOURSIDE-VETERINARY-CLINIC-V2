@@ -43,6 +43,7 @@ import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
+import { formatTimeSlot } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -601,14 +602,14 @@ export default function ManageOwners() {
           }
         }}
       >
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
+        <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="font-heading">
               {editOwner ? "Edit Owner Information" : form.is_walk_in ? "Register Walk-in Client" : "Register Pet Owner"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="flex justify-center">
               <ImageUpload
                 currentImage={form.image_url}
@@ -748,7 +749,7 @@ export default function ManageOwners() {
             </div>
           </div>
 
-          <DialogFooter className="pt-4 border-t">
+          <DialogFooter className="p-4 border-t bg-muted/30">
             <Button variant="outline" onClick={() => { setShowAdd(false); setEditOwner(null); }}>
               Cancel
             </Button>
@@ -761,10 +762,10 @@ export default function ManageOwners() {
 
       {/* Comprehensive Owner Profile Modal */}
       <Dialog open={!!viewOwner} onOpenChange={() => setViewOwner(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           {viewOwner && (
             <>
-              <DialogHeader>
+              <DialogHeader className="p-6 pb-2 border-b">
                 <div className="flex items-center justify-between pr-6">
                   <DialogTitle className="font-heading text-lg font-bold flex items-center gap-2">
                     <Users className="h-5 w-5 text-primary" /> {viewOwner.name}
@@ -775,128 +776,130 @@ export default function ManageOwners() {
                 </div>
               </DialogHeader>
 
-              <Tabs defaultValue="info" className="space-y-4 pt-2">
-                <TabsList className="bg-muted p-1">
-                  <TabsTrigger value="info" className="text-xs">Personal Info</TabsTrigger>
-                  <TabsTrigger value="pets" className="text-xs">Registered Pets ({ownerPets(viewOwner.id).length})</TabsTrigger>
-                  <TabsTrigger value="appointments" className="text-xs">Appointments</TabsTrigger>
-                  <TabsTrigger value="care" className="text-xs">Care History</TabsTrigger>
-                  <TabsTrigger value="billing" className="text-xs">Billing History</TabsTrigger>
-                </TabsList>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
+                <Tabs defaultValue="info" className="space-y-4">
+                  <TabsList className="bg-muted p-1">
+                    <TabsTrigger value="info" className="text-xs">Personal Info</TabsTrigger>
+                    <TabsTrigger value="pets" className="text-xs">Registered Pets ({ownerPets(viewOwner.id).length})</TabsTrigger>
+                    <TabsTrigger value="appointments" className="text-xs">Appointments</TabsTrigger>
+                    <TabsTrigger value="care" className="text-xs">Care History</TabsTrigger>
+                    <TabsTrigger value="billing" className="text-xs">Billing History</TabsTrigger>
+                  </TabsList>
 
-                {/* Tab 1: Personal Info */}
-                <TabsContent value="info" className="space-y-4">
-                  <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={viewOwner.image_url ?? undefined} alt={viewOwner.name} />
-                      <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
-                        {initials(viewOwner.name)}
-                      </AvatarFallback>
-                    </Avatar>
+                  {/* Tab 1: Personal Info */}
+                  <TabsContent value="info" className="space-y-4">
+                    <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage src={viewOwner.image_url ?? undefined} alt={viewOwner.name} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
+                          {initials(viewOwner.name)}
+                        </AvatarFallback>
+                      </Avatar>
 
-                    <div className="grid grid-cols-2 gap-3 text-sm flex-1">
-                      <div><span className="text-muted-foreground text-xs block">Contact Number</span> {viewOwner.contact || "—"}</div>
-                      <div><span className="text-muted-foreground text-xs block">Email Address</span> {viewOwner.email || "—"}</div>
-                      <div><span className="text-muted-foreground text-xs block">Gender</span> {viewOwner.gender || "—"}</div>
-                      <div><span className="text-muted-foreground text-xs block">Birth Date</span> {viewOwner.birth_date ? formatDate(viewOwner.birth_date) : "—"}</div>
-                      <div className="col-span-2"><span className="text-muted-foreground text-xs block">Home Address</span> {viewOwner.address || "—"}</div>
-                      <div><span className="text-muted-foreground text-xs block">Emergency Contact</span> {viewOwner.emergency_contact_name || "—"}</div>
-                      <div><span className="text-muted-foreground text-xs block">Emergency Phone</span> {viewOwner.emergency_contact_number || "—"}</div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                {/* Tab 2: Registered Pets */}
-                <TabsContent value="pets">
-                  <div className="space-y-2">
-                    {ownerPets(viewOwner.id).map((pet) => (
-                      <div key={pet.id} className="p-3 rounded-lg border flex items-center justify-between bg-card">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9">
-                            <AvatarFallback className="bg-primary/10 text-primary font-bold">{pet.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-bold text-sm">{pet.name}</p>
-                            <p className="text-xs text-muted-foreground">{pet.species} • {pet.breed || "Crossbreed"}</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-xs">{pet.status || "Healthy"}</Badge>
+                      <div className="grid grid-cols-2 gap-3 text-sm flex-1">
+                        <div><span className="text-muted-foreground text-xs block">Contact Number</span> {viewOwner.contact || "—"}</div>
+                        <div><span className="text-muted-foreground text-xs block">Email Address</span> {viewOwner.email || "—"}</div>
+                        <div><span className="text-muted-foreground text-xs block">Gender</span> {viewOwner.gender || "—"}</div>
+                        <div><span className="text-muted-foreground text-xs block">Birth Date</span> {viewOwner.birth_date ? formatDate(viewOwner.birth_date) : "—"}</div>
+                        <div className="col-span-2"><span className="text-muted-foreground text-xs block">Home Address</span> {viewOwner.address || "—"}</div>
+                        <div><span className="text-muted-foreground text-xs block">Emergency Contact</span> {viewOwner.emergency_contact_name || "—"}</div>
+                        <div><span className="text-muted-foreground text-xs block">Emergency Phone</span> {viewOwner.emergency_contact_number || "—"}</div>
                       </div>
-                    ))}
-                    {ownerPets(viewOwner.id).length === 0 && (
-                      <p className="text-xs text-muted-foreground py-6 text-center">No pets registered under this owner.</p>
-                    )}
-                  </div>
-                </TabsContent>
+                    </div>
+                  </TabsContent>
 
-                {/* Tab 3: Appointments */}
-                <TabsContent value="appointments">
-                  <Table>
-                    <TableHeader>
-                      <TableRow><TableHead>Date</TableHead><TableHead>Time</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead></TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ownerAppointments(viewOwner.id).map((a) => (
-                        <TableRow key={a.id}>
-                          <TableCell className="text-xs">{formatDate(a.date)}</TableCell>
-                          <TableCell className="text-xs">{a.time}</TableCell>
-                          <TableCell className="text-xs">{a.appointment_type || a.care_type}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-xs">{a.status}</Badge></TableCell>
-                        </TableRow>
+                  {/* Tab 2: Registered Pets */}
+                  <TabsContent value="pets">
+                    <div className="space-y-2">
+                      {ownerPets(viewOwner.id).map((pet) => (
+                        <div key={pet.id} className="p-3 rounded-lg border flex items-center justify-between bg-card">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarFallback className="bg-primary/10 text-primary font-bold">{pet.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-bold text-sm">{pet.name}</p>
+                              <p className="text-xs text-muted-foreground">{pet.species} • {pet.breed || "Crossbreed"}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs">{pet.status || "Healthy"}</Badge>
+                        </div>
                       ))}
-                      {ownerAppointments(viewOwner.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No appointments recorded.</TableCell></TableRow>
+                      {ownerPets(viewOwner.id).length === 0 && (
+                        <p className="text-xs text-muted-foreground py-6 text-center">No pets registered under this owner.</p>
                       )}
-                    </TableBody>
-                  </Table>
-                </TabsContent>
+                    </div>
+                  </TabsContent>
 
-                {/* Tab 4: Care History */}
-                <TabsContent value="care">
-                  <Table>
-                    <TableHeader>
-                      <TableRow><TableHead>Date</TableHead><TableHead>Care Type</TableHead><TableHead>Diagnosis</TableHead><TableHead>Vet</TableHead></TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ownerCareRecords(viewOwner.id).map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell className="text-xs">{formatDate(c.date)}</TableCell>
-                          <TableCell className="text-xs capitalize">{c.care_type}</TableCell>
-                          <TableCell className="text-xs">{c.diagnosis || c.chief_complaint || "—"}</TableCell>
-                          <TableCell className="text-xs">{c.vet || "Clinic Staff"}</TableCell>
-                        </TableRow>
-                      ))}
-                      {ownerCareRecords(viewOwner.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No medical care records logged.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TabsContent>
+                  {/* Tab 3: Appointments */}
+                  <TabsContent value="appointments">
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Date</TableHead><TableHead>Time</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ownerAppointments(viewOwner.id).map((a) => (
+                          <TableRow key={a.id}>
+                            <TableCell className="text-xs">{formatDate(a.date)}</TableCell>
+                            <TableCell className="text-xs">{formatTimeSlot(a.time)}</TableCell>
+                            <TableCell className="text-xs">{a.appointment_type || a.care_type}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{a.status}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                        {ownerAppointments(viewOwner.id).length === 0 && (
+                          <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No appointments recorded.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
 
-                {/* Tab 5: Billing History */}
-                <TabsContent value="billing">
-                  <Table>
-                    <TableHeader>
-                      <TableRow><TableHead>Txn #</TableHead><TableHead>Date</TableHead><TableHead>Total Amount</TableHead><TableHead>Status</TableHead></TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ownerTransactions(viewOwner.id).map((t) => (
-                        <TableRow key={t.id}>
-                          <TableCell className="font-mono text-xs font-bold text-primary">{t.transaction_number || t.id.slice(0, 6)}</TableCell>
-                          <TableCell className="text-xs">{formatDate(t.date || t.created_at)}</TableCell>
-                          <TableCell className="font-semibold text-xs">₱{Number(t.total_amount || 0).toLocaleString()}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-xs">{t.payment_status || "Paid"}</Badge></TableCell>
-                        </TableRow>
-                      ))}
-                      {ownerTransactions(viewOwner.id).length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No billing transactions recorded.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TabsContent>
-              </Tabs>
+                  {/* Tab 4: Care History */}
+                  <TabsContent value="care">
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Date</TableHead><TableHead>Care Type</TableHead><TableHead>Diagnosis</TableHead><TableHead>Vet</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ownerCareRecords(viewOwner.id).map((c) => (
+                          <TableRow key={c.id}>
+                            <TableCell className="text-xs">{formatDate(c.date)}</TableCell>
+                            <TableCell className="text-xs capitalize">{c.care_type}</TableCell>
+                            <TableCell className="text-xs">{c.diagnosis || c.chief_complaint || "—"}</TableCell>
+                            <TableCell className="text-xs">{c.vet || "Clinic Staff"}</TableCell>
+                          </TableRow>
+                        ))}
+                        {ownerCareRecords(viewOwner.id).length === 0 && (
+                          <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No medical care records logged.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
 
-              <DialogFooter className="pt-4 border-t flex items-center justify-between sm:justify-end gap-2">
+                  {/* Tab 5: Billing History */}
+                  <TabsContent value="billing">
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Txn #</TableHead><TableHead>Date</TableHead><TableHead>Total Amount</TableHead><TableHead>Status</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ownerTransactions(viewOwner.id).map((t) => (
+                          <TableRow key={t.id}>
+                            <TableCell className="font-mono text-xs font-bold text-primary">{t.transaction_number || t.id.slice(0, 6)}</TableCell>
+                            <TableCell className="text-xs">{formatDate(t.date || t.created_at)}</TableCell>
+                            <TableCell className="font-semibold text-xs">₱{Number(t.total_amount || 0).toLocaleString()}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{t.payment_status || "Paid"}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                        {ownerTransactions(viewOwner.id).length === 0 && (
+                          <TableRow><TableCell colSpan={4} className="text-center text-xs py-6 text-muted-foreground">No billing transactions recorded.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              <DialogFooter className="p-4 border-t bg-muted/30 flex items-center justify-between sm:justify-end gap-2">
                 <Button variant="outline" onClick={() => setViewOwner(null)}>Close</Button>
                 <Button variant="outline" onClick={() => handlePrintOwner(viewOwner)}>
                   <Printer className="h-4 w-4 mr-1" /> Print Profile
@@ -914,17 +917,19 @@ export default function ManageOwners() {
 
       {/* Delete Owner Confirmation Dialog */}
       <Dialog open={!!deleteOwnerTarget} onOpenChange={() => setDeleteOwnerTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
             <DialogTitle className="flex items-center gap-2 text-rose-600 font-heading">
               <AlertTriangle className="h-5 w-5" /> Confirm Delete Owner
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            Are you sure you want to permanently delete owner <strong>{deleteOwnerTarget?.name}</strong>?
-            This will also delete all pets registered under this owner.
-          </p>
-          <DialogFooter className="pt-4 border-t">
+          <div className="p-6 overflow-y-auto">
+            <p className="text-sm text-muted-foreground py-2">
+              Are you sure you want to permanently delete owner <strong>{deleteOwnerTarget?.name}</strong>?
+              This will also delete all pets registered under this owner.
+            </p>
+          </div>
+          <DialogFooter className="p-4 border-t bg-muted/30">
             <Button variant="outline" onClick={() => setDeleteOwnerTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDeleteOwner} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Owner Record"}

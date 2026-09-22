@@ -1,5 +1,6 @@
 import { formatDate } from "@/lib/age";
 import { daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH } from "@/lib/datetime";
+import { formatTimeSlot } from "@/lib/appointment-slots";
 
 export type NotificationType = "vaccine" | "appointment" | "inventory" | "alert";
 
@@ -54,7 +55,7 @@ function appointmentNotifications(
       return {
         id: `apt-${a.id}`,
         title: days === 0 ? `Today: ${petName}` : `Upcoming: ${petName}`,
-        description: `${a.reason ?? "Visit"}${ownerPart} — ${formatDate(a.date)} at ${a.time ?? "—"}`,
+        description: `${a.reason ?? "Visit"}${ownerPart} — ${formatDate(a.date)} at ${formatTimeSlot(a.time)}`,
         type: "appointment" as const,
         time: formatDate(a.date),
         sortKey: days,
@@ -72,7 +73,7 @@ function requestedAppointmentNotifications(appointments: any[], link: string): N
       return {
         id: `apt-req-${a.id}`,
         title: `Request: ${petName}`,
-        description: `${a.reason ?? "Visit request"}${ownerPart} — ${formatDate(a.date)} at ${a.time ?? "—"}`,
+        description: `${a.reason ?? "Visit request"}${ownerPart} — ${formatDate(a.date)} at ${formatTimeSlot(a.time)}`,
         type: "alert" as const,
         time: formatDate(a.date),
         sortKey: -500 + (daysFromTodayPH(a.date) ?? 0),

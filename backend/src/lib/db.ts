@@ -24,6 +24,7 @@ export const TABLES = [
   "inventory_suppliers",
   "lab_transactions",
   "lab_transaction_items",
+  "lab_records",
   "messages",
 ] as const;
 

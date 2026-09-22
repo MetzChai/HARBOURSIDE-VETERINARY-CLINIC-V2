@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, PawPrint } from "lucide-react";
 import { formatDatePH, todayPH, toDateOnly } from "@/lib/datetime";
-import { getStatusBadgeClass } from "@/lib/appointment-slots";
+import { getStatusBadgeClass, formatTimeSlot } from "@/lib/appointment-slots";
 
 interface AppointmentCalendarProps {
   appointments: any[];
@@ -235,7 +235,7 @@ export default function AppointmentCalendar({
                           onClick={() => onSelectAppointment(a)}
                           className={`w-full text-left p-1 rounded border text-[11px] font-medium leading-tight truncate hover:opacity-80 transition-opacity bg-background shadow-2xs block ${getStatusBadgeClass(a.status)}`}
                         >
-                          <span className="font-semibold">{a.time || "—"}</span> {getPetName(a)}
+                          <span className="font-semibold">{formatTimeSlot(a.time)}</span> {getPetName(a)}
                         </button>
                       ))}
                       {dayApts.length > 3 && (
@@ -284,7 +284,7 @@ export default function AppointmentCalendar({
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-primary flex items-center gap-1">
-                              <Clock className="h-3 w-3" /> {a.time}
+                              <Clock className="h-3 w-3" /> {formatTimeSlot(a.time)}
                             </span>
                             <Badge variant="outline" className={`text-[10px] px-1 py-0 ${getStatusBadgeClass(a.status)}`}>
                               {a.status}
@@ -328,7 +328,7 @@ export default function AppointmentCalendar({
                   >
                     <div className="flex items-center gap-4">
                       <div className="bg-primary/10 text-primary font-bold px-3 py-2 rounded-lg text-sm font-mono">
-                        {a.time}
+                        {formatTimeSlot(a.time)}
                       </div>
                       <div>
                         <p className="font-semibold text-base flex items-center gap-2">
