@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -99,8 +100,6 @@ export default function UserCareHistory() {
 
   const handlePrint = (record?: any) => {
     const recordsToPrint = record ? [record] : filteredRecords;
-    const w = window.open("", "_blank");
-    if (!w) return;
 
     const rowsHtml = recordsToPrint
       .map((r) => {
@@ -118,44 +117,36 @@ export default function UserCareHistory() {
       })
       .join("");
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Medical History — Harbourside Veterinary Clinic</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 4px; }
-            h2 { color: #555; font-weight: normal; margin-top: 0; font-size: 16px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
-            th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
           <h1>Harbourside Veterinary Clinic</h1>
           <h2>Pet Medical History Record</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Visit Date</th>
-                <th>Pet</th>
-                <th>Care Type</th>
-                <th>Veterinarian</th>
-                <th>Diagnosis / Treatment</th>
-                <th>Visit Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || "<tr><td colSpan='6' style='text-align:center'>No records found</td></tr>"}
-            </tbody>
-          </table>
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Visit Date</th>
+            <th>Pet</th>
+            <th>Care Type</th>
+            <th>Veterinarian</th>
+            <th>Diagnosis / Treatment</th>
+            <th>Visit Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || "<tr><td colSpan='6' style='text-align:center'>No records found</td></tr>"}
+        </tbody>
+      </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: "Medical History — Harbourside Veterinary Clinic",
+      bodyHtml,
+    });
   };
 
   if (petsLoading || recordsLoading) {

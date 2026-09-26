@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { Plus, Search, Bug, Loader2, Printer, BellRing } from "lucide-react";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { isOnOrBeforeTodayPH, formatNowPH } from "@/lib/datetime";
+import { isOnOrBeforeTodayPH, formatNowPH, todayPH } from "@/lib/datetime";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -66,12 +67,31 @@ export default function Dewormings() {
       status: form.status,
       notes: form.notes || null,
     } as any);
+
+    if (error) {
+      setSaving(false);
+      toast.error(error.message);
+      return;
+    }
+
+    // Also store in care_records for pet's complete medical history profile
+    await db.from("care_records").insert({
+      pet_id: form.pet_id,
+      date: form.date_given || todayPH(),
+      vet: form.vet || "Clinic Staff",
+      record_type: "deworming",
+      dewormer_used: form.product.trim(),
+      next_deworming_due: form.next_due || null,
+      outcome: form.status || "Completed",
+      notes: form.notes || null,
+    } as any);
+
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Deworming record added");
+    toast.success("Deworming record saved to medical profile");
     setOpen(false);
     setForm({ pet_id: "", product: "", date_given: "", next_due: "", vet: "", status: "Scheduled", notes: "" });
     invalidate("dewormings");
+    invalidate("care_records");
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -82,37 +102,52 @@ export default function Dewormings() {
   };
 
   const printRecord = (r: any) => {
-    const w = window.open("", "_blank"); if (!w) return;
-    w.document.write(`
-      <html><head><title>Deworming Record</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;color:#222}h1{color:#1B3A5C;margin-bottom:0}
-      h2{color:#555;font-weight:normal;margin-top:4px}
-      .row{display:flex;padding:8px 0;border-bottom:1px solid #eee}
-      .label{width:180px;font-weight:bold;color:#1B3A5C}</style></head>
-      <body><h1>Harbourside Veterinary Clinic</h1><h2>Deworming Record</h2>
-      <div class="row"><div class="label">Pet</div><div>${petName(r.pet_id)}</div></div>
-      <div class="row"><div class="label">Product</div><div>${r.product ?? "—"}</div></div>
-      <div class="row"><div class="label">Date Given</div><div>${r.date_given ? formatDate(r.date_given) : "—"}</div></div>
-      <div class="row"><div class="label">Next Due / Follow-up</div><div>${r.next_due ? formatDate(r.next_due) : "—"}</div></div>
-      <div class="row"><div class="label">Attending Vet</div><div>${r.vet ?? "—"}</div></div>
-      <div class="row"><div class="label">Status</div><div>${effectiveStatus(r)}</div></div>
-      <div class="row"><div class="label">Notes</div><div>${r.notes ?? "—"}</div></div>
-      <br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time)</p></body></html>`);
-    w.document.close(); w.print();
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Official Deworming Record</h2>
+        </div>
+      </div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Pet</div><div>${petName(r.pet_id)}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Product</div><div>${r.product ?? "—"}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Date Given</div><div>${r.date_given ? formatDate(r.date_given) : "—"}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Next Due / Follow-up</div><div>${r.next_due ? formatDate(r.next_due) : "—"}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Attending Vet</div><div>${r.vet ?? "—"}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Status</div><div>${effectiveStatus(r)}</div></div>
+      <div style="display:flex;padding:8px 0;border-bottom:1px solid #eee"><div style="width:180px;font-weight:bold;color:#1B3A5C">Notes</div><div>${r.notes ?? "—"}</div></div>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: "Deworming Record - Harbourside Veterinary Clinic",
+      bodyHtml,
+    });
   };
 
   const printAll = () => {
-    const w = window.open("", "_blank"); if (!w) return;
-    w.document.write(`
-      <html><head><title>Deworming Records</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px}h1{color:#1B3A5C}
-      table{width:100%;border-collapse:collapse;margin-top:16px}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#E8EEF4;color:#1B3A5C}</style></head>
-      <body><h1>Harbourside Veterinary Clinic</h1><h2>Deworming Records</h2>
-      <table><tr><th>Pet</th><th>Product</th><th>Date Given</th><th>Next Due</th><th>Vet</th><th>Status</th></tr>
-      ${rows.map((r) => `<tr><td>${petName(r.pet_id)}</td><td>${r.product ?? "—"}</td><td>${r.date_given ? formatDate(r.date_given) : "—"}</td><td>${r.next_due ? formatDate(r.next_due) : "—"}</td><td>${r.vet ?? "—"}</td><td>${effectiveStatus(r)}</td></tr>`).join("")}
-      </table><br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time)</p></body></html>`);
-    w.document.close(); w.print();
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Master Deworming Records</h2>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Pet</th><th>Product</th><th>Date Given</th><th>Next Due</th><th>Vet</th><th>Status</th></tr></thead>
+        <tbody>
+          ${rows.map((r) => `<tr><td>${petName(r.pet_id)}</td><td>${r.product ?? "—"}</td><td>${r.date_given ? formatDate(r.date_given) : "—"}</td><td>${r.next_due ? formatDate(r.next_due) : "—"}</td><td>${r.vet ?? "—"}</td><td>${effectiveStatus(r)}</td></tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: "Deworming Records - Harbourside Veterinary Clinic",
+      bodyHtml,
+    });
   };
 
   return (

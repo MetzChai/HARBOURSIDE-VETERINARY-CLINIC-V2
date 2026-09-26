@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -519,10 +520,67 @@ export default function ManagePets() {
   }, [filteredPets, currentPage]);
 
   const petAppointments = (petId: string) => appointments.filter((a) => a.pet_id === petId);
-  const petVaccinations = (petId: string) => vaccinations.filter((v) => v.pet_id === petId);
-  const petDewormings = (petId: string) => dewormings.filter((d) => d.pet_id === petId);
-  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && String(c.record_type || "").toLowerCase() === "treatment");
-  const petCheckups = (petId: string) => careRecords.filter((c) => c.pet_id === petId && (String(c.record_type || "").toLowerCase() === "checkup" || String(c.record_type || "").toLowerCase() === "check-up" || !c.record_type));
+
+  const petVaccinations = (petId: string) => {
+    const fromVax = vaccinations.filter((v) => v.pet_id === petId);
+    const fromCare = careRecords
+      .filter(
+        (c) =>
+          c.pet_id === petId &&
+          (String(c.record_type || "").toLowerCase() === "vaccination" ||
+            String(c.record_type || "").toLowerCase() === "vaccine" ||
+            !!c.vaccine_used)
+      )
+      .map((c) => ({
+        id: c.id,
+        pet_id: c.pet_id,
+        vaccine_type: c.vaccine_used || c.diagnosis || "Vaccination",
+        date_given: c.date,
+        next_due: c.next_vax_due,
+        vet: c.vet || "Clinic Staff",
+        notes: c.notes,
+      }));
+    const map = new Map();
+    fromVax.forEach((v) => map.set(`${v.date_given || v.created_at}_${v.vaccine_type}`, v));
+    fromCare.forEach((v) => {
+      const key = `${v.date_given}_${v.vaccine_type}`;
+      if (!map.has(key)) map.set(key, v);
+    });
+    return Array.from(map.values()).sort((a, b) => String(b.date_given || "").localeCompare(String(a.date_given || "")));
+  };
+
+  const petDewormings = (petId: string) => {
+    const fromDeworm = dewormings.filter((d) => d.pet_id === petId);
+    const fromCare = careRecords
+      .filter(
+        (c) =>
+          c.pet_id === petId &&
+          (String(c.record_type || "").toLowerCase() === "deworming" || !!c.dewormer_used)
+      )
+      .map((c) => ({
+        id: c.id,
+        pet_id: c.pet_id,
+        product: c.dewormer_used || c.diagnosis || "Deworming",
+        dewormer_used: c.dewormer_used || c.diagnosis || "Deworming",
+        date_given: c.date,
+        date: c.date,
+        next_due: c.next_deworming_due,
+        next_deworming_due: c.next_deworming_due,
+        status: c.outcome || "Completed",
+        vet: c.vet || "Clinic Staff",
+        notes: c.notes,
+      }));
+    const map = new Map();
+    fromDeworm.forEach((d) => map.set(`${d.date_given || d.date || d.created_at}_${d.product || d.dewormer_used}`, d));
+    fromCare.forEach((d) => {
+      const key = `${d.date_given}_${d.product}`;
+      if (!map.has(key)) map.set(key, d);
+    });
+    return Array.from(map.values()).sort((a, b) => String(b.date_given || b.date || "").localeCompare(String(a.date_given || a.date || "")));
+  };
+
+  const petTreatments = (petId: string) => careRecords.filter((c) => c.pet_id === petId && (String(c.record_type || "").toLowerCase() === "treatment" || !!c.treatment));
+  const petCheckups = (petId: string) => careRecords.filter((c) => c.pet_id === petId && (String(c.record_type || "").toLowerCase() === "checkup" || String(c.record_type || "").toLowerCase() === "check-up" || (!c.record_type && !c.vaccine_used && !c.dewormer_used)));
 
   const getPetStatusBadge = (status?: string | null) => {
     const s = (status ?? "Healthy").toLowerCase();
@@ -546,121 +604,98 @@ export default function ManagePets() {
     const treatList = petTreatments(pet.id);
     const dewormList = petDewormings(pet.id);
 
-    const w = window.open("", "_blank");
-    if (!w) return;
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div style="flex:1;">
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Official Pet Medical Profile</h2>
+        </div>
+        <div>
+          <span style="background: #1B3A5C; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace;">${pet.pet_code || "PET"}</span>
+        </div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Pet Name</span><strong>${pet.name} (${pet.gender || "—"})</strong></div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Owner Name</span><strong>${owner?.name || "—"}</strong></div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Species & Breed</span>${pet.species || "—"} (${pet.breed || "Crossbreed"})</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Owner Contact & Email</span>${owner?.contact || "—"} | ${owner?.email || "—"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Age / DOB</span>${pet.dob ? formatDate(pet.dob) : pet.estimated_age || "—"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Owner Address</span>${owner?.address || "—"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Weight & Color</span>${pet.weight || "—"} | ${pet.color || "—"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Microchip # & Blood Type</span>${pet.microchip_number || "None"} | ${pet.blood_type || "—"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Current Health Status</span>${pet.health_status || pet.status || "Healthy"}</div>
+        <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Allergies & Existing Conditions</span>Allergies: ${pet.allergies || "None"} | Conditions: ${pet.existing_conditions || "None"}</div>
+      </div>
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Pet Medical Record - ${pet.name}</title>
-          <style>
-            @page { size: portrait; margin: 15mm; }
-            body { font-family: Arial, sans-serif; padding: 20px; color: #222; background: #fff; line-height: 1.4; }
-            .header-banner { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1B3A5C; padding-bottom: 12px; margin-bottom: 20px; }
-            h1 { color: #1B3A5C; margin: 0; font-size: 24px; font-weight: bold; }
-            h2 { color: #555; margin: 4px 0 0 0; font-size: 14px; font-weight: normal; }
-            .badge { background: #1B3A5C; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace; }
-            .section-title { color: #1B3A5C; font-size: 15px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 6px; margin-top: 24px; margin-bottom: 10px; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
-            .info-item { display: flex; flex-direction: column; }
-            .info-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
-            .info-val { font-size: 12px; color: #0f172a; font-weight: 500; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; vertical-align: top; }
-            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
-            .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; }
-          </style>
-        </head>
-        <body>
-          <div class="header-banner">
-            <div>
-              <h1>Harbourside Veterinary Clinic</h1>
-              <h2>Official Pet Medical Profile</h2>
-            </div>
-            <div>
-              <span class="badge">${pet.pet_code || "PET"}</span>
-            </div>
-          </div>
-          
-          <div class="info-grid">
-            <div class="info-item"><span class="info-label">Pet Name</span><span class="info-val">${pet.name} (${pet.gender || "—"})</span></div>
-            <div class="info-item"><span class="info-label">Owner Name</span><span class="info-val">${owner?.name || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Species & Breed</span><span class="info-val">${pet.species || "—"} (${pet.breed || "Crossbreed"})</span></div>
-            <div class="info-item"><span class="info-label">Owner Contact & Email</span><span class="info-val">${owner?.contact || "—"} | ${owner?.email || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Age / DOB</span><span class="info-val">${pet.dob ? formatDate(pet.dob) : pet.estimated_age || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Owner Address</span><span class="info-val">${owner?.address || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Weight & Color</span><span class="info-val">${pet.weight || "—"} | ${pet.color || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Microchip # & Blood Type</span><span class="info-val">${pet.microchip_number || "None"} | ${pet.blood_type || "—"}</span></div>
-            <div class="info-item"><span class="info-label">Current Health Status</span><span class="info-val">${pet.health_status || pet.status || "Healthy"}</span></div>
-            <div class="info-item"><span class="info-label">Allergies & Existing Conditions</span><span class="info-val">Allergies: ${pet.allergies || "None"} | Conditions: ${pet.existing_conditions || "None"}</span></div>
-          </div>
+      <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Check-up & Exam Records (${checkupList.length})</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Clinical Findings</th><th>Medications / Products</th><th>Veterinarian</th></tr></thead>
+        <tbody>
+          ${
+            checkupList
+              .map(
+                (c) =>
+                  `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.chief_complaint || "—"}</td><td>${c.diagnosis || "General Exam"}</td><td>${c.findings || "—"}</td><td>${c.medication || "—"}</td><td>${c.vet || "Clinic Staff"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='6'>No check-up records logged</td></tr>"
+          }
+        </tbody>
+      </table>
 
-          <div class="section-title">Check-up & Exam Records (${checkupList.length})</div>
-          <table>
-            <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Clinical Findings</th><th>Medications / Products</th><th>Veterinarian</th></tr></thead>
-            <tbody>
-              ${
-                checkupList
-                  .map(
-                    (c) =>
-                      `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td>${c.chief_complaint || "—"}</td><td>${c.diagnosis || "General Exam"}</td><td>${c.findings || "—"}</td><td>${c.medication || "—"}</td><td>${c.vet || "Clinic Staff"}</td></tr>`
-                  )
-                  .join("") || "<tr><td colSpan='6'>No check-up records logged</td></tr>"
-              }
-            </tbody>
-          </table>
+      <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Vaccination Records (${vaxList.length})</h3>
+      <table>
+        <thead><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Veterinarian</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${
+            vaxList
+              .map(
+                (v) =>
+                  `<tr><td>${v.vaccine_type}</td><td>${v.date_given ? formatDate(v.date_given) : "—"}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.vet || "Clinic Staff"}</td><td>${v.notes || "—"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='5'>No vaccination records logged</td></tr>"
+          }
+        </tbody>
+      </table>
 
-          <div class="section-title">Vaccination Records (${vaxList.length})</div>
-          <table>
-            <thead><tr><th>Vaccine</th><th>Date Given</th><th>Next Due</th><th>Veterinarian</th><th>Notes</th></tr></thead>
-            <tbody>
-              ${
-                vaxList
-                  .map(
-                    (v) =>
-                      `<tr><td>${v.vaccine_type}</td><td>${v.date_given ? formatDate(v.date_given) : "—"}</td><td>${v.next_due ? formatDate(v.next_due) : "—"}</td><td>${v.vet || "Clinic Staff"}</td><td>${v.notes || "—"}</td></tr>`
-                  )
-                  .join("") || "<tr><td colSpan='5'>No vaccination records logged</td></tr>"
-              }
-            </tbody>
-          </table>
+      <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Treatment Records (${treatList.length})</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Treatment / Procedure</th><th>Veterinarian</th></tr></thead>
+        <tbody>
+          ${
+            treatList
+              .map(
+                (t) =>
+                  `<tr><td>${t.date ? formatDate(t.date) : "—"}</td><td>${t.chief_complaint || "—"}</td><td>${t.diagnosis || "—"}</td><td>${t.treatment || "—"}</td><td>${t.vet || "Clinic Staff"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='5'>No treatment records logged</td></tr>"
+          }
+        </tbody>
+      </table>
 
-          <div class="section-title">Treatment Records (${treatList.length})</div>
-          <table>
-            <thead><tr><th>Date</th><th>Chief Complaint</th><th>Diagnosis</th><th>Treatment / Procedure</th><th>Veterinarian</th></tr></thead>
-            <tbody>
-              ${
-                treatList
-                  .map(
-                    (t) =>
-                      `<tr><td>${t.date ? formatDate(t.date) : "—"}</td><td>${t.chief_complaint || "—"}</td><td>${t.diagnosis || "—"}</td><td>${t.treatment || "—"}</td><td>${t.vet || "Clinic Staff"}</td></tr>`
-                  )
-                  .join("") || "<tr><td colSpan='5'>No treatment records logged</td></tr>"
-              }
-            </tbody>
-          </table>
+      <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Deworming Records (${dewormList.length})</h3>
+      <table>
+        <thead><tr><th>Product</th><th>Date Given</th><th>Next Due</th><th>Status</th><th>Veterinarian</th></tr></thead>
+        <tbody>
+          ${
+            dewormList
+              .map(
+                (d) =>
+                  `<tr><td>${d.product || d.dewormer_used || "Deworming"}</td><td>${d.date_given ? formatDate(d.date_given) : d.date ? formatDate(d.date) : "—"}</td><td>${d.next_due ? formatDate(d.next_due) : d.next_deworming_due ? formatDate(d.next_deworming_due) : "—"}</td><td>${d.status || "Completed"}</td><td>${d.vet || "Clinic Staff"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='5'>No deworming records logged</td></tr>"
+          }
+        </tbody>
+      </table>
 
-          <div class="section-title">Deworming Records (${dewormList.length})</div>
-          <table>
-            <thead><tr><th>Product</th><th>Date Given</th><th>Next Due</th><th>Status</th><th>Veterinarian</th></tr></thead>
-            <tbody>
-              ${
-                dewormList
-                  .map(
-                    (d) =>
-                      `<tr><td>${d.product || d.dewormer_used || "Deworming"}</td><td>${d.date_given ? formatDate(d.date_given) : d.date ? formatDate(d.date) : "—"}</td><td>${d.next_due ? formatDate(d.next_due) : d.next_deworming_due ? formatDate(d.next_deworming_due) : "—"}</td><td>${d.status || "Completed"}</td><td>${d.vet || "Clinic Staff"}</td></tr>`
-                  )
-                  .join("") || "<tr><td colSpan='5'>No deworming records logged</td></tr>"
-              }
-            </tbody>
-          </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
 
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+    printDocument({
+      title: `Pet Medical Record - ${pet.name}`,
+      bodyHtml,
+    });
   };
 
   if (isLoading) {

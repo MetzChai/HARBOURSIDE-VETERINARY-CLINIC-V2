@@ -30,7 +30,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
     <div className="min-h-screen flex bg-slate-950">
       {/* Dynamic Branding Hero Panel */}
       <div className="hidden lg:flex lg:w-[48%] xl:w-[52%] flex-col items-center justify-center p-12 relative overflow-hidden bg-gradient-to-br from-[#3B070B] via-[#7F1D1D] to-[#450A0E] select-none">
-        
+
         {/* Background Mesh Gradients & Orbs */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(244,63,94,0.25),transparent_45%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_80%,rgba(190,18,60,0.3),transparent_50%)]" />
@@ -52,7 +52,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
 
         {/* Main Content Box */}
         <div className="relative z-10 flex flex-col items-center text-center max-w-lg">
-          
+
           {/* Trust Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/90 text-xs font-semibold backdrop-blur-md shadow-md mb-8">
             <Sparkles className="h-3.5 w-3.5 text-rose-300 animate-pulse" />
@@ -99,7 +99,6 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
             <div className="h-3 w-px bg-white/20" />
             <div className="flex items-center gap-1.5">
               <Activity className="h-4 w-4 text-rose-300" />
-              <span>24/7 Care Access</span>
             </div>
           </div>
         </div>

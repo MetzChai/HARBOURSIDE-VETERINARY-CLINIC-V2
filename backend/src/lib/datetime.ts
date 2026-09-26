@@ -6,6 +6,19 @@ export function todayPH(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIMEZONE }).format(new Date());
 }
 
+/** Current time in PH formatted as HH:mm (24-hour) */
+export function nowTimePH(): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: PH_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
 /** Normalize DB / input values to YYYY-MM-DD without timezone shift */
 export function toDateOnly(value: unknown): string {
   if (!value) return "";

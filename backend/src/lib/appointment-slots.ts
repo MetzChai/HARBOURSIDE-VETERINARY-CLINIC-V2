@@ -31,6 +31,7 @@ export const CARE_TYPE_LABELS: Record<string, string> = {
 export function normalizeCareType(value: unknown): string {
   const v = String(value ?? "checkup").toLowerCase();
   if (v === "vaccine") return "vaccination";
+  if (v === "consultation") return "checkup";
   return (CARE_TYPES as readonly string[]).includes(v) ? v : "checkup";
 }
 

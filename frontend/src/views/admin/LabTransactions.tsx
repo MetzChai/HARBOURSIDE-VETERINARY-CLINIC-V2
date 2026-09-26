@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import { formatNowPH, todayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
+import { CLINIC_SERVICES } from "@/lib/appointment-slots";
 
 type TransactionRow = {
   id: string;
@@ -232,6 +234,7 @@ export default function LabTransactions() {
         else if (serviceText.includes("vaccin")) fallbackFee = 350;
         else if (serviceText.includes("check-up") || serviceText.includes("consult")) fallbackFee = 300;
         else if (serviceText.includes("treatment")) fallbackFee = 400;
+        else if (serviceText.includes("grooming")) fallbackFee = 500;
         else if (serviceText.includes("lab") || serviceText.includes("diagnostic")) fallbackFee = 500;
         else fallbackFee = 300;
       }
@@ -582,8 +585,6 @@ export default function LabTransactions() {
     const owner = ownerMap.get(txn.owner_id || "") || txn.owners;
     const appt = apptMap.get(txn.appointment_id || "");
     const lineItems = itemsByTxnId.get(txn.id) ?? [];
-    const w = window.open("", "_blank");
-    if (!w) return;
 
     const lineItemsHtml = lineItems.length
       ? lineItems
@@ -601,86 +602,69 @@ export default function LabTransactions() {
           .join("")
       : `<tr><td>Service</td><td>${txn.services_rendered || "Veterinary Medical Service"}</td><td style="text-align:center">1</td><td style="text-align:right">${formatPeso(txn.total_amount)}</td><td style="text-align:right">${formatPeso(txn.total_amount)}</td></tr>`;
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Clinic Receipt - ${txn.transaction_number}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #7F1D1D; margin: 0 0 2px; font-size: 22px; }
-            h2 { color: #E5192C; margin: 0 0 16px; font-size: 14px; border-bottom: 2px solid #7F1D1D; padding-bottom: 6px; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 20px; background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; }
-            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 11px; }
-            th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
-            th { background: #FEE2E2; color: #7F1D1D; font-weight: bold; }
-            .summary-table { width: 300px; margin-left: auto; margin-top: 16px; font-size: 11px; }
-            .summary-table td { border: none; padding: 4px 8px; }
-            .summary-table tr.total-row { font-size: 13px; font-weight: bold; border-top: 2px solid #7F1D1D; color: #7F1D1D; }
-            .footer { margin-top: 30px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 10px; text-align: center; }
-          </style>
-        </head>
-        <body>
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-            <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
-            <div>
-              <h1>Harbourside Veterinary Clinic</h1>
-              <h2>Official Payment Statement & Summary Receipt</h2>
-            </div>
-          </div>
-          
-          <div class="info-grid">
-            <div><strong>Transaction #:</strong> ${txn.transaction_number || "TXN"}</div>
-            <div><strong>Date:</strong> ${formatDate(txn.date || txn.created_at)}</div>
-            <div><strong>Owner Name:</strong> ${owner?.name || "—"}</div>
-            <div><strong>Pet Name:</strong> ${pet?.name || "—"} ${pet?.species ? `(${pet.species} - ${pet.breed || "Crossbreed"})` : ""}</div>
-            <div><strong>Appointment Ref:</strong> ${appt ? `APT-${appt.id.slice(0, 6)} (${formatDate(appt.date)})` : "Direct Walk-in / Medical Record"}</div>
-            <div><strong>Veterinarian / Staff:</strong> ${txn.vet || txn.processed_by || "Clinic Staff"}</div>
-            <div><strong>Payment Method:</strong> ${txn.payment_method || "Cash"}</div>
-            <div><strong>Payment Status:</strong> <strong>${txn.payment_status || "Pending"}</strong></div>
-          </div>
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Official Payment Statement & Summary Receipt</h2>
+        </div>
+      </div>
+      
+      <div class="info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 20px; background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+        <div><strong>Transaction #:</strong> ${txn.transaction_number || "TXN"}</div>
+        <div><strong>Date:</strong> ${formatDate(txn.date || txn.created_at)}</div>
+        <div><strong>Owner Name:</strong> ${owner?.name || "—"}</div>
+        <div><strong>Pet Name:</strong> ${pet?.name || "—"} ${pet?.species ? `(${pet.species} - ${pet.breed || "Crossbreed"})` : ""}</div>
+        <div><strong>Appointment Ref:</strong> ${appt ? `APT-${appt.id.slice(0, 6)} (${formatDate(appt.date)})` : "Direct Walk-in / Medical Record"}</div>
+        <div><strong>Veterinarian / Staff:</strong> ${txn.vet || txn.processed_by || "Clinic Staff"}</div>
+        <div><strong>Payment Method:</strong> ${txn.payment_method || "Cash"}</div>
+        <div><strong>Payment Status:</strong> <strong>${txn.payment_status || "Pending"}</strong></div>
+      </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Description / Product Used</th>
-                <th style="text-align:center">Qty</th>
-                <th style="text-align:right">Unit Price</th>
-                <th style="text-align:right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${lineItemsHtml}
-            </tbody>
-          </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Description / Product Used</th>
+            <th style="text-align:center">Qty</th>
+            <th style="text-align:right">Unit Price</th>
+            <th style="text-align:right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lineItemsHtml}
+        </tbody>
+      </table>
 
-          <table class="summary-table">
-            <tr>
-              <td>Subtotal:</td>
-              <td style="text-align:right">${formatPeso(txn.subtotal)}</td>
-            </tr>
-            ${txn.discount ? `<tr><td>Discount:</td><td style="text-align:right">-${formatPeso(txn.discount)}</td></tr>` : ""}
-            ${txn.additional_fees ? `<tr><td>Additional Fees:</td><td style="text-align:right">+${formatPeso(txn.additional_fees)}</td></tr>` : ""}
-            <tr class="total-row">
-              <td>Total Charge:</td>
-              <td style="text-align:right">${formatPeso(txn.total_amount)}</td>
-            </tr>
-            <tr>
-              <td>Amount Paid:</td>
-              <td style="text-align:right;color:#16A34A;font-weight:bold;">${formatPeso(txn.amount_paid)}</td>
-            </tr>
-            <tr>
-              <td>Remaining Balance:</td>
-              <td style="text-align:right;color:#D97706;font-weight:bold;">${formatPeso(txn.balance)}</td>
-            </tr>
-          </table>
+      <table style="width: 300px; margin-left: auto; margin-top: 16px; font-size: 11px;">
+        <tr>
+          <td style="border:none;padding:4px 8px;">Subtotal:</td>
+          <td style="border:none;padding:4px 8px;text-align:right">${formatPeso(txn.subtotal)}</td>
+        </tr>
+        ${txn.discount ? `<tr><td style="border:none;padding:4px 8px;">Discount:</td><td style="border:none;padding:4px 8px;text-align:right">-${formatPeso(txn.discount)}</td></tr>` : ""}
+        ${txn.additional_fees ? `<tr><td style="border:none;padding:4px 8px;">Additional Fees:</td><td style="border:none;padding:4px 8px;text-align:right">+${formatPeso(txn.additional_fees)}</td></tr>` : ""}
+        <tr style="font-size: 13px; font-weight: bold; border-top: 2px solid #7F1D1D; color: #7F1D1D;">
+          <td style="border:none;padding:4px 8px;">Total Charge:</td>
+          <td style="border:none;padding:4px 8px;text-align:right">${formatPeso(txn.total_amount)}</td>
+        </tr>
+        <tr>
+          <td style="border:none;padding:4px 8px;">Amount Paid:</td>
+          <td style="border:none;padding:4px 8px;text-align:right;color:#16A34A;font-weight:bold;">${formatPeso(txn.amount_paid)}</td>
+        </tr>
+        <tr>
+          <td style="border:none;padding:4px 8px;">Remaining Balance:</td>
+          <td style="border:none;padding:4px 8px;text-align:right;color:#D97706;font-weight:bold;">${formatPeso(txn.balance)}</td>
+        </tr>
+      </table>
 
-          <div class="footer">Confidential Clinic Billing Record | Harbourside Veterinary Clinic | Generated on ${formatNowPH()}</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+      <div class="footer-brand">Confidential Clinic Billing Record | Harbourside Veterinary Clinic | Generated on ${formatNowPH()}</div>
+    `;
+
+    printDocument({
+      title: `Clinic Receipt - ${txn.transaction_number || "TXN"}`,
+      bodyHtml,
+    });
   };
 
   return (
@@ -1238,10 +1222,41 @@ export default function LabTransactions() {
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-[#1B3A5C]">Select Service Category / Preset</Label>
+              <Select
+                onValueChange={(val) => {
+                  let defaultFee = "500";
+                  if (val === "Grooming") defaultFee = "500";
+                  else if (val === "Consultation" || val === "Check-up") defaultFee = "300";
+                  else if (val === "Vaccination") defaultFee = "350";
+                  else if (val === "Treatment") defaultFee = "400";
+                  else if (val === "Deworming") defaultFee = "150";
+                  else if (val === "Laboratory Test") defaultFee = "500";
+                  setTxnForm((prev) => ({
+                    ...prev,
+                    services_rendered: prev.services_rendered && prev.services_rendered !== "General Veterinary Check-up" ? `${prev.services_rendered}, ${val}` : val,
+                    subtotal: prev.subtotal === "0" || prev.subtotal === "" || prev.subtotal === "500" ? defaultFee : prev.subtotal,
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a service (Grooming, Consultation, Deworming...)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLINIC_SERVICES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs font-bold text-[#1B3A5C]">Services & Items Description *</Label>
               <Input
-                placeholder="e.g. General Consultation, Vaccination, Antibiotics"
+                placeholder="e.g. Grooming, General Consultation, Vaccination, Antibiotics"
                 value={txnForm.services_rendered}
                 onChange={(e) => setTxnForm({ ...txnForm, services_rendered: e.target.value })}
               />

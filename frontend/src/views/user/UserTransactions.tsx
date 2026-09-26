@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -54,50 +55,35 @@ export default function UserTransactions() {
 
   const handlePrintReceipt = (t: any) => {
     const pet = petMap.get(t.pet_id);
-    const w = window.open("", "_blank");
-    if (!w) return;
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Clinic Receipt - ${t.transaction_number || "TXN"}</title>
-          <style>
-            h1 { color: #7F1D1D; margin-bottom: 2px; }
-            .badge { background: #fee2e2; color: #7F1D1D; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #FEE2E2; color: #7F1D1D; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-            <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
-            <div>
-              <h1 style="margin:0;font-size:20px;color:#7F1D1D;">Harbourside Veterinary Clinic</h1>
-              <h2 style="margin:2px 0 0;font-size:14px;color:#E5192C;">Payment Statement</h2>
-            </div>
-          </div>
-          <div class="info-grid">
-            <div><strong>Transaction #:</strong> ${t.transaction_number || `TXN-${t.id.slice(0, 6)}`}</div>
-            <div><strong>Date:</strong> ${formatDate(t.date || t.created_at)}</div>
-            <div><strong>Pet Name:</strong> ${pet?.name || "Pet"}</div>
-            <div><strong>Payment Method:</strong> ${t.payment_method || "Cash"}</div>
-            <div><strong>Status:</strong> ${t.payment_status || "Pending"}</div>
-          </div>
-          <table>
-            <thead><tr><th>Services Rendered</th><th style="text-align:right">Amount</th></tr></thead>
-            <tbody>
-              <tr><td>${t.services_rendered || "Veterinary Medical Service"}</td><td style="text-align:right">₱${Number(t.total_amount || t.total || 0).toLocaleString()}</td></tr>
-            </tbody>
-          </table>
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Payment Statement</h2>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div><strong>Transaction #:</strong> ${t.transaction_number || `TXN-${t.id.slice(0, 6)}`}</div>
+        <div><strong>Date:</strong> ${formatDate(t.date || t.created_at)}</div>
+        <div><strong>Pet Name:</strong> ${pet?.name || "Pet"}</div>
+        <div><strong>Payment Method:</strong> ${t.payment_method || "Cash"}</div>
+        <div><strong>Status:</strong> ${t.payment_status || "Pending"}</div>
+      </div>
+      <table>
+        <thead><tr><th>Services Rendered</th><th style="text-align:right">Amount</th></tr></thead>
+        <tbody>
+          <tr><td>${t.services_rendered || "Veterinary Medical Service"}</td><td style="text-align:right">₱${Number(t.total_amount || t.total || 0).toLocaleString()}</td></tr>
+        </tbody>
+      </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: `Clinic Receipt - ${t.transaction_number || "TXN"}`,
+      bodyHtml,
+    });
   };
 
   return (

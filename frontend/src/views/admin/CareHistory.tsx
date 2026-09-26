@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -482,6 +483,31 @@ export default function CareHistory() {
       staffName,
     });
 
+    if ((form.record_type === "vaccination" || form.vaccine_used.trim()) && form.vaccine_used.trim()) {
+      await db.from("vaccinations").insert({
+        pet_id: form.pet_id,
+        vaccine_type: form.vaccine_used.trim(),
+        date_given: form.date,
+        next_due: form.next_vax_due || null,
+        vet: form.vet,
+        notes: form.notes || null,
+        skip_stock_deduction: true,
+      } as any);
+    }
+
+    if ((form.record_type === "deworming" || form.dewormer_used.trim()) && form.dewormer_used.trim()) {
+      await db.from("dewormings").insert({
+        pet_id: form.pet_id,
+        product: form.dewormer_used.trim(),
+        date_given: form.date,
+        next_due: form.next_deworming_due || null,
+        vet: form.vet,
+        status: "Completed",
+        notes: form.notes || null,
+        skip_stock_deduction: true,
+      } as any);
+    }
+
     setSaving(false);
 
     toast.success(targetId ? "Care History record updated." : "Care History record saved successfully.");
@@ -489,6 +515,8 @@ export default function CareHistory() {
     setEditingId(null);
     resetForm();
     invalidate("care_records");
+    invalidate("vaccinations");
+    invalidate("dewormings");
     invalidate("inventory_items");
     invalidate("inventory_batches");
     invalidate("inventory_transactions");
@@ -520,8 +548,6 @@ export default function CareHistory() {
 
   const handlePrint = (record?: any) => {
     const recordsToPrint = record ? [record] : filteredRecords;
-    const w = window.open("", "_blank");
-    if (!w) return;
 
     const rowsHtml = recordsToPrint
       .map((r) => {
@@ -541,50 +567,37 @@ export default function CareHistory() {
       })
       .join("");
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Harbourside Veterinary Clinic - Care History Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #7F1D1D; margin-bottom: 2px; }
-            h2 { color: #E5192C; font-weight: normal; margin-top: 0; font-size: 15px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
-            th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
-            th { background: #FEE2E2; color: #7F1D1D; font-weight: bold; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-            <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
-            <div>
-              <h1 style="margin:0;font-size:20px;color:#7F1D1D;">Harbourside Veterinary Clinic</h1>
-              <h2 style="margin:2px 0 0;font-size:14px;color:#E5192C;">Care History & Medical Records</h2>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Visit Date</th>
-                <th>Pet</th>
-                <th>Owner</th>
-                <th>Care Type</th>
-                <th>Vet / Staff</th>
-                <th>Diagnosis / Treatment</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || "<tr><td colSpan='7' style='text-align:center'>No records found</td></tr>"}
-            </tbody>
-          </table>
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic Management System</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Care History & Medical Records</h2>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Visit Date</th>
+            <th>Pet</th>
+            <th>Owner</th>
+            <th>Care Type</th>
+            <th>Vet / Staff</th>
+            <th>Diagnosis / Treatment</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || "<tr><td colSpan='7' style='text-align:center'>No records found</td></tr>"}
+        </tbody>
+      </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic Management System</div>
+    `;
+
+    printDocument({
+      title: "Harbourside Veterinary Clinic - Care History Report",
+      bodyHtml,
+    });
   };
 
   const selectedPetObject = petMap.get(form.pet_id);

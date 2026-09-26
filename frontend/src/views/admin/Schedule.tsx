@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ import Link from "next/link";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH, todayPH, isBeforeTodayPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, isBeforeTodayPH, nowTimePH, formatDateTimePH } from "@/lib/datetime";
 import {
   APPOINTMENT_SLOTS,
   formatTimeSlot,
@@ -123,7 +124,7 @@ export default function Schedule() {
   // Slots taken for the date selected in the form
   const takenSlots = useMemo(() => {
     if (!form.date) return new Set<string>();
-    return new Set(
+    const set = new Set(
       appointments
         .filter(
           (a) =>
@@ -133,6 +134,15 @@ export default function Schedule() {
         )
         .map((a) => a.time)
     );
+
+    const tPH = todayPH();
+    const nTime = nowTimePH();
+    APPOINTMENT_SLOTS.forEach((s) => {
+      if (form.date < tPH) set.add(s);
+      if (form.date === tPH && s <= nTime) set.add(s);
+    });
+
+    return set;
   }, [appointments, form.date, editingId]);
 
   const availableSlots = APPOINTMENT_SLOTS.filter((s) => !takenSlots.has(s));
@@ -325,9 +335,6 @@ export default function Schedule() {
   };
 
   const handlePrintSchedule = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-
     const rowsHtml = filteredAppointments
       .map(
         (a) => `
@@ -345,46 +352,38 @@ export default function Schedule() {
       )
       .join("");
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Harbourside Veterinary Clinic - Appointment Schedule</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 4px; }
-            h2 { color: #555; font-weight: normal; margin-top: 0; font-size: 16px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; font-weight: bold; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
           <h1>Harbourside Veterinary Clinic</h1>
           <h2>Master Appointment Schedule Report</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Apt #</th>
-                <th>Date</th>
-                <th>Time (PHT)</th>
-                <th>Pet</th>
-                <th>Owner</th>
-                <th>Type</th>
-                <th>Veterinarian</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || "<tr><td colSpan='8' style='text-align:center'>No appointments found</td></tr>"}
-            </tbody>
-          </table>
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Apt #</th>
+            <th>Date</th>
+            <th>Time (PHT)</th>
+            <th>Pet</th>
+            <th>Owner</th>
+            <th>Type</th>
+            <th>Veterinarian</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || "<tr><td colSpan='8' style='text-align:center'>No appointments found</td></tr>"}
+        </tbody>
+      </table>
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: "Harbourside Veterinary Clinic - Appointment Schedule",
+      bodyHtml,
+    });
   };
 
   if (isLoading) {
@@ -719,7 +718,15 @@ export default function Schedule() {
                   type="date"
                   min={todayPH()}
                   value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value, time: "" })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && isBeforeTodayPH(val)) {
+                      toast.error("Appointments cannot be booked in the past.");
+                      setForm({ ...form, date: todayPH(), time: "" });
+                    } else {
+                      setForm({ ...form, date: val, time: "" });
+                    }
+                  }}
                 />
               </div>
 
@@ -884,6 +891,12 @@ export default function Schedule() {
                     <span className="text-xs text-muted-foreground">Veterinarian</span>
                     <span className="font-medium">{selectedAppointment.vet || "Unassigned"}</span>
                   </div>
+                  {selectedAppointment.created_at && (
+                    <div className="flex justify-between pt-1 border-t border-border/50">
+                      <span className="text-xs text-muted-foreground">Booked / Logged At</span>
+                      <span className="text-xs font-mono text-muted-foreground">{formatDateTimePH(selectedAppointment.created_at)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">

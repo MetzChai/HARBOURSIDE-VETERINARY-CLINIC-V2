@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar, Eye, PawPrint, Printer } from "lucide-react";
-import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords, useMyAppointments } from "@/hooks/useOwnerData";
+import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords, useMyAppointments, useMyDewormings } from "@/hooks/useOwnerData";
 import { formatAge, formatDate } from "@/lib/age";
 import { daysFromTodayPH, formatNowPH } from "@/lib/datetime";
 import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
@@ -20,6 +21,7 @@ export default function UserPets() {
   const { data: owner } = useMyOwner();
   const { data: pets = [] } = useMyPets();
   const { data: vaccinations = [] } = useMyVaccinations();
+  const { data: dewormings = [] } = useMyDewormings();
   const { data: careRecords = [] } = useMyCareRecords();
   const { data: appointments = [] } = useMyAppointments();
   const [viewPet, setViewPet] = useState<any | null>(null);
@@ -34,15 +36,81 @@ export default function UserPets() {
           a.status !== "Missed" &&
           (daysFromTodayPH(a.date) ?? -1) >= 0,
       )
-      .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)))[0];
+      .sort((a: any, b: any) => String(a.date).localeCompare(String(a.date)))[0];
 
-  const vaccinesByPet = (petId: string) => vaccinations.filter((v: any) => v.pet_id === petId);
+  const vaccinesByPet = (petId: string) => {
+    const fromVax = vaccinations.filter((v: any) => v.pet_id === petId);
+    const fromCare = careRecords
+      .filter(
+        (c: any) =>
+          c.pet_id === petId &&
+          (String(c.record_type || "").toLowerCase() === "vaccination" ||
+            String(c.record_type || "").toLowerCase() === "vaccine" ||
+            !!c.vaccine_used)
+      )
+      .map((c: any) => ({
+        id: c.id,
+        pet_id: c.pet_id,
+        vaccine_type: c.vaccine_used || c.diagnosis || "Vaccination",
+        date_given: c.date,
+        next_due: c.next_vax_due,
+        vet: c.vet || "Clinic Staff",
+        notes: c.notes,
+      }));
+    const map = new Map();
+    fromVax.forEach((v: any) => map.set(`${v.date_given || v.created_at}_${v.vaccine_type}`, v));
+    fromCare.forEach((v: any) => {
+      const key = `${v.date_given}_${v.vaccine_type}`;
+      if (!map.has(key)) map.set(key, v);
+    });
+    return Array.from(map.values()).sort((a: any, b: any) => String(b.date_given || "").localeCompare(String(a.date_given || "")));
+  };
+
+  const dewormingsByPet = (petId: string) => {
+    const fromDeworm = dewormings.filter((d: any) => d.pet_id === petId);
+    const fromCare = careRecords
+      .filter(
+        (c: any) =>
+          c.pet_id === petId &&
+          (String(c.record_type || "").toLowerCase() === "deworming" || !!c.dewormer_used)
+      )
+      .map((c: any) => ({
+        id: c.id,
+        pet_id: c.pet_id,
+        product: c.dewormer_used || c.diagnosis || "Deworming",
+        dewormer_used: c.dewormer_used || c.diagnosis || "Deworming",
+        date_given: c.date,
+        date: c.date,
+        next_due: c.next_deworming_due,
+        next_deworming_due: c.next_deworming_due,
+        status: c.outcome || "Completed",
+        vet: c.vet || "Clinic Staff",
+        notes: c.notes,
+      }));
+    const map = new Map();
+    fromDeworm.forEach((d: any) => map.set(`${d.date_given || d.date || d.created_at}_${d.product || d.dewormer_used}`, d));
+    fromCare.forEach((d: any) => {
+      const key = `${d.date_given}_${d.product}`;
+      if (!map.has(key)) map.set(key, d);
+    });
+    return Array.from(map.values()).sort((a: any, b: any) => String(b.date_given || b.date || "").localeCompare(String(a.date_given || a.date || "")));
+  };
+
   const checkupsByPet = (petId: string) =>
-    careRecords.filter((c: any) => c.pet_id === petId && (c.record_type === "checkup" || c.record_type === "check-up" || !c.record_type));
+    careRecords.filter(
+      (c: any) =>
+        c.pet_id === petId &&
+        (String(c.record_type || "").toLowerCase() === "checkup" ||
+          String(c.record_type || "").toLowerCase() === "check-up" ||
+          (!c.record_type && !c.vaccine_used && !c.dewormer_used))
+    );
+
   const treatmentsByPet = (petId: string) =>
-    careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "treatment");
-  const dewormingsByPet = (petId: string) =>
-    careRecords.filter((c: any) => c.pet_id === petId && c.record_type === "deworming");
+    careRecords.filter(
+      (c: any) =>
+        c.pet_id === petId &&
+        (String(c.record_type || "").toLowerCase() === "treatment" || !!c.treatment)
+    );
 
   const handlePrint = (pet: any) => {
     const vaccs = vaccinesByPet(pet.id);
@@ -51,34 +119,18 @@ export default function UserPets() {
     const dewormingsList = dewormingsByPet(pet.id);
     const petRecords = careRecords.filter((c: any) => c.pet_id === pet.id).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
 
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(`
-      <html><head><title>Pet Medical Record - ${pet.name}</title>
-      <style>
-        @page { size: portrait; margin: 15mm; }
-        body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;line-height:1.4}
-        h1{color:#7F1D1D;margin:0;font-size:22px}
-        h2{margin:4px 0 12px;color:#333;font-size:16px}
-        .header{border-bottom:2px solid #7F1D1D;padding-bottom:12px;margin-bottom:16px}
-        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;background:#f8fafc;padding:12px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:16px}
-        table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}
-        th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#FEE2E2;color:#7F1D1D}
-        .timeline-card{border:1px solid #e2e8f0;border-left:4px solid #7F1D1D;padding:10px;margin-bottom:10px;border-radius:4px;background:#fff}
-        .timeline-date{font-weight:bold;color:#475569;font-size:11px}
-        .timeline-title{font-size:12px;font-weight:bold;color:#7F1D1D;margin:2px 0}
-        .timeline-detail{font-size:11px;color:#334155;margin-top:2px}
-      </style></head>
-      <body>
-      <div class="header" style="display:flex;align-items:center;gap:12px;">
+    const bodyHtml = `
+      <div class="header-brand">
         <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
         <div>
           <h1>Harbourside Veterinary Clinic</h1>
-          <p style="margin:2px 0 0;font-size:12px;color:#666">Official Pet Medical Record & Care History</p>
+          <h2>Official Pet Medical Record & Care History</h2>
         </div>
       </div>
-      <h2>${pet.name}</h2>
-      <div class="info-grid">
+      
+      <h3 style="margin:4px 0 12px;color:#333;font-size:16px">${pet.name}</h3>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;background:#f8fafc;padding:12px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:16px">
         <div><strong>Species & Breed:</strong> ${pet.species} (${pet.breed ?? "Crossbreed"})</div>
         <div><strong>Owner Name:</strong> ${owner?.name ?? "—"}</div>
         <div><strong>Gender & Age:</strong> ${pet.gender ?? "—"} | ${formatAge(pet.dob)}</div>
@@ -89,15 +141,15 @@ export default function UserPets() {
       ${
         petRecords.length
           ? petRecords.map((r: any) => `
-            <div class="timeline-card">
-              <div class="timeline-date">Date: ${r.date ? formatDate(r.date) : "—"} | Type: ${r.record_type || "Visit"}</div>
-              <div class="timeline-title">${r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Service"}</div>
-              ${r.vet ? `<div class="timeline-detail"><strong>Vet/Staff:</strong> ${r.vet}</div>` : ""}
-              ${r.chief_complaint ? `<div class="timeline-detail"><strong>Reason:</strong> ${r.chief_complaint}</div>` : ""}
-              ${r.diagnosis ? `<div class="timeline-detail"><strong>Diagnosis:</strong> ${r.diagnosis}</div>` : ""}
-              ${r.treatment ? `<div class="timeline-detail"><strong>Treatment:</strong> ${r.treatment}</div>` : ""}
-              ${r.medication ? `<div class="timeline-detail"><strong>Medications:</strong> ${r.medication}</div>` : ""}
-              ${r.notes ? `<div class="timeline-detail"><strong>Notes:</strong> ${r.notes}</div>` : ""}
+            <div style="border:1px solid #e2e8f0;border-left:4px solid #7F1D1D;padding:10px;margin-bottom:10px;border-radius:4px;background:#fff">
+              <div style="font-weight:bold;color:#475569;font-size:11px">Date: ${r.date ? formatDate(r.date) : "—"} | Type: ${r.record_type || "Visit"}</div>
+              <div style="font-size:12px;font-weight:bold;color:#7F1D1D;margin:2px 0">${r.diagnosis || r.vaccine_used || r.treatment || r.dewormer_used || r.chief_complaint || "Medical Service"}</div>
+              ${r.vet ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Vet/Staff:</strong> ${r.vet}</div>` : ""}
+              ${r.chief_complaint ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Reason:</strong> ${r.chief_complaint}</div>` : ""}
+              ${r.diagnosis ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Diagnosis:</strong> ${r.diagnosis}</div>` : ""}
+              ${r.treatment ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Treatment:</strong> ${r.treatment}</div>` : ""}
+              ${r.medication ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Medications:</strong> ${r.medication}</div>` : ""}
+              ${r.notes ? `<div style="font-size:11px;color:#334155;margin-top:2px"><strong>Notes:</strong> ${r.notes}</div>` : ""}
             </div>
           `).join("")
           : "<p style='font-size:12px;color:#888'>No medical care history records logged.</p>"
@@ -123,11 +175,13 @@ export default function UserPets() {
       ${dewormingsList.map((d: any) => `<tr><td>${d.dewormer_used || d.product || "Deworming"}</td><td>${d.date ? formatDate(d.date) : d.date_given ? formatDate(d.date_given) : "—"}</td><td>${d.next_deworming_due ? formatDate(d.next_deworming_due) : d.next_due ? formatDate(d.next_due) : "—"}</td><td>${d.notes ?? "—"}</td></tr>`).join("") || "<tr><td colSpan='4'>No records</td></tr>"}
       </table>
 
-      <br><p style="color:#999;font-size:12px">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</p>
-      </body></html>
-    `);
-    w.document.close();
-    w.print();
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: `Pet Medical Record - ${pet.name}`,
+      bodyHtml,
+    });
   };
 
   return (

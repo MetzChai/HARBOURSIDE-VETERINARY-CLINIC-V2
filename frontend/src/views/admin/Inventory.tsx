@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1097,76 +1098,67 @@ export default function Inventory() {
   // PRINT REPORT HANDLER
   const handlePrintReport = () => {
     const list = filteredItems;
-    const w = window.open("", "_blank");
-    if (!w) return;
 
-    w.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Inventory Report — Harbourside Veterinary Clinic</title>
-        <style>
-          body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #0f172a; }
-          h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-          p { font-size: 12px; color: #64748b; margin-top: 0; }
-          .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; background: #f8fafc; }
-          .metric { font-size: 11px; color: #64748b; }
-          .metric-val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-          th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-          th { background: #f1f5f9; font-weight: 600; color: #334155; }
-          .status { font-weight: 600; font-size: 11px; }
-        </style>
-      </head>
-      <body>
-        <h1>Harbourside Veterinary Clinic — Inventory Report</h1>
-        <p>Generated on ${formatNowPH()}</p>
-        <div class="metrics">
-          <div class="metric">Total Items<div class="metric-val">${metrics.total}</div></div>
-          <div class="metric">Medicines<div class="metric-val">${metrics.medicines}</div></div>
-          <div class="metric">Vaccines<div class="metric-val">${metrics.vaccines}</div></div>
-          <div class="metric">Dewormers<div class="metric-val">${metrics.dewormers}</div></div>
-          <div class="metric">Medical Supplies<div class="metric-val">${metrics.supplies}</div></div>
-          <div class="metric">Low Stock<div class="metric-val">${metrics.lowStock}</div></div>
-          <div class="metric">Out of Stock<div class="metric-val">${metrics.outOfStock}</div></div>
-          <div class="metric">Expiring Soon<div class="metric-val">${metrics.expiringSoon}</div></div>
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>Inventory Management Report</h2>
         </div>
-        <table>
-          <thead>
+      </div>
+      <p style="font-size: 11px; color: #64748b; margin-top: -10px; margin-bottom: 16px;">Generated on ${formatNowPH()} (PH Time)</p>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; background: #f8fafc;">
+        <div style="font-size: 11px; color: #64748b;">Total Items<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.total}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Medicines<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.medicines}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Vaccines<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.vaccines}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Dewormers<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.dewormers}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Medical Supplies<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.supplies}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Low Stock<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.lowStock}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Out of Stock<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.outOfStock}</div></div>
+        <div style="font-size: 11px; color: #64748b;">Expiring Soon<div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">${metrics.expiringSoon}</div></div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Item ID</th>
+            <th>Item Name</th>
+            <th>Category</th>
+            <th>Total Quantity</th>
+            <th>Reorder Level</th>
+            <th>Earliest Expiration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list
+            .map((i) => {
+              const s = itemSummaries[i.id] || getItemSummary(i, txns);
+              return `
             <tr>
-              <th>Item ID</th>
-              <th>Item Name</th>
-              <th>Category</th>
-              <th>Total Quantity</th>
-              <th>Reorder Level</th>
-              <th>Earliest Expiration</th>
-              <th>Status</th>
+              <td>${i.item_code || i.id?.slice(0, 8) || "—"}</td>
+              <td><strong>${i.name}</strong>${i.description ? `<br><span style="color:#64748b;font-size:11px;">${i.description}</span>` : ""}</td>
+              <td>${getCategoryLabel(i.category)}</td>
+              <td>${s.totalQty} ${i.unit || "unit"}</td>
+              <td>${i.reorder_level ?? 5}</td>
+              <td>${s.earliestExpiration ? formatDate(s.earliestExpiration) : "N/A"}</td>
+              <td><span style="font-weight: 600; font-size: 11px;">${s.status}</span></td>
             </tr>
-          </thead>
-          <tbody>
-            ${list
-              .map((i) => {
-                const s = itemSummaries[i.id] || getItemSummary(i, txns);
-                return `
-              <tr>
-                <td>${i.item_code || i.id?.slice(0, 8) || "—"}</td>
-                <td><strong>${i.name}</strong>${i.description ? `<br><span style="color:#64748b;font-size:11px;">${i.description}</span>` : ""}</td>
-                <td>${getCategoryLabel(i.category)}</td>
-                <td>${s.totalQty} ${i.unit || "unit"}</td>
-                <td>${i.reorder_level ?? 5}</td>
-                <td>${s.earliestExpiration ? formatDate(s.earliestExpiration) : "N/A"}</td>
-                <td><span class="status">${s.status}</span></td>
-              </tr>
-            `;
-              })
-              .join("")}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+          `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+
+      <div class="footer-brand">Confidential Inventory Report | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: "Inventory Report — Harbourside Veterinary Clinic",
+      bodyHtml,
+    });
   };
 
   return (

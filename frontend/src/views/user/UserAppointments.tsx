@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,7 +21,7 @@ import {
   getStatusBadgeClass,
 } from "@/lib/appointment-slots";
 import { formatDate } from "@/lib/age";
-import { todayPH, isBeforeTodayPH, daysFromTodayPH } from "@/lib/datetime";
+import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatDateTimePH, formatNowPH } from "@/lib/datetime";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -173,6 +174,59 @@ export default function UserAppointments() {
     [sorted],
   );
 
+  const handlePrintAppointments = () => {
+    const rowsHtml = sorted
+      .map(
+        (a: any) => `
+        <tr>
+          <td>${a.appointment_number || `APT-${a.id.slice(0, 6)}`}</td>
+          <td>${formatDate(a.date)}</td>
+          <td>${a.time ? formatTimeSlot(a.time) : "—"}</td>
+          <td>${a.pets?.name || "Pet"}</td>
+          <td>${a.care_type || a.appointment_type || "Check-up"}</td>
+          <td>${a.vet || "Clinic Staff"}</td>
+          <td><strong>${a.status || "Scheduled"}</strong></td>
+        </tr>
+      `
+      )
+      .join("");
+
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div>
+          <h1>Harbourside Veterinary Clinic</h1>
+          <h2>My Appointments & Schedule</h2>
+        </div>
+      </div>
+      
+      <p style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated on ${formatNowPH()} (PH Time)</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Apt #</th>
+            <th>Date</th>
+            <th>Time Slot</th>
+            <th>Pet</th>
+            <th>Type / Reason</th>
+            <th>Veterinarian</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || "<tr><td colSpan='7' style='text-align:center'>No appointments scheduled.</td></tr>"}
+        </tbody>
+      </table>
+      <div class="footer-brand">Harbourside Veterinary Clinic | Official Client Appointment Statement</div>
+    `;
+
+    printDocument({
+      title: "My Appointments - Harbourside Veterinary Clinic",
+      bodyHtml,
+    });
+  };
+
   const renderTable = (rows: any[]) => (
     <Card className="border border-border/80 shadow-sm rounded-xl overflow-hidden">
       <CardContent className="p-0">
@@ -320,7 +374,15 @@ export default function UserAppointments() {
                         type="date"
                         value={form.date}
                         min={todayPH()}
-                        onChange={(e) => setForm({ ...form, date: e.target.value, time: "" })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && isBeforeTodayPH(val)) {
+                            toast.error("Appointments cannot be requested for past dates.");
+                            setForm({ ...form, date: todayPH(), time: "" });
+                          } else {
+                            setForm({ ...form, date: val, time: "" });
+                          }
+                        }}
                       />
                     </div>
 
@@ -402,7 +464,7 @@ export default function UserAppointments() {
             </DialogContent>
           </Dialog>
 
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
+          <Button variant="outline" size="sm" onClick={handlePrintAppointments}>
             <Printer className="h-4 w-4 mr-1.5" /> Print
           </Button>
         </div>
@@ -460,6 +522,12 @@ export default function UserAppointments() {
                     <span className="text-xs text-muted-foreground">Veterinarian</span>
                     <span className="font-medium">{selectedAppointment.vet || "Assigned upon approval"}</span>
                   </div>
+                  {selectedAppointment.created_at && (
+                    <div className="flex justify-between pt-1 border-t border-border/50">
+                      <span className="text-xs text-muted-foreground">Requested / Booked At</span>
+                      <span className="text-xs font-mono text-muted-foreground">{formatDateTimePH(selectedAppointment.created_at)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">

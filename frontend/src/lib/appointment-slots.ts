@@ -60,7 +60,19 @@ export const APPOINTMENT_TYPES = [
 
 export type AppointmentTypeOption = (typeof APPOINTMENT_TYPES)[number];
 
-export const CARE_TYPES = ["checkup", "treatment", "vaccine", "vaccination", "deworming", "consultation"] as const;
+export const CLINIC_SERVICES = [
+  "Consultation",
+  "Check-up",
+  "Vaccination",
+  "Treatment",
+  "Deworming",
+  "Grooming",
+  "Laboratory Test",
+] as const;
+
+export type ServiceTypeOption = (typeof CLINIC_SERVICES)[number];
+
+export const CARE_TYPES = ["checkup", "treatment", "vaccine", "vaccination", "deworming"] as const;
 export type CareType = (typeof CARE_TYPES)[number];
 
 export const CARE_TYPE_LABELS: Record<string, string> = {
@@ -69,12 +81,12 @@ export const CARE_TYPE_LABELS: Record<string, string> = {
   vaccine: "Vaccination",
   vaccination: "Vaccination",
   deworming: "Deworming",
-  consultation: "Consultation",
 };
 
 export function normalizeCareType(value: unknown): string {
   const v = String(value ?? "checkup").toLowerCase();
   if (v === "vaccine") return "vaccination";
+  if (v === "consultation") return "checkup";
   return (CARE_TYPES as readonly string[]).includes(v) ? v : "checkup";
 }
 

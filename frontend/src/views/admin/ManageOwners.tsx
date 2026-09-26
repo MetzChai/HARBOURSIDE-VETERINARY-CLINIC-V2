@@ -1,5 +1,6 @@
 "use client";
 
+import { printDocument } from "@/lib/print";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,57 +278,51 @@ export default function ManageOwners() {
 
   const handlePrintOwner = (owner: OwnerRow) => {
     const petsList = ownerPets(owner.id);
-    const w = window.open("", "_blank");
-    if (!w) return;
 
-    w.document.write(`
-      <html>
-        <head>
-          <title>Owner Profile - ${owner.name}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
-            h1 { color: #1B3A5C; margin-bottom: 2px; }
-            .badge { background: #e8eef4; color: #1B3A5C; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #E8EEF4; color: #1B3A5C; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; }
-            .footer { margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
+    const bodyHtml = `
+      <div class="header-brand">
+        <img src="/logo.png" style="height:44px;width:44px;object-fit:contain;border-radius:6px;" alt="HVS" />
+        <div style="flex:1;">
           <h1>Harbourside Veterinary Clinic</h1>
-          <h2>Pet Owner Record: ${owner.name} <span class="badge">${owner.owner_code || "OWN"}</span></h2>
-          
-          <div class="info-grid">
-            <div><strong>Contact Number:</strong> ${owner.contact || "—"}</div>
-            <div><strong>Email Address:</strong> ${owner.email || "—"}</div>
-            <div><strong>Address:</strong> ${owner.address || "—"}</div>
-            <div><strong>Account Status:</strong> ${owner.account_status || "Active"} (${owner.is_walk_in ? "Walk-in Client" : "Online User"})</div>
-            <div><strong>Emergency Contact:</strong> ${owner.emergency_contact_name || "—"} (${owner.emergency_contact_number || "—"})</div>
-          </div>
+          <h2>Pet Owner Official Profile Record</h2>
+        </div>
+        <div>
+          <span style="background: #e8eef4; color: #1B3A5C; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; font-family: monospace;">${owner.owner_code || "OWN"}</span>
+        </div>
+      </div>
+      
+      <h3 style="color:#1B3A5C;font-size:16px;margin:0 0 12px;">Owner Name: ${owner.name}</h3>
 
-          <h3>Registered Pets (${petsList.length})</h3>
-          <table>
-            <thead><tr><th>Pet Name</th><th>Species</th><th>Breed</th><th>Gender</th><th>Status</th></tr></thead>
-            <tbody>
-              ${
-                petsList
-                  .map(
-                    (p) =>
-                      `<tr><td>${p.name}</td><td>${p.species || "—"}</td><td>${p.breed || "—"}</td><td>${p.gender || "—"}</td><td>${p.status || "Healthy"}</td></tr>`
-                  )
-                  .join("") || "<tr><td colSpan='5'>No pets registered</td></tr>"
-              }
-            </tbody>
-          </table>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div><strong>Contact Number:</strong> ${owner.contact || "—"}</div>
+        <div><strong>Email Address:</strong> ${owner.email || "—"}</div>
+        <div><strong>Address:</strong> ${owner.address || "—"}</div>
+        <div><strong>Account Status:</strong> ${owner.account_status || "Active"} (${owner.is_walk_in ? "Walk-in Client" : "Online User"})</div>
+        <div><strong>Emergency Contact:</strong> ${owner.emergency_contact_name || "—"} (${owner.emergency_contact_number || "—"})</div>
+      </div>
 
-          <div class="footer">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
-        </body>
-      </html>
-    `);
-    w.document.close();
-    w.print();
+      <h3 style="color:#1B3A5C;font-size:14px;font-weight:bold;border-bottom:2px solid #E8EEF4;padding-bottom:4px;margin-top:20px;">Registered Pets (${petsList.length})</h3>
+      <table>
+        <thead><tr><th>Pet Name</th><th>Species</th><th>Breed</th><th>Gender</th><th>Status</th></tr></thead>
+        <tbody>
+          ${
+            petsList
+              .map(
+                (p) =>
+                  `<tr><td>${p.name}</td><td>${p.species || "—"}</td><td>${p.breed || "—"}</td><td>${p.gender || "—"}</td><td>${p.status || "Healthy"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='5'>No pets registered</td></tr>"
+          }
+        </tbody>
+      </table>
+
+      <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
+    `;
+
+    printDocument({
+      title: `Owner Profile - ${owner.name}`,
+      bodyHtml,
+    });
   };
 
   if (isLoading) {

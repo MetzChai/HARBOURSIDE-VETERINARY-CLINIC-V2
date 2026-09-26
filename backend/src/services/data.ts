@@ -2,7 +2,7 @@ import type { SessionUser } from "./auth.js";
 import { isClinicUser, resolvePrimaryRole } from "./auth.js";
 import { getPool, isTableName, parseSelect, quoteIdent, type TableName } from "../lib/db.js";
 import { APPOINTMENT_SLOTS, isSlotBlockingStatus, normalizeCareType } from "../lib/appointment-slots.js";
-import { toDateOnly, nowPHIso } from "../lib/datetime.js";
+import { toDateOnly, nowPHIso, todayPH, nowTimePH } from "../lib/datetime.js";
 import { buildInventoryDeductionPlan, validateInventoryDeductionPlan } from "./inventory-integration.js";
 
 type Filter = { column: string; value: unknown };
@@ -312,11 +312,28 @@ export async function getAppointmentAvailability(date: string) {
       .filter((r: { status?: string }) => isSlotBlockingStatus(r.status))
       .map((r: { time: string }) => r.time)
   );
-  const available = APPOINTMENT_SLOTS.filter((s) => !taken.has(s));
+
+  const tPH = todayPH();
+  const nTime = nowTimePH();
+
+  const available = APPOINTMENT_SLOTS.filter((s) => {
+    if (date < tPH) return false;
+    if (date === tPH && s <= nTime) return false;
+    return !taken.has(s);
+  });
   return { date, slots: [...APPOINTMENT_SLOTS], taken: [...taken], available };
 }
 
 async function assertAppointmentSlotAvailable(date: string, time: string, excludeId?: string) {
+  const tPH = todayPH();
+  const nTime = nowTimePH();
+  if (date < tPH) {
+    throw new Error("Appointments cannot be booked or scheduled for past dates.");
+  }
+  if (date === tPH && time <= nTime) {
+    throw new Error("That time slot has already passed today.");
+  }
+
   const pool = getPool();
   const { rows } = await pool.query(
     `SELECT id, status FROM appointments WHERE date = $1 AND time = $2`,
