@@ -38,7 +38,7 @@ export function formatTimeSlot(timeStr?: string | null): string {
   return `${hour}:${min} ${ampm}`;
 }
 
-export const VET_OPTIONS: string[] = ["Alfredo B. Badiola, Jr., DVM"];
+export const VET_OPTIONS: string[] = ["Dr. Alfredo B. Badiola Jr."];
 
 export const APPOINTMENT_STATUSES = [
   "Requested",

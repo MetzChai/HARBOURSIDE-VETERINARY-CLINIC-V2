@@ -75,6 +75,12 @@ export default function UserAppointments() {
       return;
     }
 
+    const dateObj = new Date(`${form.date}T12:00:00+08:00`);
+    if (!isNaN(dateObj.getTime()) && dateObj.getDay() === 0) {
+      toast.error("Harbourside Veterinary Clinic is closed on Sundays. Please select a date from Monday to Saturday.");
+      return;
+    }
+
     // Check duplicate booking for pet
     const duplicate = appointments.find(
       (a: any) =>

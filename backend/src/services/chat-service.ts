@@ -158,26 +158,37 @@ export function buildContextPrompt(ctx: ChatContext): string {
 }
 
 const CLINIC_INFO = `Harbourside Veterinary Clinic
-Hours: Mon–Sat 8AM–6PM (Philippine Time), closed Sunday
-Vets: Dr. Rivera (general), Dr. Tan (surgery & dental)
-Emergency hotline: 0917-VET-HELP
-Location: Harbourside area — call for directions`;
+Veterinarian / Doctor: Dr. Alfredo B. Badiola Jr.
+Operating Hours: Monday–Saturday: 9:00 AM – 5:00 PM (Philippine Time), Sunday: CLOSED
+Services: Check-up / Consultation, Vaccination, Treatment, Deworming, Grooming, Laboratory Tests`;
 
 export function generateLocalChatReply(message: string, ctx: ChatContext): string {
   const q = message.toLowerCase().trim();
 
   if (/hello|hi|hey|good (morning|afternoon|evening)/.test(q)) {
-    return `Hello ${ctx.userName.split(" ")[0]}! 🐾 I'm PawBot. I can help with your pets' appointments, vaccinations, and general care tips. What would you like to know?`;
+    return `Hello ${ctx.userName.split(" ")[0]}! 🐾 I'm PawBot, the AI assistant for Harbourside Veterinary Clinic (Dr. Alfredo B. Badiola Jr.). How can I assist you today?`;
+  }
+
+  if (/vet|doctor|badiola|who.*(vet|doctor|physician)/.test(q)) {
+    return `The veterinarian at Harbourside Veterinary Clinic is **Dr. Alfredo B. Badiola Jr.** 🩺`;
+  }
+
+  if (/sunday|open.*sunday|sunday.*open/.test(q)) {
+    return `Harbourside Veterinary Clinic is **CLOSED on Sundays**. Our operating hours are **Monday to Saturday, 9:00 AM to 5:00 PM**.`;
   }
 
   if (/hour|open|close|when.*open|schedule.*clinic|contact|phone|hotline|address|location/.test(q)) {
     return CLINIC_INFO;
   }
 
+  if (/record|medical.*record|history|view.*record/.test(q)) {
+    return `You can view your pet's medical records, vaccination history, deworming history, and care timeline directly in the **My Pets** / **Pet Profile** section of your portal.`;
+  }
+
   if (/appointment|schedule|visit|booking|book|next.*(appt|visit)|when.*(see|visit)/.test(q)) {
     if (!ctx.appointments.length) {
       return ctx.role === "owner"
-        ? "You don't have any upcoming appointments. You can request one from **Appointments** in your portal, or call the clinic to book a walk-in."
+        ? "You don't have any upcoming appointments. You can request an appointment through **Appointments** in your portal (Mon–Sat, 9:00 AM – 5:00 PM)."
         : "No upcoming appointments on the schedule. Check **Schedule** to book visits.";
     }
     const list = ctx.appointments
@@ -187,7 +198,7 @@ export function generateLocalChatReply(message: string, ctx: ChatContext): strin
           `• **${a.pet_name ?? "Pet"}** — ${formatDatePH(a.date)} at ${a.time} (${a.status})${a.reason ? `: ${a.reason}` : ""}`
       )
       .join("\n");
-    return `Here ${ctx.appointments.length === 1 ? "is your next appointment" : "are your upcoming appointments"}:\n\n${list}`;
+    return `Here ${ctx.appointments.length === 1 ? "is your next appointment" : "are your upcoming appointments"}:\n\n${list}\n\n*Clinic Hours: Mon–Sat 9:00 AM – 5:00 PM (Closed Sunday).*`;
   }
 
   if (/vaccin|shot|due|booster|immuniz/.test(q)) {
@@ -195,7 +206,7 @@ export function generateLocalChatReply(message: string, ctx: ChatContext): strin
     if (!due.length) {
       return ctx.vaccinations.length
         ? "All your pets' vaccinations look up to date for the next 30 days. ✅"
-        : "I don't see vaccination records yet. Ask the clinic to update your pet's vaccine history, or check **Care History** if you're staff.";
+        : "I don't see vaccination records logged yet. Please ask Dr. Alfredo B. Badiola Jr. or clinic staff to check your pet's record.";
     }
     const list = due
       .map((v) => {
@@ -204,19 +215,23 @@ export function generateLocalChatReply(message: string, ctx: ChatContext): strin
         return `• **${v.pet_name}** — ${v.vaccine_type}: ${formatDatePH(v.next_due)} ${status}`;
       })
       .join("\n");
-    return `Vaccination reminders:\n\n${list}\n\nVisit the clinic or request an appointment for boosters.`;
+    return `Vaccination status:\n\n${list}\n\nRequest an appointment with Dr. Alfredo B. Badiola Jr. for boosters (Mon–Sat 9:00 AM–5:00 PM).`;
+  }
+
+  if (/deworm/.test(q)) {
+    return `Deworming helps protect pets from internal parasites. Check your pet's **Medical Profile** in the portal for past deworming dates and next due dates. Consult Dr. Alfredo B. Badiola Jr. for recommended deworming products and schedules.`;
   }
 
   if (/groom|brush|bath|clean|hygiene/.test(q)) {
-    return "Grooming tips 🛁:\n• Brush coat 2–3× weekly to reduce shedding\n• Bathe dogs every 4–6 weeks (more often can dry skin)\n• Trim nails when you hear clicking on the floor\n• Clean ears gently — ask your vet if you notice odor or redness";
+    return "Grooming tips 🛁:\n• Brush coat 2–3× weekly to reduce shedding\n• Bathe dogs every 4–6 weeks\n• Trim nails when you hear clicking on the floor\n• Clean ears gently — consult Dr. Alfredo B. Badiola Jr. if you notice odor or redness";
   }
 
   if (/food|diet|feed|nutrition|eat/.test(q)) {
-    return "Nutrition tips 🍽️:\n• Feed age-appropriate portions (puppy/kitten vs adult)\n• Fresh water always available\n• Avoid chocolate, grapes, onions, and cooked bones\n• Ask Dr. Rivera or Dr. Tan for a diet plan suited to your pet's breed and weight";
+    return "Nutrition tips 🍽️:\n• Feed age-appropriate, balanced pet food\n• Ensure fresh water is always available\n• Avoid chocolate, grapes, onions, garlic, and cooked bones\n• Ask Dr. Alfredo B. Badiola Jr. for personalized dietary advice";
   }
 
-  if (/emergency|urgent|sick|vomit|bleed|help/.test(q)) {
-    return `If this is an emergency, please call the clinic hotline **0917-VET-HELP** right away or bring your pet in during clinic hours (Mon–Sat 8AM–6PM PH time).\n\n${CLINIC_INFO}`;
+  if (/emergency|urgent|sick|symptom|vomit|bleed|letharg|fever|help/.test(q)) {
+    return `If your pet is showing concerning symptoms or feeling sick, please bring your pet to Harbourside Veterinary Clinic during operating hours (**Monday–Saturday 9:00 AM – 5:00 PM**) for professional examination by **Dr. Alfredo B. Badiola Jr.**\n\n*Note: PawBot provides general guidance and cannot provide a definitive medical diagnosis.*`;
   }
 
   if (isClinicUser(ctx.role) && /request|pending|approve/.test(q)) {
@@ -235,7 +250,7 @@ export function generateLocalChatReply(message: string, ctx: ChatContext): strin
     return `Your registered pets:\n${ctx.pets.map((p) => `• **${p.name}**${p.species ? ` (${p.species})` : ""}`).join("\n")}`;
   }
 
-  return `I'm PawBot, your clinic assistant! I can help with:\n• Upcoming **appointments**\n• **Vaccination** due dates\n• **Pet care** tips (grooming, nutrition)\n• **Clinic hours** and contact info\n\nTry: "When is my next appointment?" or "What vaccines are due?"\n\n${CLINIC_INFO}`;
+  return `I'm PawBot, your AI assistant for Harbourside Veterinary Clinic (Dr. Alfredo B. Badiola Jr.)! I can help with:\n• **Clinic hours** (Mon–Sat 9:00 AM – 5:00 PM, Sun Closed)\n• Upcoming **appointments**\n• **Vaccination & Deworming** reminders\n• **Pet care** guidance (grooming, nutrition)\n\nFor medical concerns, please consult Dr. Alfredo B. Badiola Jr.`;
 }
 
 const GEMINI_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"];
@@ -245,16 +260,21 @@ function buildGeminiPayload(
   contextBlock: string
 ) {
   const systemPrompt = `You are PawBot, the friendly AI assistant for Harbourside Veterinary Clinic in the Philippines (Asia/Manila timezone).
+Veterinarian: Dr. Alfredo B. Badiola Jr.
+Operating Hours: Monday through Saturday: 9:00 AM to 5:00 PM. Sunday: CLOSED.
 
-Use the user's live clinic data below when answering about appointments, pets, or vaccines. If data is missing, say so and suggest using the portal or calling the clinic.
+CRITICAL SAFETY RULES:
+- Do NOT provide a definitive medical diagnosis based only on user descriptions.
+- Do NOT claim to replace a veterinarian. Always recommend consulting Dr. Alfredo B. Badiola Jr. or visiting the clinic for medical concerns.
+- Do NOT invent fake medical records, clinic services, prices, policies, or operating hours.
+- Do NOT alter or claim to alter medical records or inventory directly.
+- Appointments are available Monday to Saturday, 9:00 AM to 5:00 PM. No Sunday appointments.
 
-${CLINIC_INFO}
-
---- User's current data ---
+--- User's live clinic data ---
 ${contextBlock}
 --- End data ---
 
-Keep replies concise, warm, and practical. Use markdown sparingly (bold for pet names). If unsure, suggest calling the clinic.`;
+Keep replies concise, warm, helpful, and professional. Use markdown formatting appropriately.`;
 
   const contents = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -302,3 +322,4 @@ export async function generateGeminiReply(
 
   return null;
 }
+

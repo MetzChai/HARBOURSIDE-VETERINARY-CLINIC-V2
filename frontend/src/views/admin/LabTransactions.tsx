@@ -179,9 +179,12 @@ export default function LabTransactions() {
   const [payMethodInput, setPayMethodInput] = useState("Cash");
 
   const [showAddLab, setShowAddLab] = useState(false);
+  const [editLab, setEditLab] = useState<LabRecordRow | null>(null);
+  const [deleteLabTarget, setDeleteLabTarget] = useState<LabRecordRow | null>(null);
   const [viewLab, setViewLab] = useState<LabRecordRow | null>(null);
 
   const [saving, setSaving] = useState(false);
+
 
   // Transaction Form State
   const emptyTxnForm = {
@@ -449,6 +452,7 @@ export default function LabTransactions() {
 
   // Open Add Lab Record Modal
   const openAddLab = () => {
+    setEditLab(null);
     setLabForm({
       ...emptyLabForm,
       lab_record_number: `LAB-${Date.now().toString().slice(-6)}`,
@@ -459,7 +463,27 @@ export default function LabTransactions() {
     setShowAddLab(true);
   };
 
-  // Save Lab Record
+  // Open Edit Lab Record Modal
+  const openEditLab = (lab: LabRecordRow) => {
+    setEditLab(lab);
+    setLabForm({
+      lab_record_number: lab.lab_record_number || `LAB-${lab.id.slice(0, 6)}`,
+      pet_id: lab.pet_id || "",
+      owner_id: lab.owner_id || "",
+      appointment_id: lab.appointment_id || "",
+      care_record_id: lab.care_record_id || "",
+      test_type: lab.test_type || "Blood Test",
+      result: lab.result || "",
+      remarks: lab.remarks || "",
+      status: lab.status || "Completed",
+      lab_fee: String(lab.lab_fee ?? 500),
+      performed_by: lab.performed_by || "",
+      notes: lab.notes || "",
+      date_conducted: lab.date_conducted ? lab.date_conducted.slice(0, 10) : todayPH(),
+    });
+  };
+
+  // Save Lab Record (Insert or Update)
   const handleSaveLab = async () => {
     if (!labForm.pet_id || !labForm.test_type) {
       toast.error("Pet and Test Type are required.");
@@ -488,7 +512,10 @@ export default function LabTransactions() {
       date_conducted: labForm.date_conducted || todayPH(),
     };
 
-    const { error } = await db.from("lab_records").insert(payload as any);
+    const { error } = editLab
+      ? await db.from("lab_records").update(payload as any).eq("id", editLab.id)
+      : await db.from("lab_records").insert(payload as any);
+
     setSaving(false);
 
     if (error) {
@@ -496,13 +523,52 @@ export default function LabTransactions() {
       return;
     }
 
-    toast.success(`Laboratory record ${code} recorded.`);
+    toast.success(editLab ? `Laboratory record ${code} updated.` : `Laboratory record ${code} recorded.`);
     setShowAddLab(false);
+    setEditLab(null);
     setLabForm(emptyLabForm);
     invalidate("lab_records");
   };
 
+  // Delete Lab Record
+  const handleDeleteLab = async () => {
+    if (!deleteLabTarget) return;
+
+    setSaving(true);
+    const { error } = await db.from("lab_records").delete().eq("id", deleteLabTarget.id);
+    setSaving(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`Laboratory record ${deleteLabTarget.lab_record_number || "item"} deleted.`);
+    setDeleteLabTarget(null);
+    invalidate("lab_records");
+  };
+
+
+  // Update Lab Record Status
+  const handleUpdateLabStatus = async (labId: string, newStatus: string) => {
+    setSaving(true);
+    const { error } = await db.from("lab_records").update({ status: newStatus } as any).eq("id", labId);
+    setSaving(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`Lab record status updated to ${newStatus}.`);
+    invalidate("lab_records");
+    if (viewLab && viewLab.id === labId) {
+      setViewLab((prev) => (prev ? { ...prev, status: newStatus } : null));
+    }
+  };
+
   // Date Filter Helper
+
   const filterByDate = (dateStr?: string | null) => {
     if (!dateStr) return true;
     const d = dateStr.slice(0, 10);
@@ -1099,20 +1165,38 @@ export default function LabTransactions() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  l.status === "Completed"
-                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold text-xs"
-                                    : l.status === "In Progress"
-                                    ? "bg-sky-50 text-sky-800 border-sky-300 font-semibold text-xs"
-                                    : l.status === "Requested"
-                                    ? "bg-amber-50 text-amber-800 border-amber-300 font-semibold text-xs"
-                                    : "bg-slate-100 text-slate-700 font-semibold text-xs"
-                                }
+                              <Select
+                                value={l.status || "Completed"}
+                                onValueChange={(val) => handleUpdateLabStatus(l.id, val)}
                               >
-                                {l.status || "Completed"}
-                              </Badge>
+                                <SelectTrigger
+                                  className={`h-7 px-2.5 text-xs font-semibold rounded-full border shadow-none cursor-pointer transition-colors w-auto gap-1 ${
+                                    l.status === "Completed"
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                      : l.status === "In Progress"
+                                      ? "bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100"
+                                      : l.status === "Requested"
+                                      ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                                      : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+                                  }`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent align="start">
+                                  <SelectItem value="Requested" className="text-xs font-medium text-amber-800">
+                                    🟡 Requested
+                                  </SelectItem>
+                                  <SelectItem value="In Progress" className="text-xs font-medium text-sky-800">
+                                    🔵 In Progress
+                                  </SelectItem>
+                                  <SelectItem value="Completed" className="text-xs font-medium text-emerald-800">
+                                    🟢 Completed
+                                  </SelectItem>
+                                  <SelectItem value="Cancelled" className="text-xs font-medium text-slate-700">
+                                    ⚪ Cancelled
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                             </TableCell>
                             <TableCell className="text-xs text-right font-mono font-bold">
                               {formatPeso(l.lab_fee)}
@@ -1120,6 +1204,30 @@ export default function LabTransactions() {
                             <TableCell className="text-xs">{l.performed_by || "Clinic Staff"}</TableCell>
                             <TableCell className="text-right pr-4">
                               <div className="flex items-center justify-end gap-1">
+                                {l.status === "Requested" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs bg-sky-50 text-sky-700 border-sky-300 hover:bg-sky-100 font-semibold"
+                                    onClick={() => handleUpdateLabStatus(l.id, "In Progress")}
+                                    title="Mark as In Progress"
+                                  >
+                                    <Clock className="h-3 w-3 mr-1" /> Start
+                                  </Button>
+                                )}
+
+                                {l.status !== "Completed" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 font-semibold"
+                                    onClick={() => handleUpdateLabStatus(l.id, "Completed")}
+                                    title="Mark as Completed"
+                                  >
+                                    <CheckCircle className="h-3 w-3 mr-1" /> Complete
+                                  </Button>
+                                )}
+
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1129,8 +1237,32 @@ export default function LabTransactions() {
                                 >
                                   <Eye className="h-3.5 w-3.5 text-[#1B3A5C]" />
                                 </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openEditLab(l)}
+                                  title="Edit Lab Record"
+                                >
+                                  <Pencil className="h-3.5 w-3.5 text-slate-700" />
+                                </Button>
+
+                                {isAdmin && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                    onClick={() => setDeleteLabTarget(l)}
+                                    title="Delete Lab Record"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
                               </div>
+
                             </TableCell>
+
                           </TableRow>
                         ))
                       ) : (
@@ -1338,12 +1470,21 @@ export default function LabTransactions() {
         </DialogContent>
       </Dialog>
 
-      {/* Record New Lab Test Dialog */}
-      <Dialog open={showAddLab} onOpenChange={setShowAddLab}>
+      {/* Record / Edit Lab Test Dialog */}
+      <Dialog
+        open={showAddLab || !!editLab}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowAddLab(false);
+            setEditLab(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-heading text-base font-bold text-[#1B3A5C] flex items-center gap-2">
-              <FlaskConical className="h-5 w-5 text-[#1FA8A8]" /> Record Laboratory Test
+              <FlaskConical className="h-5 w-5 text-[#1FA8A8]" />
+              {editLab ? "Edit Laboratory Record" : "Record Laboratory Test"}
             </DialogTitle>
           </DialogHeader>
 
@@ -1456,15 +1597,44 @@ export default function LabTransactions() {
           </div>
 
           <DialogFooter className="pt-3 border-t">
-            <Button variant="outline" onClick={() => setShowAddLab(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddLab(false);
+                setEditLab(null);
+              }}
+            >
               Cancel
             </Button>
             <Button onClick={handleSaveLab} disabled={saving} className="bg-[#1FA8A8] hover:bg-[#188787]">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Save Lab Record"}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : editLab ? "Save Changes" : "Save Lab Record"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Lab Record Confirmation Modal */}
+      <Dialog open={!!deleteLabTarget} onOpenChange={() => setDeleteLabTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 font-heading">
+              <AlertTriangle className="h-5 w-5" /> Confirm Delete Laboratory Record
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to permanently delete laboratory record <strong>{deleteLabTarget?.lab_record_number}</strong>?
+          </p>
+          <DialogFooter className="pt-4 border-t">
+            <Button variant="outline" onClick={() => setDeleteLabTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteLab} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Lab Record"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       {/* View Detailed Transaction & Record Payment Modal */}
       <Dialog open={!!viewTxn} onOpenChange={() => setViewTxn(null)}>
@@ -1691,10 +1861,42 @@ export default function LabTransactions() {
                   <span className="text-muted-foreground">Owner Name:</span>
                   <span>{ownerMap.get(viewLab.owner_id || "")?.name || viewLab.owners?.name || "—"}</span>
                 </div>
-                <div className="flex justify-between py-1 border-b">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="font-semibold">{viewLab.status || "Completed"}</span>
+                <div className="flex items-center justify-between py-1 border-b">
+                  <span className="text-muted-foreground">Status (Click to change):</span>
+                  <Select
+                    value={viewLab.status || "Completed"}
+                    onValueChange={(val) => handleUpdateLabStatus(viewLab.id, val)}
+                  >
+                    <SelectTrigger
+                      className={`h-7 px-2.5 text-xs font-semibold rounded-full border shadow-none cursor-pointer transition-colors w-auto gap-1 ${
+                        viewLab.status === "Completed"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                          : viewLab.status === "In Progress"
+                          ? "bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100"
+                          : viewLab.status === "Requested"
+                          ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                          : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+                      }`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="Requested" className="text-xs font-medium text-amber-800">
+                        🟡 Requested
+                      </SelectItem>
+                      <SelectItem value="In Progress" className="text-xs font-medium text-sky-800">
+                        🔵 In Progress
+                      </SelectItem>
+                      <SelectItem value="Completed" className="text-xs font-medium text-emerald-800">
+                        🟢 Completed
+                      </SelectItem>
+                      <SelectItem value="Cancelled" className="text-xs font-medium text-slate-700">
+                        ⚪ Cancelled
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 <div className="flex justify-between py-1 border-b">
                   <span className="text-muted-foreground">Laboratory Fee:</span>
                   <span className="font-bold text-[#1B3A5C] font-mono">{formatPeso(viewLab.lab_fee)}</span>

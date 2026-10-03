@@ -236,16 +236,21 @@ export function buildAdminNotifications(data: {
 }): NotificationItem[] {
   const ownerReplies = (data.messages ?? [])
     .filter((m) => String(m.sent_by || "").toLowerCase() === "owner")
-    .slice(0, 8)
-    .map((m) => ({
-      id: `msg-${m.id}`,
-      title: m.subject || "Owner message",
-      description: String(m.body || "").slice(0, 120),
-      type: "alert" as const,
-      time: formatDate(m.sent_at || m.created_at),
-      sortKey: -450,
-      link: "/admin/messages",
-    }));
+    .slice(0, 10)
+    .map((m) => {
+      const ownerName = m.owners?.name || "Pet Owner";
+      const subject = m.subject || "Question / Inquiry";
+      return {
+        id: `msg-${m.id}`,
+        title: `Question from ${ownerName}`,
+        description: `Subject: "${subject}" — ${String(m.body || "").slice(0, 90)}`,
+        type: "alert" as const,
+        time: formatDate(m.sent_at || m.created_at),
+        sortKey: -450,
+        link: `/admin/messages?ownerId=${m.owner_id || ""}&msgId=${m.id}${m.pet_id ? `&petId=${m.pet_id}` : ""}`,
+      };
+    });
+
 
   return sortNotifications([
     ...ownerReplies,

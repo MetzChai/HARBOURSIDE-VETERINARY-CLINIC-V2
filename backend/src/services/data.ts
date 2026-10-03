@@ -302,6 +302,9 @@ export async function querySelect(opts: {
 }
 
 export async function getAppointmentAvailability(date: string) {
+  const dateObj = new Date(`${date}T12:00:00+08:00`);
+  const isSunday = !isNaN(dateObj.getTime()) && dateObj.getDay() === 0;
+
   const pool = getPool();
   const { rows } = await pool.query(
     `SELECT time, status FROM appointments WHERE date = $1`,
@@ -316,15 +319,34 @@ export async function getAppointmentAvailability(date: string) {
   const tPH = todayPH();
   const nTime = nowTimePH();
 
-  const available = APPOINTMENT_SLOTS.filter((s) => {
-    if (date < tPH) return false;
-    if (date === tPH && s <= nTime) return false;
-    return !taken.has(s);
-  });
-  return { date, slots: [...APPOINTMENT_SLOTS], taken: [...taken], available };
+  const available = isSunday
+    ? []
+    : APPOINTMENT_SLOTS.filter((s) => {
+        if (date < tPH) return false;
+        if (date === tPH && s <= nTime) return false;
+        return !taken.has(s);
+      });
+
+  return {
+    date,
+    isClosed: isSunday,
+    message: isSunday ? "Harbourside Veterinary Clinic is closed on Sundays." : undefined,
+    slots: [...APPOINTMENT_SLOTS],
+    taken: isSunday ? [...APPOINTMENT_SLOTS] : [...taken],
+    available,
+  };
 }
 
 async function assertAppointmentSlotAvailable(date: string, time: string, excludeId?: string) {
+  const dateObj = new Date(`${date}T12:00:00+08:00`);
+  if (!isNaN(dateObj.getTime()) && dateObj.getDay() === 0) {
+    throw new Error("Appointments cannot be requested or scheduled on Sundays. Harbourside Veterinary Clinic is closed on Sundays.");
+  }
+
+  if (!APPOINTMENT_SLOTS.includes(time as any)) {
+    throw new Error("Appointment time must be within clinic operating hours (9:00 AM – 5:00 PM).");
+  }
+
   const tPH = todayPH();
   const nTime = nowTimePH();
   if (date < tPH) {

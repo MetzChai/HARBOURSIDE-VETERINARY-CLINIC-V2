@@ -15,7 +15,7 @@ export const APPOINTMENT_SLOTS = [
   "16:30",
 ] as const;
 
-export const VET_OPTIONS = ["Dr. Rivera", "Dr. Tan"] as const;
+export const VET_OPTIONS = ["Dr. Alfredo B. Badiola Jr."] as const;
 
 export const CARE_TYPES = ["checkup", "treatment", "vaccine", "vaccination", "deworming"] as const;
 export type CareType = (typeof CARE_TYPES)[number];

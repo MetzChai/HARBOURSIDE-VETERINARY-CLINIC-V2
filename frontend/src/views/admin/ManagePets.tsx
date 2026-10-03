@@ -689,6 +689,23 @@ export default function ManagePets() {
         </tbody>
       </table>
 
+      <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Care History Timeline (${careRecords.filter((c) => c.pet_id === pet.id).length})</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Care Type</th><th>Diagnosis / Reason</th><th>Treatment</th><th>Medication / Product Used</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${
+            careRecords
+              .filter((c) => c.pet_id === pet.id)
+              .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+              .map(
+                (c) =>
+                  `<tr><td>${c.date ? formatDate(c.date) : "—"}</td><td><strong>${c.record_type || "Check-up"}</strong></td><td>${c.diagnosis || c.chief_complaint || "—"}</td><td>${c.treatment || "—"}</td><td>${c.medication || c.vaccine_used || c.dewormer_used || "—"}</td><td>${c.notes || "—"}</td></tr>`
+              )
+              .join("") || "<tr><td colSpan='6'>No care history timeline records logged</td></tr>"
+          }
+        </tbody>
+      </table>
+
       <div class="footer-brand">Generated on ${formatNowPH()} (PH Time) | Harbourside Veterinary Clinic</div>
     `;
 

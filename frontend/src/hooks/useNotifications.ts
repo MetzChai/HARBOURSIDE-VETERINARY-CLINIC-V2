@@ -123,10 +123,11 @@ export function useAdminNotifications(): { notifications: NotificationItem[]; is
     enabled: !!user,
     refetchInterval: REFETCH_MS,
     queryFn: async () => {
-      const { data } = await db.from("messages").select("*").order("created_at", { ascending: false });
+      const { data } = await db.from("messages").select("*, owners(name, email, contact)").order("created_at", { ascending: false });
       return (data ?? []) as any[];
     },
   });
+
 
   const notifications = buildAdminNotifications({
     vaccinations,

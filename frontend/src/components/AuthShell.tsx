@@ -10,8 +10,8 @@ interface AuthShellProps {
 const highlights = [
   {
     icon: Stethoscope,
-    title: "Professional Veterinary Care",
-    text: "Certified veterinary specialists & comprehensive check-ups",
+    title: "Dr. Alfredo B. Badiola Jr., DVM",
+    text: "Certified veterinarian · Mon–Sat: 9:00 AM – 5:00 PM (Closed Sunday)",
   },
   {
     icon: Heart,

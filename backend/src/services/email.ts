@@ -1,29 +1,65 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST || "smtp.gmail.com";
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER || process.env.GMAIL_USER;
-  const pass = process.env.SMTP_PASS || process.env.GMAIL_PASS;
-
-  if (!user || !pass) {
+function getResendClient(): Resend | null {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
     return null;
   }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+  return new Resend(apiKey);
 }
 
-function getAppUrl() {
+function getFromAddress(): string {
+  return process.env.EMAIL_FROM?.trim() || "Harbourside Veterinary Clinic <onboarding@resend.dev>";
+}
+
+function getAppUrl(): string {
   const url = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   return url.replace(/\/$/, "");
 }
 
-export async function sendVerificationEmail(email: string, userName: string, token: string) {
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean; data?: unknown; error?: unknown }> {
+  const resend = getResendClient();
+  const from = getFromAddress();
+
+  if (!resend) {
+    console.warn(`[RESEND WARNING] RESEND_API_KEY is not configured. Email to ${opts.to} will be simulated.`);
+    return { success: false, error: "RESEND_API_KEY not configured" };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+    });
+
+    if (error) {
+      console.error(`[RESEND ERROR] Failed to send email to ${opts.to}:`, error);
+      return { success: false, error };
+    }
+
+    console.log(`[EMAIL] Email sent via Resend to ${opts.to} (ID: ${data?.id})`);
+    return { success: true, data };
+  } catch (e) {
+    console.error(`[RESEND EXCEPTION] Exception sending email to ${opts.to}:`, e);
+    return { success: false, error: e };
+  }
+}
+
+export async function sendVerificationEmail(email: string, userName: string, token: string): Promise<void> {
   const appUrl = getAppUrl();
   const verifyLink = `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
@@ -32,7 +68,7 @@ export async function sendVerificationEmail(email: string, userName: string, tok
       <h2 style="color: #0f766e; text-align: center;">Harbourside Veterinary Clinic</h2>
       <h3 style="color: #1e293b;">Email Verification Required</h3>
       <p>Hello <strong>${userName || "Valued Pet Owner"}</strong>,</p>
-      <p>Thank you for registering with Harbourside Veterinary Clinic. Please verify your Gmail address to activate your pet record management account.</p>
+      <p>Thank you for registering with Harbourside Veterinary Clinic. Please verify your email address to activate your pet record management account.</p>
       
       <div style="text-align: center; margin: 30px 0;">
         <a href="${verifyLink}" style="background-color: #0f766e; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
@@ -45,18 +81,17 @@ export async function sendVerificationEmail(email: string, userName: string, tok
     </div>
   `;
 
-  const transporter = getTransporter();
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: `"Harbourside Veterinary Clinic" <${process.env.SMTP_USER || process.env.GMAIL_USER}>`,
-        to: email,
-        subject: "Verify Your Email - Harbourside Veterinary Clinic",
-        html,
-      });
+  const resend = getResendClient();
+  if (resend) {
+    const res = await sendEmail({
+      to: email,
+      subject: "Verify Your Email - Harbourside Veterinary Clinic",
+      html,
+    });
+    if (res.success) {
       console.log(`[EMAIL] Verification email sent to ${email}`);
-    } catch (e) {
-      console.error("[EMAIL ERROR] Failed to send verification email:", e);
+    } else {
+      console.error(`[EMAIL ERROR] Failed to send verification email to ${email}`);
     }
   } else {
     console.log(`\n========================================`);
@@ -67,7 +102,7 @@ export async function sendVerificationEmail(email: string, userName: string, tok
   }
 }
 
-export async function sendPasswordResetEmail(email: string, userName: string, token: string) {
+export async function sendPasswordResetEmail(email: string, userName: string, token: string): Promise<void> {
   const appUrl = getAppUrl();
   const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
@@ -89,18 +124,17 @@ export async function sendPasswordResetEmail(email: string, userName: string, to
     </div>
   `;
 
-  const transporter = getTransporter();
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: `"Harbourside Veterinary Clinic" <${process.env.SMTP_USER || process.env.GMAIL_USER}>`,
-        to: email,
-        subject: "Reset Your Password - Harbourside Veterinary Clinic",
-        html,
-      });
+  const resend = getResendClient();
+  if (resend) {
+    const res = await sendEmail({
+      to: email,
+      subject: "Reset Your Password - Harbourside Veterinary Clinic",
+      html,
+    });
+    if (res.success) {
       console.log(`[EMAIL] Password reset email sent to ${email}`);
-    } catch (e) {
-      console.error("[EMAIL ERROR] Failed to send password reset email:", e);
+    } else {
+      console.error(`[EMAIL ERROR] Failed to send password reset email to ${email}`);
     }
   } else {
     console.log(`\n========================================`);
@@ -111,20 +145,12 @@ export async function sendPasswordResetEmail(email: string, userName: string, to
   }
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 export async function sendClinicNoticeEmail(
   email: string,
   userName: string,
   subject: string,
   body: string
-) {
+): Promise<void> {
   const portalLink = `${getAppUrl()}/user/messages`;
   const htmlBody = escapeHtml(body).replace(/\n/g, "<br />");
 
@@ -142,18 +168,17 @@ export async function sendClinicNoticeEmail(
     </div>
   `;
 
-  const transporter = getTransporter();
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: `"Harbourside Veterinary Clinic" <${process.env.SMTP_USER || process.env.GMAIL_USER}>`,
-        to: email,
-        subject,
-        html,
-      });
+  const resend = getResendClient();
+  if (resend) {
+    const res = await sendEmail({
+      to: email,
+      subject,
+      html,
+    });
+    if (res.success) {
       console.log(`[EMAIL] Clinic notice sent to ${email}`);
-    } catch (e) {
-      console.error("[EMAIL ERROR] Failed to send clinic notice:", e);
+    } else {
+      console.error(`[EMAIL ERROR] Failed to send clinic notice to ${email}`);
     }
   } else {
     console.log(`\n========================================`);

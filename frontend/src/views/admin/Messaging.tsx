@@ -103,6 +103,7 @@ export default function Messaging() {
   const [body, setBody] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [sending, setSending] = useState(false);
+  const [referencedMsgId, setReferencedMsgId] = useState<string | null>(null);
 
   // History State
   const [search, setSearch] = useState("");
@@ -116,18 +117,46 @@ export default function Messaging() {
 
   const searchParams = useSearchParams();
 
-  // URL Params Pre-fill
+  // URL Params Pre-fill (e.g. from Notification Bell click)
   useEffect(() => {
     const pOwner = searchParams.get("ownerId");
     const pPet = searchParams.get("petId");
     const pType = searchParams.get("type");
+    const pMsgId = searchParams.get("msgId");
 
     if (pOwner) setSelectedOwnerId(pOwner);
     if (pPet) setSelectedPetId(pPet);
-    if (pType) {
-      setMessageType(pType);
+    if (pType) setMessageType(pType);
+    if (pMsgId) setReferencedMsgId(pMsgId);
+
+    if (pOwner || pMsgId) {
+      setActiveTab("compose");
     }
   }, [searchParams]);
+
+  // Find target referenced question/message from owner
+  const targetQuestion = useMemo(() => {
+    if (referencedMsgId) {
+      const found = messages.find((m) => m.id === referencedMsgId);
+      if (found) return found;
+    }
+    if (selectedOwnerId && selectedOwnerId !== "ALL_OWNERS") {
+      return messages.find(
+        (m) => m.owner_id === selectedOwnerId && String(m.sent_by || "").toLowerCase() === "owner"
+      );
+    }
+    return null;
+  }, [referencedMsgId, selectedOwnerId, messages]);
+
+  // Auto pre-fill Re: subject line when answering an owner question
+  useEffect(() => {
+    if (targetQuestion && targetQuestion.subject) {
+      const orig = targetQuestion.subject.trim();
+      const reSubj = /^re:/i.test(orig) ? orig : `Re: ${orig}`;
+      setSubject(reSubj);
+    }
+  }, [targetQuestion]);
+
 
   // Filtered Pets for Selected Owner
   const ownerPets = useMemo(() => {
@@ -383,6 +412,81 @@ export default function Messaging() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Form Column (lg:col-span-7) */}
             <div className="lg:col-span-7 space-y-6">
+              {/* Owner Question / Inquiry Context Card */}
+              {targetQuestion && (
+                <Card className="border-2 border-[#1FA8A8] bg-gradient-to-r from-[#E8F6F6] via-white to-[#E8F6F6] shadow-md rounded-xl overflow-hidden mb-4">
+                  <CardHeader className="py-3 px-5 bg-[#1FA8A8]/10 border-b border-[#1FA8A8]/20 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-[#1FA8A8] text-white font-semibold">
+                        <MessageSquare className="h-3 w-3 mr-1 inline" /> Owner Question / Inquiry
+                      </Badge>
+                      <span className="text-xs font-semibold text-[#1B3A5C]">
+                        Received {formatDate(targetQuestion.sent_at || targetQuestion.created_at)}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-slate-500 hover:text-slate-800"
+                      onClick={() => {
+                        setReferencedMsgId(null);
+                      }}
+                    >
+                      Clear Question Context
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    {/* Contact Card */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Asked By (Owner)</span>
+                        <span className="text-xs font-bold text-[#1B3A5C] block">
+                          {ownerMap.get(targetQuestion.owner_id || "")?.name || targetQuestion.owners?.name || "Pet Owner"}
+                        </span>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Email Address</span>
+                        <div className="flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 text-[#1FA8A8] shrink-0" />
+                          <a
+                            href={`mailto:${ownerMap.get(targetQuestion.owner_id || "")?.email || targetQuestion.email || ""}`}
+                            className="text-xs font-semibold text-[#1FA8A8] hover:underline truncate"
+                          >
+                            {ownerMap.get(targetQuestion.owner_id || "")?.email || targetQuestion.email || "No email on file"}
+                          </a>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Phone / Contact</span>
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-[#1FA8A8] shrink-0" />
+                          <span className="text-xs font-semibold text-slate-700">
+                            {ownerMap.get(targetQuestion.owner_id || "")?.contact || targetQuestion.phone || "No phone number"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question Content */}
+                    <div className="space-y-1.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1B3A5C]">
+                          Question Subject: {targetQuestion.subject || "General Question"}
+                        </span>
+                        {targetQuestion.pet_id && (
+                          <Badge variant="outline" className="text-[10px] bg-white">
+                            Pet: {petMap.get(targetQuestion.pet_id)?.name || "Pet"}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="p-3 bg-white rounded-lg border text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {targetQuestion.body}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card className="border border-border/80 shadow-sm rounded-xl overflow-hidden">
                 <CardHeader className="pb-3 bg-slate-50/60 border-b">
                   <CardTitle className="font-heading text-base font-bold text-[#1B3A5C] flex items-center gap-2">
@@ -413,7 +517,32 @@ export default function Messaging() {
                           ))}
                         </SelectContent>
                       </Select>
+
+                      {selectedOwnerId && selectedOwnerId !== "ALL_OWNERS" && (
+                        <div className="mt-2 text-xs bg-[#E8F6F6] text-[#1B3A5C] p-2.5 rounded-lg border border-[#1FA8A8]/30 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="font-bold">{ownerMap.get(selectedOwnerId)?.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px]">
+                            {ownerMap.get(selectedOwnerId)?.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="h-3 w-3 text-[#1FA8A8]" />
+                                <a href={`mailto:${ownerMap.get(selectedOwnerId)?.email}`} className="hover:underline text-[#1FA8A8]">
+                                  {ownerMap.get(selectedOwnerId)?.email}
+                                </a>
+                              </span>
+                            )}
+                            {ownerMap.get(selectedOwnerId)?.contact && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="h-3 w-3 text-[#1FA8A8]" />
+                                {ownerMap.get(selectedOwnerId)?.contact}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
+
 
                     {/* Pet Filter */}
                     <div className="space-y-1.5">

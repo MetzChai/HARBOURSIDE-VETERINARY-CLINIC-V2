@@ -48,6 +48,8 @@ app.listen(port, () => {
   console.log(`Frontend URL: ${frontendUrl}`);
   const gemini = process.env.GEMINI_API_KEY?.trim();
   console.log(`Gemini AI: ${gemini ? "configured" : "not set (PawBot uses local fallback)"}`);
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  console.log(`Resend Email Service: ${resendKey ? "configured" : "not set (emails will be simulated in console)"}`);
 
   import("./services/message-dispatch.js")
     .then(({ processPendingScheduledMessages }) => {

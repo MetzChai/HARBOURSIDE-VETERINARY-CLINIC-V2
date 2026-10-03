@@ -137,8 +137,10 @@ export default function Schedule() {
 
     const tPH = todayPH();
     const nTime = nowTimePH();
+    const isSunday = new Date(`${form.date}T12:00:00+08:00`).getDay() === 0;
+
     APPOINTMENT_SLOTS.forEach((s) => {
-      if (form.date < tPH) set.add(s);
+      if (isSunday || form.date < tPH) set.add(s);
       if (form.date === tPH && s <= nTime) set.add(s);
     });
 
@@ -233,6 +235,12 @@ export default function Schedule() {
 
     if (isBeforeTodayPH(form.date)) {
       toast.error("Appointments cannot be booked in the past.");
+      return;
+    }
+
+    const dateObj = new Date(`${form.date}T12:00:00+08:00`);
+    if (!isNaN(dateObj.getTime()) && dateObj.getDay() === 0) {
+      toast.error("Harbourside Veterinary Clinic is closed on Sundays. Please select a date from Monday to Saturday.");
       return;
     }
 
