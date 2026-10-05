@@ -67,6 +67,9 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
           <h1 className="font-heading text-3xl xl:text-4xl font-extrabold text-white tracking-tight mt-6 leading-tight">
             Harbourside <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-200 via-white to-rose-300">Veterinary Clinic</span>
           </h1>
+          <p className="text-rose-200/95 font-semibold text-sm xl:text-base mt-2 tracking-wide font-heading">
+            Your VET for a healthy PET!
+          </p>
 
           <p className="text-white/80 mt-3 text-sm leading-relaxed max-w-md font-normal">
             Compassionate, state-of-the-art medical care and personalized wellness for your beloved companions.
@@ -108,8 +111,11 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
       <div className="flex-1 flex items-center justify-center px-6 py-12 bg-slate-50 border-l border-slate-200">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center mb-8 lg:items-start lg:mb-6">
-            <div className="lg:hidden mb-5">
+            <div className="lg:hidden mb-5 flex flex-col items-center">
               <BrandLogo size="lg" />
+              <p className="text-xs font-semibold text-rose-600 mt-2 font-heading tracking-wide">
+                Your VET for a healthy PET!
+              </p>
             </div>
             <h1 className="font-heading text-2xl font-bold text-[#1B3A5C] tracking-tight">{title}</h1>
             {subtitle && (

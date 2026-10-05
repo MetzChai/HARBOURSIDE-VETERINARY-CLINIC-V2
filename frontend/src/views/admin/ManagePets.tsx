@@ -71,12 +71,26 @@ type PetRow = {
   health_status?: string | null;
   cause_of_death?: string | null;
   deceased_date?: string | null;
+  cause_details?: string | null;
+  place_of_death?: string | null;
+  death_notes?: string | null;
+  death_recorded_by?: string | null;
   owners?: { name: string; contact?: string; email?: string } | null;
 };
 
 const ITEMS_PER_PAGE = 8;
 const SPECIES_OPTIONS = ["Dog", "Cat", "Bird", "Rabbit", "Reptile", "Other"];
-const STATUS_OPTIONS = ["Healthy", "Under Treatment", "Recovered", "Deceased"];
+const STATUS_OPTIONS = ["Healthy", "Treatment", "Recovered", "Deceased"];
+const CAUSE_OF_DEATH_OPTIONS = [
+  "Natural Causes",
+  "Disease/Illness",
+  "Accident/Trauma",
+  "Surgical/Procedure Complication",
+  "Euthanasia",
+  "Unknown",
+  "Other",
+];
+const PLACE_OF_DEATH_OPTIONS = ["Clinic", "Home", "Other", "Unknown"];
 
 export default function ManagePets() {
   const { role, user } = useAuth();
@@ -187,6 +201,10 @@ export default function ManagePets() {
     status: "Healthy",
     cause_of_death: "",
     deceased_date: "",
+    cause_details: "",
+    place_of_death: "",
+    death_notes: "",
+    death_recorded_by: "",
   };
 
   const [form, setForm] = useState(emptyForm);
@@ -204,6 +222,7 @@ export default function ManagePets() {
 
   const openEdit = (pet: PetRow) => {
     setEditPet(pet);
+    const staffName = user?.user_metadata?.full_name || user?.email || "Clinic Staff";
     setForm({
       pet_code: pet.pet_code || `PET-${pet.id.slice(0, 6)}`,
       owner_id: pet.owner_id,
@@ -223,7 +242,11 @@ export default function ManagePets() {
       image_url: pet.image_url || "",
       status: pet.health_status || (pet.status === "deceased" ? "Deceased" : "Healthy"),
       cause_of_death: pet.cause_of_death || "",
-      deceased_date: pet.deceased_date || "",
+      deceased_date: pet.deceased_date ? String(pet.deceased_date).slice(0, 10) : "",
+      cause_details: pet.cause_details || "",
+      place_of_death: pet.place_of_death || "",
+      death_notes: pet.death_notes || "",
+      death_recorded_by: pet.death_recorded_by || staffName,
     });
   };
 
@@ -429,8 +452,30 @@ export default function ManagePets() {
       return;
     }
 
+    const isDeceased = form.status === "Deceased";
+
+    if (isDeceased) {
+      if (!form.deceased_date) {
+        toast.error("Please enter the date of death.");
+        return;
+      }
+      if (form.deceased_date > todayPH()) {
+        toast.error("Date of death cannot be in the future.");
+        return;
+      }
+      if (!form.cause_of_death) {
+        toast.error("Please select a cause of death.");
+        return;
+      }
+      if (form.cause_of_death === "Other" && !form.cause_details.trim()) {
+        toast.error("Please enter details for the cause of death.");
+        return;
+      }
+    }
+
     setSaving(true);
     const code = form.pet_code || `PET-${Date.now().toString().slice(-6)}`;
+    const staffName = user?.user_metadata?.full_name || user?.email || "Clinic Staff";
 
     const payload = {
       pet_code: code,
@@ -450,9 +495,13 @@ export default function ManagePets() {
       notes: form.notes.trim() || null,
       image_url: form.image_url || null,
       health_status: form.status,
-      status: form.status === "Deceased" ? "deceased" : "available",
-      cause_of_death: form.status === "Deceased" ? form.cause_of_death.trim() || null : null,
-      deceased_date: form.status === "Deceased" ? form.deceased_date || todayPH() : null,
+      status: isDeceased ? "deceased" : "available",
+      cause_of_death: isDeceased ? form.cause_of_death : (editPet?.cause_of_death || null),
+      deceased_date: isDeceased ? form.deceased_date : (editPet?.deceased_date || null),
+      cause_details: isDeceased ? (form.cause_details.trim() || null) : (editPet?.cause_details || null),
+      place_of_death: isDeceased ? (form.place_of_death || null) : (editPet?.place_of_death || null),
+      death_notes: isDeceased ? (form.death_notes.trim() || null) : (editPet?.death_notes || null),
+      death_recorded_by: isDeceased ? (form.death_recorded_by || staffName) : (editPet?.death_recorded_by || null),
     };
 
     const { error } = editPet
@@ -628,6 +677,24 @@ export default function ManagePets() {
         <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Current Health Status</span>${pet.health_status || pet.status || "Healthy"}</div>
         <div><span style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; display:block;">Allergies & Existing Conditions</span>Allergies: ${pet.allergies || "None"} | Conditions: ${pet.existing_conditions || "None"}</div>
       </div>
+
+      ${
+        pet.health_status === "Deceased" || pet.status === "deceased" || pet.deceased_date
+          ? `
+            <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 style="color: #9f1239; font-size: 13px; margin: 0 0 8px; font-weight: bold; border-bottom: 1px solid #fda4af; padding-bottom: 4px;">Death Information</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+                <div><span style="color: #9f1239; font-weight: bold; display:block;">Date of Death</span>${pet.deceased_date ? formatDate(pet.deceased_date) : "—"}</div>
+                <div><span style="color: #9f1239; font-weight: bold; display:block;">Cause of Death</span>${pet.cause_of_death || "—"}</div>
+                <div><span style="color: #9f1239; font-weight: bold; display:block;">Place of Death</span>${pet.place_of_death || "—"}</div>
+                <div><span style="color: #9f1239; font-weight: bold; display:block;">Recorded By</span>${pet.death_recorded_by || "Clinic Staff"}</div>
+              </div>
+              ${pet.cause_details ? `<div style="margin-top: 6px; font-size: 11px;"><strong>Cause Details:</strong> ${pet.cause_details}</div>` : ""}
+              ${pet.death_notes ? `<div style="margin-top: 4px; font-size: 11px;"><strong>Additional Notes:</strong> ${pet.death_notes}</div>` : ""}
+            </div>
+          `
+          : ""
+      }
 
       <h3 style="color: #1B3A5C; font-size: 14px; font-weight: bold; border-bottom: 2px solid #E8EEF4; padding-bottom: 4px; margin-top: 20px; margin-bottom: 8px;">Check-up & Exam Records (${checkupList.length})</h3>
       <table>
@@ -1139,21 +1206,97 @@ export default function ManagePets() {
             </div>
 
             {form.status === "Deceased" && (
-              <div className="grid grid-cols-2 gap-3 p-3 rounded bg-rose-50 border border-rose-200">
+              <div className="space-y-3 p-3.5 rounded-lg bg-rose-50/70 border border-rose-200">
+                <div className="border-b border-rose-200 pb-1.5 flex items-center justify-between">
+                  <h4 className="font-semibold text-rose-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-rose-600" /> Death Information
+                  </h4>
+                  <Badge variant="destructive" className="bg-rose-600 text-[10px]">Deceased</Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-rose-900">Date of Death *</Label>
+                    <Input
+                      type="date"
+                      max={todayPH()}
+                      className="bg-white"
+                      value={form.deceased_date}
+                      onChange={(e) => setForm({ ...form, deceased_date: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-rose-900">Cause of Death *</Label>
+                    <Select
+                      value={form.cause_of_death}
+                      onValueChange={(v) => setForm({ ...form, cause_of_death: v })}
+                    >
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Select cause" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CAUSE_OF_DEATH_OPTIONS.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-rose-900">Place of Death</Label>
+                    <Select
+                      value={form.place_of_death}
+                      onValueChange={(v) => setForm({ ...form, place_of_death: v })}
+                    >
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Select place" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PLACE_OF_DEATH_OPTIONS.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-rose-900">Recorded By</Label>
+                    <Input
+                      disabled
+                      value={form.death_recorded_by || user?.user_metadata?.full_name || user?.email || "Clinic Staff"}
+                      className="bg-slate-100 text-slate-700 text-xs cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <Label className="text-xs text-rose-800">Cause of Death</Label>
-                  <Input
-                    placeholder="e.g. Severe organ failure"
-                    value={form.cause_of_death}
-                    onChange={(e) => setForm({ ...form, cause_of_death: e.target.value })}
+                  <Label className="text-xs font-semibold text-rose-900">
+                    Cause Details {form.cause_of_death === "Other" ? "*" : "(Optional)"}
+                  </Label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Provide additional context about the cause (e.g. Severe respiratory illness with complications)"
+                    className="bg-white text-xs"
+                    value={form.cause_details}
+                    onChange={(e) => setForm({ ...form, cause_details: e.target.value })}
                   />
                 </div>
+
                 <div className="space-y-1">
-                  <Label className="text-xs text-rose-800">Deceased Date</Label>
-                  <Input
-                    type="date"
-                    value={form.deceased_date}
-                    onChange={(e) => setForm({ ...form, deceased_date: e.target.value })}
+                  <Label className="text-xs font-semibold text-rose-900">Additional Notes (Optional)</Label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Any administrative or clinical notes regarding pet death..."
+                    className="bg-white text-xs"
+                    value={form.death_notes}
+                    onChange={(e) => setForm({ ...form, death_notes: e.target.value })}
                   />
                 </div>
               </div>
@@ -1237,6 +1380,50 @@ export default function ManagePets() {
                       <div><span className="text-muted-foreground text-xs block">Existing Conditions</span> {viewPet.existing_conditions || "None"}</div>
                     </div>
                   </div>
+
+                  {(viewPet.health_status === "Deceased" || viewPet.status === "deceased" || viewPet.deceased_date) && (
+                    <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/60 space-y-3">
+                      <div className="flex items-center justify-between border-b border-rose-200 pb-2">
+                        <h4 className="font-heading font-bold text-rose-900 text-sm flex items-center gap-1.5">
+                          <AlertTriangle className="h-4 w-4 text-rose-600" /> Death Information
+                        </h4>
+                        <Badge variant="destructive" className="bg-rose-600">Deceased</Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="text-rose-700/80 font-medium block">Date of Death</span>
+                          <strong className="text-rose-950">{viewPet.deceased_date ? formatDate(viewPet.deceased_date) : "—"}</strong>
+                        </div>
+                        <div>
+                          <span className="text-rose-700/80 font-medium block">Cause of Death</span>
+                          <strong className="text-rose-950">{viewPet.cause_of_death || "—"}</strong>
+                        </div>
+                        <div>
+                          <span className="text-rose-700/80 font-medium block">Place of Death</span>
+                          <strong className="text-rose-950">{viewPet.place_of_death || "—"}</strong>
+                        </div>
+                        <div>
+                          <span className="text-rose-700/80 font-medium block">Recorded By</span>
+                          <strong className="text-rose-950">{viewPet.death_recorded_by || "Clinic Staff"}</strong>
+                        </div>
+                      </div>
+
+                      {viewPet.cause_details && (
+                        <div className="text-xs pt-1.5 border-t border-rose-200/60">
+                          <span className="text-rose-700/80 font-semibold block mb-0.5">Cause Details</span>
+                          <p className="text-rose-950 whitespace-pre-wrap">{viewPet.cause_details}</p>
+                        </div>
+                      )}
+
+                      {viewPet.death_notes && (
+                        <div className="text-xs pt-1.5 border-t border-rose-200/60">
+                          <span className="text-rose-700/80 font-semibold block mb-0.5">Additional Notes</span>
+                          <p className="text-rose-950 whitespace-pre-wrap">{viewPet.death_notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {viewPet.notes && (
                     <div className="p-3 rounded-lg border bg-muted/40 text-xs">

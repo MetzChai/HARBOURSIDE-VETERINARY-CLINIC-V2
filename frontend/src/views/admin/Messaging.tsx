@@ -175,51 +175,51 @@ export default function Messaging() {
 
     switch (type) {
       case "Appointment Approved":
-        setSubject(`Appointment Approved - Harbourside Veterinary Clinic`);
+        setSubject(`Appointment Approved - Harbourside Veterinary Services`);
         setBody(
-          `Dear ${ownerName},\n\nWe are pleased to inform you that your appointment request for ${petName} has been APPROVED.\n\nPlease arrive 10 minutes prior to your scheduled time.\n\nThank you,\nHarbourside Veterinary Clinic`
+          `Dear ${ownerName},\n\nWe are pleased to inform you that your appointment request for ${petName} has been APPROVED.\n\nPlease arrive 10 minutes prior to your scheduled time.\n\nThank you,\nHarbourside Veterinary Services`
         );
         break;
 
       case "Appointment Reminder":
         setSubject(`Appointment Reminder for ${petName}`);
         setBody(
-          `Reminder: ${petName} has an upcoming appointment scheduled at Harbourside Veterinary Clinic.\n\nIf you need to reschedule, please contact us or update via the online portal.\n\nThank you!`
+          `Reminder: ${petName} has an upcoming appointment scheduled at Harbourside Veterinary Services.\n\nIf you need to reschedule, please contact us or update via the online portal.\n\nThank you!`
         );
         break;
 
       case "Appointment Rescheduled":
-        setSubject(`Appointment Rescheduled - Harbourside Veterinary Clinic`);
+        setSubject(`Appointment Rescheduled - Harbourside Veterinary Services`);
         setBody(
-          `Dear ${ownerName},\n\nYour appointment for ${petName} has been rescheduled. Please check your online portal or schedule for updated date and time details.\n\nHarbourside Veterinary Clinic`
+          `Dear ${ownerName},\n\nYour appointment for ${petName} has been rescheduled. Please check your online portal or schedule for updated date and time details.\n\nHarbourside Veterinary Services`
         );
         break;
 
       case "Appointment Cancelled":
         setSubject(`Appointment Cancellation Notice`);
         setBody(
-          `Dear ${ownerName},\n\nYour appointment for ${petName} at Harbourside Veterinary Clinic has been cancelled.\n\nPlease contact us if you would like to book a new slot.`
+          `Dear ${ownerName},\n\nYour appointment for ${petName} at Harbourside Veterinary Services has been cancelled.\n\nPlease contact us if you would like to book a new slot.`
         );
         break;
 
       case "Vaccination Reminder":
         setSubject(`Vaccination Reminder for ${petName}`);
         setBody(
-          `Dear ${ownerName},\n\nThis is a friendly reminder that ${petName} is due for a routine vaccination.\n\nKeeping vaccinations up to date protects ${petName} against preventable diseases. Book an appointment today!\n\nHarbourside Veterinary Clinic`
+          `Dear ${ownerName},\n\nThis is a friendly reminder that ${petName} is due for a routine vaccination.\n\nKeeping vaccinations up to date protects ${petName} against preventable diseases. Book an appointment today!\n\nHarbourside Veterinary Services`
         );
         break;
 
       case "Deworming Reminder":
         setSubject(`Deworming Due Reminder for ${petName}`);
         setBody(
-          `Dear ${ownerName},\n\nThis is a friendly reminder that ${petName} is due for scheduled deworming treatment.\n\nVisit Harbourside Veterinary Clinic to ensure complete parasite protection.`
+          `Dear ${ownerName},\n\nThis is a friendly reminder that ${petName} is due for scheduled deworming treatment.\n\nVisit Harbourside Veterinary Services to ensure complete parasite protection.`
         );
         break;
 
       case "General Announcement":
-        setSubject(`Clinic Announcement - Harbourside Veterinary Clinic`);
+        setSubject(`Clinic Announcement - Harbourside Veterinary Services`);
         setBody(
-          `Dear Pet Owners,\n\nHarbourside Veterinary Clinic announces regular operating hours and enhanced pet care services. Visit our portal for updates and scheduling.\n\nWarm regards,\nClinic Staff`
+          `Dear Pet Owners,\n\nHarbourside Veterinary Services announces regular operating hours and enhanced pet care services. Visit our portal for updates and scheduling.\n\nWarm regards,\nClinic Staff`
         );
         break;
 

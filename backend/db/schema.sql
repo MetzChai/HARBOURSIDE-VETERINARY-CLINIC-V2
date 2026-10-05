@@ -172,6 +172,10 @@ ALTER TABLE pets ADD COLUMN IF NOT EXISTS allergies text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS existing_conditions text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE pets ADD COLUMN IF NOT EXISTS health_status text NOT NULL DEFAULT 'Healthy';
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS cause_details text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS place_of_death text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS death_notes text;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS death_recorded_by text;
 
 UPDATE pets SET health_status = 'Deceased' WHERE status::text = 'deceased' AND health_status = 'Healthy';
 
@@ -527,3 +531,20 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 UPDATE users SET email_verified = true, must_verify_gmail = false WHERE google_id IS NOT NULL;
 UPDATE users SET email_verified = true, must_verify_gmail = false
 WHERE id IN (SELECT user_id FROM user_roles WHERE role::text IN ('admin', 'staff'));
+
+-- ===== clinic_knowledge =====
+CREATE TABLE IF NOT EXISTS clinic_knowledge (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category text NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  keywords text[] NOT NULL DEFAULT '{}',
+  source text NOT NULL DEFAULT 'official_clinic_information',
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_clinic_knowledge_updated ON clinic_knowledge;
+CREATE TRIGGER trg_clinic_knowledge_updated BEFORE UPDATE ON clinic_knowledge FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+

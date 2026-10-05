@@ -2,46 +2,60 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-function storageKey(userId: string) {
-  return `harbourside-notif-read-${userId}`;
+const GLOBAL_KEY = "harbourside-notif-read-global";
+
+function userKey(userId: string | undefined) {
+  return userId ? `harbourside-notif-read-${userId}` : GLOBAL_KEY;
+}
+
+function getStoredReadIds(userId: string | undefined): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  const set = new Set<string>();
+  try {
+    const rawGlobal = localStorage.getItem(GLOBAL_KEY);
+    if (rawGlobal) {
+      (JSON.parse(rawGlobal) as string[]).forEach((id) => set.add(id));
+    }
+    if (userId) {
+      const rawUser = localStorage.getItem(userKey(userId));
+      if (rawUser) {
+        (JSON.parse(rawUser) as string[]).forEach((id) => set.add(id));
+      }
+    }
+  } catch (_e) {}
+  return set;
+}
+
+function persistReadIds(set: Set<string>, userId: string | undefined) {
+  if (typeof window === "undefined") return;
+  const list = Array.from(set);
+  try {
+    localStorage.setItem(GLOBAL_KEY, JSON.stringify(list));
+    if (userId) {
+      localStorage.setItem(userKey(userId), JSON.stringify(list));
+    }
+  } catch (_e) {}
 }
 
 export function useNotificationRead(userId: string | undefined) {
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds(userId));
+  const [loaded, setLoaded] = useState(true);
 
   useEffect(() => {
-    if (!userId) {
-      setReadIds(new Set());
-      setLoaded(true);
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(storageKey(userId));
-      setReadIds(raw ? new Set(JSON.parse(raw) as string[]) : new Set());
-    } catch {
-      setReadIds(new Set());
-    }
+    const current = getStoredReadIds(userId);
+    setReadIds((prev) => {
+      const merged = new Set([...prev, ...current]);
+      persistReadIds(merged, userId);
+      return merged;
+    });
     setLoaded(true);
   }, [userId]);
-
-  const save = useCallback(
-    (next: Set<string>) => {
-      if (userId) {
-        localStorage.setItem(storageKey(userId), JSON.stringify([...next]));
-      }
-      setReadIds(next);
-    },
-    [userId]
-  );
 
   const markRead = useCallback(
     (id: string) => {
       setReadIds((prev) => {
         const next = new Set(prev).add(id);
-        if (userId) {
-          localStorage.setItem(storageKey(userId), JSON.stringify([...next]));
-        }
+        persistReadIds(next, userId);
         return next;
       });
     },
@@ -50,9 +64,14 @@ export function useNotificationRead(userId: string | undefined) {
 
   const markAllRead = useCallback(
     (ids: string[]) => {
-      save(new Set(ids));
+      setReadIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        persistReadIds(next, userId);
+        return next;
+      });
     },
-    [save]
+    [userId]
   );
 
   const isRead = useCallback((id: string) => readIds.has(id), [readIds]);
@@ -64,3 +83,4 @@ export function useNotificationRead(userId: string | undefined) {
 
   return { loaded, isRead, markRead, markAllRead, unreadCount };
 }
+

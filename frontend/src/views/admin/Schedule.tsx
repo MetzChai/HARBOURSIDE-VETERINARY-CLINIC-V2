@@ -32,7 +32,7 @@ import Link from "next/link";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH, todayPH, isBeforeTodayPH, nowTimePH, formatDateTimePH } from "@/lib/datetime";
+import { formatNowPH, todayPH, isBeforeTodayPH, nowTimePH, formatDateTimePH, toDateOnly } from "@/lib/datetime";
 import {
   APPOINTMENT_SLOTS,
   formatTimeSlot,
@@ -177,7 +177,7 @@ export default function Schedule() {
       }
 
       // Date Filter
-      if (filterDate && a.date !== filterDate) return false;
+      if (filterDate && toDateOnly(a.date) !== toDateOnly(filterDate)) return false;
 
       // Pet Filter
       if (filterPetId !== "all" && a.pet_id !== filterPetId) return false;
@@ -511,8 +511,31 @@ export default function Schedule() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1 border-t">
                 {/* Date Filter */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Filter by Date</Label>
-                  <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Filter by Date</Label>
+                    {filterDate && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterDate("")}
+                        className="text-[10px] text-primary hover:underline font-medium"
+                      >
+                        Clear Date
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="h-9 text-xs" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-xs shrink-0"
+                      onClick={() => setFilterDate(todayPH())}
+                      title="Filter Today"
+                    >
+                      Today
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Pet Filter */}

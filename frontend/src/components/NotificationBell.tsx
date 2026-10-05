@@ -95,7 +95,7 @@ export default function NotificationBell({ notifications, userId, isLoading }: P
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-80">
+        <div className="max-h-[360px] overflow-y-auto">
           {isLoading && notifications.length === 0 ? (
             <div className="flex justify-center p-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -114,7 +114,7 @@ export default function NotificationBell({ notifications, userId, isLoading }: P
                     key={n.id}
                     onClick={() => handleClick(n)}
                     className={`w-full flex items-start gap-3 p-3 text-left hover:bg-muted/50 transition-colors ${
-                      !read ? "bg-brand-navy-light/60" : ""
+                      !read ? "bg-brand-navy-light/60 font-semibold" : ""
                     }`}
                   >
                     <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${colorMap[n.type]}`}>
@@ -125,13 +125,13 @@ export default function NotificationBell({ notifications, userId, isLoading }: P
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
                       <p className="text-[10px] text-muted-foreground mt-1">{n.time}</p>
                     </div>
-                      {!read && <div className="h-2 w-2 rounded-full bg-brand-teal mt-1.5 shrink-0" />}
+                    {!read && <div className="h-2 w-2 rounded-full bg-brand-teal mt-1.5 shrink-0" />}
                   </button>
                 );
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

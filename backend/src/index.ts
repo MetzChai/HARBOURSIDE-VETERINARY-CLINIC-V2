@@ -47,6 +47,8 @@ app.listen(port, () => {
   console.log(`Backend running at http://localhost:${port}`);
   console.log(`Frontend URL: ${frontendUrl}`);
   const gemini = process.env.GEMINI_API_KEY?.trim();
+  const geminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+  console.log(`[backend] Gemini model: ${geminiModel}`);
   console.log(`Gemini AI: ${gemini ? "configured" : "not set (PawBot uses local fallback)"}`);
   const resendKey = process.env.RESEND_API_KEY?.trim();
   console.log(`Resend Email Service: ${resendKey ? "configured" : "not set (emails will be simulated in console)"}`);
@@ -59,4 +61,13 @@ app.listen(port, () => {
       }, 60_000);
     })
     .catch((err) => console.error("[messages] Scheduler failed to start:", err));
+
+  import("./services/data.js")
+    .then(({ checkAndUpdateMissedAppointments }) => {
+      void checkAndUpdateMissedAppointments();
+      setInterval(() => {
+        void checkAndUpdateMissedAppointments();
+      }, 60_000);
+    })
+    .catch((err) => console.error("[appointments] Missed status checker failed to start:", err));
 });

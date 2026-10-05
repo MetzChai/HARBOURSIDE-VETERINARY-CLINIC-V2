@@ -345,7 +345,12 @@ export default function UserPets() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0 space-y-1">
-                  <h3 className="font-heading text-xl font-extrabold text-[#7F1D1D]">{viewPet.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading text-xl font-extrabold text-[#7F1D1D]">{viewPet.name}</h3>
+                    {(viewPet.health_status === "Deceased" || viewPet.status === "deceased") && (
+                      <Badge variant="destructive" className="bg-rose-600 text-xs">Deceased</Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {viewPet.species} · {viewPet.breed || "Crossbreed"} · {viewPet.gender || "—"}
                   </p>
@@ -356,6 +361,41 @@ export default function UserPets() {
                   </div>
                 </div>
               </div>
+
+              {(viewPet.health_status === "Deceased" || viewPet.status === "deceased" || viewPet.deceased_date) && (
+                <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/60 space-y-3">
+                  <div className="flex items-center justify-between border-b border-rose-200 pb-2">
+                    <h4 className="font-heading font-bold text-rose-900 text-sm">Death Information</h4>
+                    <Badge variant="destructive" className="bg-rose-600">Deceased</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-rose-700/80 font-medium block">Date of Death</span>
+                      <strong className="text-rose-950">{viewPet.deceased_date ? formatDate(viewPet.deceased_date) : "—"}</strong>
+                    </div>
+                    <div>
+                      <span className="text-rose-700/80 font-medium block">Cause of Death</span>
+                      <strong className="text-rose-950">{viewPet.cause_of_death || "—"}</strong>
+                    </div>
+                    <div>
+                      <span className="text-rose-700/80 font-medium block">Place of Death</span>
+                      <strong className="text-rose-950">{viewPet.place_of_death || "—"}</strong>
+                    </div>
+                  </div>
+                  {viewPet.cause_details && (
+                    <div className="text-xs pt-1.5 border-t border-rose-200/60">
+                      <span className="text-rose-700/80 font-semibold block mb-0.5">Cause Details</span>
+                      <p className="text-rose-950 whitespace-pre-wrap">{viewPet.cause_details}</p>
+                    </div>
+                  )}
+                  {viewPet.death_notes && (
+                    <div className="text-xs pt-1.5 border-t border-rose-200/60">
+                      <span className="text-rose-700/80 font-semibold block mb-0.5">Additional Notes</span>
+                      <p className="text-rose-950 whitespace-pre-wrap">{viewPet.death_notes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <Tabs defaultValue="timeline" className="w-full">
                 <TabsList className="w-full bg-muted p-1 grid grid-cols-5">

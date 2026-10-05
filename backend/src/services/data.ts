@@ -208,6 +208,56 @@ function shapeRows(rows: Record<string, unknown>[], joins: ReturnType<typeof par
   });
 }
 
+function parseTimeTo24h(timeStr?: string | null): string {
+  if (!timeStr) return "00:00";
+  const s = String(timeStr).trim();
+  const match = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return s;
+  let hour = parseInt(match[1], 10);
+  const min = match[2];
+  const ampm = match[3]?.toUpperCase();
+  if (ampm === "PM" && hour < 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${min}`;
+}
+
+export async function checkAndUpdateMissedAppointments(): Promise<void> {
+  try {
+    const pool = getPool();
+    const tPH = todayPH();
+    const nPH = nowTimePH();
+
+    const { rows } = await pool.query(
+      `SELECT id, date::text, time, status FROM appointments WHERE status = 'Scheduled'`
+    );
+
+    const missedIds: string[] = [];
+
+    for (const row of rows) {
+      const dateStr = toDateOnly(row.date);
+      if (!dateStr) continue;
+
+      if (dateStr < tPH) {
+        missedIds.push(row.id);
+      } else if (dateStr === tPH) {
+        const slotTime = parseTimeTo24h(row.time);
+        if (slotTime < nPH) {
+          missedIds.push(row.id);
+        }
+      }
+    }
+
+    if (missedIds.length > 0) {
+      await pool.query(
+        `UPDATE appointments SET status = 'Missed', updated_at = now() WHERE id = ANY($1::uuid[])`,
+        [missedIds]
+      );
+    }
+  } catch (err) {
+    console.error("[appointments] Automatic missed status check error:", err);
+  }
+}
+
 export async function querySelect(opts: {
   user: SessionUser;
   table: string;
@@ -221,6 +271,9 @@ export async function querySelect(opts: {
   await authorizeTableAccess(opts.user, table, "select");
 
   const pool = getPool();
+  if (table === "appointments") {
+    await checkAndUpdateMissedAppointments();
+  }
   if (table === "messages") {
     const { ensureMessagesSchema } = await import("./message-dispatch.js");
     await ensureMessagesSchema();

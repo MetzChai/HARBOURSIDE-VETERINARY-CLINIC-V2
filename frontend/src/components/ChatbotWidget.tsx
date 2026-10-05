@@ -11,18 +11,20 @@ import { cn } from "@/lib/utils";
 type Msg = { role: "user" | "assistant"; content: string };
 
 const QUICK_PROMPTS = [
+  "Where is the clinic located?",
+  "How can I contact the clinic?",
+  "What are your operating hours?",
   "When is my pet's next appointment?",
-  "What vaccines are due?",
-  "What are the clinic hours?",
 ];
 
 export default function ChatbotWidget() {
   const [open, setOpen] = useState(false);
+  const [language, setLanguage] = useState<"auto" | "en" | "tl" | "ceb">("auto");
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
       content:
-        "Hi there! I'm PawBot, your Harbourside clinic assistant. Ask me about appointments, vaccines, clinic hours, or general pet care tips.",
+        "Welcome to Harbourside Veterinary Services! I'm PawBot, your virtual assistant. Ask me about appointments, vaccines, clinic hours, location, or contact info!",
     },
   ]);
   const [input, setInput] = useState("");
@@ -53,7 +55,7 @@ export default function ChatbotWidget() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ messages: allMessages }),
+        body: JSON.stringify({ messages: allMessages, languagePreference: language }),
       });
 
       const data = (await resp.json().catch(() => ({}))) as { reply?: string; error?: string };
@@ -98,16 +100,29 @@ export default function ChatbotWidget() {
                 <span className="text-[10px] text-white/60">Harbourside Assistant</span>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-white hover:bg-white/20"
-              data-chat-toggle="true"
-              aria-label="Close PawBot chat"
-              onClick={() => setOpen(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as "auto" | "en" | "tl" | "ceb")}
+                className="bg-white/10 hover:bg-white/20 text-white text-[11px] rounded-md px-1.5 py-1 border border-white/20 outline-none cursor-pointer"
+                aria-label="Select Chat Language"
+              >
+                <option value="auto" className="text-slate-900 bg-white">🌐 Auto</option>
+                <option value="en" className="text-slate-900 bg-white">🇺🇸 EN</option>
+                <option value="tl" className="text-slate-900 bg-white">🇵🇭 Tagalog</option>
+                <option value="ceb" className="text-slate-900 bg-white">🏝️ Cebuano</option>
+              </select>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-white hover:bg-white/20"
+                data-chat-toggle="true"
+                aria-label="Close PawBot chat"
+                onClick={() => setOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="px-3 py-2 bg-brand-teal-light/50 border-b border-brand-teal/10 flex items-start gap-2">

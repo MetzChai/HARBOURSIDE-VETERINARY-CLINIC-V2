@@ -160,11 +160,15 @@ model Pet {
   dob          DateTime? @db.Date
   imageUrl     String?   @map("image_url")
   status       PetStatus @default(available)
-  causeOfDeath String?   @map("cause_of_death")
-  deceasedDate DateTime? @map("deceased_date") @db.Date
-  healthStatus String    @default("Healthy") @map("health_status")
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  causeOfDeath    String?   @map("cause_of_death")
+  deceasedDate    DateTime? @map("deceased_date") @db.Date
+  causeDetails    String?   @map("cause_details")
+  placeOfDeath    String?   @map("place_of_death")
+  deathNotes      String?   @map("death_notes")
+  deathRecordedBy String?   @map("death_recorded_by")
+  healthStatus    String    @default("Healthy") @map("health_status")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   owner        Owner         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   appointments Appointment[]
@@ -374,3 +378,18 @@ model Message {
 
   @@map("messages")
 }
+
+model ClinicKnowledge {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  String
+  title     String
+  content   String
+  keywords  String[] @default([])
+  source    String   @default("official_clinic_information")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("clinic_knowledge")
+}
+
