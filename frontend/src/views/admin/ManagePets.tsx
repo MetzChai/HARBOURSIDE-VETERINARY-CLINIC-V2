@@ -1,6 +1,7 @@
 "use client";
 
 import { printDocument } from "@/lib/print";
+import { getImageUrl } from "@/lib/image";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -898,7 +899,7 @@ export default function ManagePets() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={pet.image_url ?? undefined} alt={pet.name} />
+                              <AvatarImage src={getImageUrl(pet.image_url)} alt={pet.name} />
                               <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
                                 {pet.name[0]}
                               </AvatarFallback>
@@ -1363,7 +1364,7 @@ export default function ManagePets() {
 
                   <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
                     <Avatar className="h-20 w-20">
-                      <AvatarImage src={viewPet.image_url ?? undefined} alt={viewPet.name} />
+                      <AvatarImage src={getImageUrl(viewPet.image_url)} alt={viewPet.name} />
                       <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
                         {viewPet.name[0]}
                       </AvatarFallback>

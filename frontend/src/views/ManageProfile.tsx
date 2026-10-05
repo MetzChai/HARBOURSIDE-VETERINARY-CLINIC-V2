@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, User, Mail, Shield, Calendar, Phone, MapPin, KeyRound, Clock, History } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
+import { getImageUrl } from "@/lib/image";
 import { toast } from "sonner";
 import { formatDatePH, formatDateTimePH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
@@ -221,10 +222,10 @@ export default function ManageProfile({ portal }: Props) {
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="h-20 w-20 rounded-2xl bg-white/10 border-2 border-white/30 flex items-center justify-center font-heading font-extrabold text-white text-3xl shadow-inner backdrop-blur-md overflow-hidden shrink-0">
-              {profile.avatarUrl && !heroImgError ? (
+              {getImageUrl(profile.avatarUrl) && !heroImgError ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={profile.avatarUrl}
+                  src={getImageUrl(profile.avatarUrl)}
                   alt=""
                   className="h-full w-full object-cover"
                   onError={() => setHeroImgError(true)}

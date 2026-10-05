@@ -1,6 +1,7 @@
 "use client";
 
 import { printDocument } from "@/lib/print";
+import { getImageUrl } from "@/lib/image";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -444,7 +445,7 @@ export default function ManageOwners() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={owner.image_url ?? undefined} alt={owner.name} />
+                              <AvatarImage src={getImageUrl(owner.image_url)} alt={owner.name} />
                               <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
                                 {initials(owner.name)}
                               </AvatarFallback>
@@ -785,7 +786,7 @@ export default function ManageOwners() {
                   <TabsContent value="info" className="space-y-4">
                     <div className="flex items-start gap-4 p-4 rounded-xl border bg-card">
                       <Avatar className="h-20 w-20">
-                        <AvatarImage src={viewOwner.image_url ?? undefined} alt={viewOwner.name} />
+                        <AvatarImage src={getImageUrl(viewOwner.image_url)} alt={viewOwner.name} />
                         <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
                           {initials(viewOwner.name)}
                         </AvatarFallback>

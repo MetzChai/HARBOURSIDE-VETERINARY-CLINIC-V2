@@ -6,6 +6,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Camera, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { getImageUrl } from "@/lib/image";
+
 interface ImageUploadProps {
   currentImage?: string;
   fallback: string;
@@ -94,7 +96,7 @@ export default function ImageUpload({
     <div className="flex items-center gap-3">
       <div className="relative group">
         <Avatar className={sizeClasses[size]}>
-          <AvatarImage src={preview || undefined} alt="Profile" />
+          <AvatarImage src={getImageUrl(preview)} alt="Profile" />
           <AvatarFallback className="bg-primary/10 text-primary font-bold">
             {fallback}
           </AvatarFallback>

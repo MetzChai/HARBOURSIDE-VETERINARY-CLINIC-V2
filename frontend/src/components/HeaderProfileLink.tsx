@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
+import { getImageUrl } from "@/lib/image";
+
 interface Props {
   href: string;
   displayName: string;
@@ -18,6 +20,8 @@ export default function HeaderProfileLink({ href, displayName, subtitle, avatarU
     setImgError(false);
   }, [avatarUrl]);
 
+  const resolvedUrl = getImageUrl(avatarUrl);
+
   return (
     <Link
       href={href}
@@ -25,10 +29,10 @@ export default function HeaderProfileLink({ href, displayName, subtitle, avatarU
       aria-label="View profile"
     >
       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-        {avatarUrl && !imgError ? (
+        {resolvedUrl && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={avatarUrl}
+            src={resolvedUrl}
             alt=""
             className="h-full w-full object-cover"
             onError={() => setImgError(true)}

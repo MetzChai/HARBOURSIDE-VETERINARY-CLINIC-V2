@@ -16,6 +16,7 @@ import {
   HeartPulse,
   Sparkles,
 } from "lucide-react";
+import { getImageUrl } from "@/lib/image";
 import {
   useMyOwner,
   useMyPets,
@@ -155,9 +156,9 @@ export default function UserDashboard() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="h-12 w-12 rounded-full bg-[#FEE2E2] border-2 border-[#E5192C]/40 flex items-center justify-center font-heading font-bold text-[#7F1D1D] overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
-                        {pet.image_url ? (
+                        {getImageUrl(pet.image_url) ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={pet.image_url} alt="" className="h-full w-full object-cover" />
+                          <img src={getImageUrl(pet.image_url)} alt="" className="h-full w-full object-cover" />
                         ) : (
                           pet.name[0]
                         )}

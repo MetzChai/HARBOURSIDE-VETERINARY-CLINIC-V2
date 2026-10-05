@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar, Eye, PawPrint, Printer } from "lucide-react";
 import { useMyOwner, useMyPets, useMyVaccinations, useMyCareRecords, useMyAppointments, useMyDewormings } from "@/hooks/useOwnerData";
 import { formatAge, formatDate } from "@/lib/age";
+import { getImageUrl } from "@/lib/image";
 import { daysFromTodayPH, formatNowPH } from "@/lib/datetime";
 import PetCareHistoryTimeline from "@/components/PetCareHistoryTimeline";
 import { PageHeader } from "@/components/PageHeader";
@@ -207,7 +208,7 @@ export default function UserPets() {
                 <div className="flex items-start justify-between mb-4 gap-3">
                   <div className="flex items-center gap-3.5 min-w-0">
                     <Avatar className="h-16 w-16 rounded-xl border-2 border-[#E5192C]/30 shadow-sm group-hover:scale-105 transition-transform">
-                      <AvatarImage src={pet.image_url} className="object-cover" />
+                      <AvatarImage src={getImageUrl(pet.image_url)} className="object-cover" />
                       <AvatarFallback className="rounded-xl bg-[#FEE2E2] text-[#7F1D1D] font-bold text-xl">
                         {pet.name?.[0]}
                       </AvatarFallback>
@@ -339,7 +340,7 @@ export default function UserPets() {
             <div className="space-y-5 pt-2">
               <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-[#FEE2E2] to-[#FFF1F2] border border-[#E5192C]/20">
                 <Avatar className="h-20 w-20 border-2 border-white shadow-md">
-                  <AvatarImage src={viewPet.image_url} />
+                  <AvatarImage src={getImageUrl(viewPet.image_url)} />
                   <AvatarFallback className="bg-[#7F1D1D] text-white text-2xl font-bold">
                     {viewPet.name?.[0]}
                   </AvatarFallback>

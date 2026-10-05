@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { requireAuth } from "../middleware/auth.js";
+import { isCloudinaryConfigured, uploadToCloudinary } from "../services/cloudinary.js";
 
 const uploadRoot = path.join(process.cwd(), "uploads");
 
@@ -12,25 +13,16 @@ function getCleanFolder(req: any): string {
   return sanitized || "pets";
 }
 
-const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    const folder = getCleanFolder(req);
-    const dir = path.join(uploadRoot, folder);
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = file.originalname.split(".").pop() || "jpg";
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
-  },
-});
+const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      cb(new Error("Invalid image file"));
+    if (!file.mimetype || (!file.mimetype.startsWith("image/") && !allowedMimeTypes.includes(file.mimetype.toLowerCase()))) {
+      cb(new Error("Invalid image type. Only JPEG, PNG, and WebP are allowed."));
       return;
     }
     cb(null, true);
@@ -39,19 +31,41 @@ const upload = multer({
 
 const router = Router();
 
-router.post("/", requireAuth, upload.single("file"), (req, res) => {
+router.post("/", requireAuth, upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
     const folder = getCleanFolder(req);
-    if (!file) {
-      res.status(400).json({ error: "Invalid image file" });
+
+    if (!file || !file.buffer) {
+      res.status(400).json({ error: "Please select a valid image file." });
       return;
     }
-    const publicUrl = `/uploads/${folder}/${file.filename}`;
+
+    if (isCloudinaryConfigured()) {
+      try {
+        const result = await uploadToCloudinary(file.buffer, folder);
+        res.json({ url: result.secure_url, public_id: result.public_id });
+        return;
+      } catch (cloudErr) {
+        console.error("Cloudinary upload failed:", cloudErr);
+        res.status(500).json({ error: "Unable to upload image. Please try again." });
+        return;
+      }
+    }
+
+    // Fallback for local development if Cloudinary env variables are missing
+    const dir = path.join(uploadRoot, folder);
+    fs.mkdirSync(dir, { recursive: true });
+    const ext = file.originalname?.split(".").pop() || "jpg";
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const filePath = path.join(dir, filename);
+    fs.writeFileSync(filePath, file.buffer);
+
+    const publicUrl = `/uploads/${folder}/${filename}`;
     res.json({ url: publicUrl });
   } catch (e) {
     console.error("upload error:", e);
-    res.status(500).json({ error: "Upload failed" });
+    res.status(500).json({ error: "Unable to upload image. Please try again." });
   }
 });
 
