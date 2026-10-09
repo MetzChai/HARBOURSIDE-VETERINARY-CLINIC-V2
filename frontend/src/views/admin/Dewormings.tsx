@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { EmptyState } from "@/components/EmptyState";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 
 const STATUSES = ["Scheduled", "Completed", "Due Follow-up"] as const;
 
@@ -29,7 +30,23 @@ const statusVariant = (s: string) =>
 export default function Dewormings() {
   const { data: rows = [], isLoading } = useRows<any>("dewormings", { orderBy: "date_given", ascending: false });
   const { data: pets = [] } = useRows<any>("pets", { orderBy: "name" });
+  const { data: owners = [] } = useRows<any>("owners", { orderBy: "name" });
   const invalidate = useInvalidate();
+
+  const ownerMap = useMemo(() => new Map(owners.map((o: any) => [o.id, o.name])), [owners]);
+
+  const petOptions: SearchableOption[] = useMemo(() => {
+    return pets.map((p: any) => {
+      const ownerName = p.owner_id ? ownerMap.get(p.owner_id) || "—" : "—";
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: `Owner: ${ownerName} • ${p.species || "Pet"}`,
+        keywords: `${p.name} ${ownerName} ${p.species || ""} ${p.breed || ""}`,
+      };
+    });
+  }, [pets, ownerMap]);
+
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -165,10 +182,13 @@ export default function Dewormings() {
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
                   <Label>Pet</Label>
-                  <Select value={form.pet_id} onValueChange={(v) => setForm((p) => ({ ...p, pet_id: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select pet" /></SelectTrigger>
-                    <SelectContent>{pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={petOptions}
+                    value={form.pet_id}
+                    onChange={(v) => setForm((p) => ({ ...p, pet_id: v }))}
+                    placeholder="Search pet by name or owner..."
+                    searchPlaceholder="Type pet name or owner..."
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Product</Label><Input value={form.product} onChange={(e) => setForm((p) => ({ ...p, product: e.target.value }))} placeholder="e.g. Drontal Plus" /></div>

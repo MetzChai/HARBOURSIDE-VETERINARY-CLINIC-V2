@@ -614,7 +614,7 @@ export default function AdminDashboard() {
                                     Approve
                                   </Button>
                                 )}
-                                {a.status !== "Completed" && (
+                                {a.status !== "Completed" && a.status !== "Cancelled" && a.status !== "Missed" && (
                                   <Button
                                     variant="secondary"
                                     size="sm"

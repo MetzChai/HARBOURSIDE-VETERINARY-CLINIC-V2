@@ -173,7 +173,7 @@ export default function Reports() {
     {
       type: "communication" as ReportType,
       title: "Communication Reports",
-      desc: "Email, SMS, and In-App notification distribution and delivery status logs",
+      desc: "Email and In-App notification distribution and delivery status logs",
       count: messages.length,
       icon: MessageSquare,
       color: "text-brand-teal bg-brand-teal-light",

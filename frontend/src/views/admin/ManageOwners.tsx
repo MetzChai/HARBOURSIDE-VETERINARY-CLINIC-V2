@@ -137,7 +137,7 @@ export default function ManageOwners() {
       middle_name: owner.middle_name || "",
       last_name: owner.last_name || owner.name.split(" ").slice(1).join(" ") || "",
       gender: owner.gender || "Male",
-      birth_date: owner.birth_date || "",
+      birth_date: owner.birth_date ? String(owner.birth_date).slice(0, 10) : "",
       contact: owner.contact || "",
       email: owner.email || "",
       address: owner.address || "",

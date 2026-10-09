@@ -1,5 +1,5 @@
 import { BrandLogo } from "@/components/BrandLogo";
-import { Heart, Shield, Sparkles, Stethoscope, Award, Activity } from "lucide-react";
+import { Heart, Shield, Sparkles, Stethoscope } from "lucide-react";
 
 interface AuthShellProps {
   children: React.ReactNode;
@@ -93,17 +93,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
             ))}
           </div>
 
-          {/* Footer Stats Pill */}
-          <div className="mt-8 flex items-center justify-center gap-6 text-white/70 text-xs font-medium border-t border-white/15 pt-6 w-full">
-            <div className="flex items-center gap-1.5">
-              <Award className="h-4 w-4 text-rose-300" />
-              <span>Certified Vets</span>
-            </div>
-            <div className="h-3 w-px bg-white/20" />
-            <div className="flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-rose-300" />
-            </div>
-          </div>
+
         </div>
       </div>
 

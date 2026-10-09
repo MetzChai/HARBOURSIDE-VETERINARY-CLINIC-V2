@@ -20,8 +20,21 @@ if (!email || !fullName || !password) {
   process.exit(1);
 }
 
-if (password.length < 6) {
-  console.error("Password must be at least 6 characters.");
+// Mirrors validatePasswordPolicy() in backend/src/services/auth.ts (single policy:
+// min 8, 1 upper, 1 lower, 1 number, 1 special). Kept in sync manually because this
+// script is plain ESM and cannot import the TypeScript service.
+function validatePasswordPolicy(value) {
+  if (!value || value.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[A-Z]/.test(value)) return "Password must contain at least one uppercase letter.";
+  if (!/[a-z]/.test(value)) return "Password must contain at least one lowercase letter.";
+  if (!/[0-9]/.test(value)) return "Password must contain at least one number.";
+  if (!/[!@#$%^&*(),.?":{}|<>_\-\\\/\[\]]/.test(value)) return "Password must contain at least one special character.";
+  return null;
+}
+
+const passwordError = validatePasswordPolicy(password);
+if (passwordError) {
+  console.error(passwordError);
   process.exit(1);
 }
 

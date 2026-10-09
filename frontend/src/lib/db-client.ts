@@ -1,5 +1,23 @@
 type Filter = { column: string; value: unknown };
 
+/** Shared timeout for /api/data calls so a hung/reset socket can't stall a query forever. */
+const DATA_TIMEOUT_MS = 15000;
+
+/** AbortSignal.timeout rejects with TimeoutError (AbortError when cancelled externally). */
+function isAbortError(err: unknown): boolean {
+  const name = (err as { name?: unknown } | null | undefined)?.name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+/** Parse a response body without throwing; returns null when the body is empty/invalid. */
+async function parseJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 class InsertBuilder {
   constructor(
     private table: string,
@@ -19,20 +37,28 @@ class InsertBuilder {
   }
 
   async execute(): Promise<{ data: unknown; error: { message: string } | null }> {
-    const res = await fetch("/api/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        action: "insert",
-        table: this.table,
-        data: this.payload,
-        returning: !!this._select,
-        single: this._single,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) return { data: null, error: { message: json.error ?? "Request failed" } };
+    let res: Response;
+    try {
+      res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "insert",
+          table: this.table,
+          data: this.payload,
+          returning: !!this._select,
+          single: this._single,
+        }),
+        signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new Error("Request timed out");
+      throw err;
+    }
+    const json = await parseJson(res);
+    if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
+    if (json == null) return { data: null, error: { message: "Malformed response from server" } };
     return { data: json.data, error: null };
   }
 
@@ -55,19 +81,27 @@ class UpdateBuilder {
   }
 
   async execute(): Promise<{ data: null; error: { message: string } | null; meta?: Record<string, unknown> }> {
-    const res = await fetch("/api/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        action: "update",
-        table: this.table,
-        data: this.payload,
-        filters: this.filters,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) return { data: null, error: { message: json.error ?? "Request failed" } };
+    let res: Response;
+    try {
+      res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "update",
+          table: this.table,
+          data: this.payload,
+          filters: this.filters,
+        }),
+        signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new Error("Request timed out");
+      throw err;
+    }
+    const json = await parseJson(res);
+    if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
+    if (json == null) return { data: null, error: { message: "Malformed response from server" } };
     return { data: null, error: null, meta: json.meta };
   }
 
@@ -125,22 +159,30 @@ class SelectBuilder {
   }
 
   async execute(): Promise<{ data: unknown; error: { message: string } | null }> {
-    const res = await fetch("/api/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        action: "select",
-        table: this.table,
-        select: this._select,
-        filters: this.filters,
-        order: this._order,
-        single: this._single,
-        maybeSingle: this._maybeSingle,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) return { data: null, error: { message: json.error ?? "Request failed" } };
+    let res: Response;
+    try {
+      res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "select",
+          table: this.table,
+          select: this._select,
+          filters: this.filters,
+          order: this._order,
+          single: this._single,
+          maybeSingle: this._maybeSingle,
+        }),
+        signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new Error("Request timed out");
+      throw err;
+    }
+    const json = await parseJson(res);
+    if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
+    if (json == null) return { data: null, error: { message: "Malformed response from server" } };
     return { data: json.data, error: null };
   }
 
@@ -163,18 +205,26 @@ class DeleteBuilder {
   }
 
   async execute(): Promise<{ data: null; error: { message: string } | null; meta?: Record<string, unknown> }> {
-    const res = await fetch("/api/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        action: "delete",
-        table: this.table,
-        filters: this.filters,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) return { data: null, error: { message: json.error ?? "Request failed" } };
+    let res: Response;
+    try {
+      res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "delete",
+          table: this.table,
+          filters: this.filters,
+        }),
+        signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw new Error("Request timed out");
+      throw err;
+    }
+    const json = await parseJson(res);
+    if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
+    if (json == null) return { data: null, error: { message: "Malformed response from server" } };
     return { data: null, error: null, meta: json.meta };
   }
 

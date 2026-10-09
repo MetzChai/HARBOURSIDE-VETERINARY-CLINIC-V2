@@ -258,71 +258,71 @@ export function generateLocalChatReply(
 
   // Sunday queries
   if (/sunday|open.*sunday|sunday.*open/.test(q)) {
-    if (targetLang === "ceb") return "Ang Harbourside Veterinary Services kay **Sirado sa Domingo**. Ang among operating hours kay **Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM**.";
-    if (targetLang === "tl") return "Ang Harbourside Veterinary Services ay **Sarado kapag Linggo**. Ang operating hours ay **Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM**.";
-    return "Harbourside Veterinary Services is **CLOSED on Sundays**. Our operating hours are **Monday to Saturday, 9:00 AM to 5:00 PM**.";
+    if (targetLang === "ceb") return "Ang Harbourside Veterinary Services kay sirado sa Domingo. Ang operating hours kay Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM.";
+    if (targetLang === "tl") return "Ang Harbourside Veterinary Services ay sarado kapag Linggo. Ang operating hours ay Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM.";
+    return "Harbourside Veterinary Services is closed on Sundays. Operating hours are Monday to Saturday, 9:00 AM to 5:00 PM.";
   }
 
   // Operating hours queries
   if (/(hour|open|close|when.*open|operating.*hour|schedule.*clinic|oras|bukas)/.test(q)) {
-    if (targetLang === "ceb") return "Ang operating hours sa Harbourside Veterinary Services kay **Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM** (Sirado sa Domingo).";
-    if (targetLang === "tl") return "Ang operating hours ng Harbourside Veterinary Services ay **Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM** (Sarado po kapag Linggo).";
-    return "Harbourside Veterinary Services operating hours are **Monday through Saturday, 9:00 AM to 5:00 PM** (Closed Sundays).";
+    if (targetLang === "ceb") return "Ang operating hours sa Harbourside Veterinary Services kay Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM. Sirado ang clinic sa Domingo.";
+    if (targetLang === "tl") return "Ang operating hours ng Harbourside Veterinary Services ay Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM. Sarado po ang clinic kapag Linggo.";
+    return "Harbourside Veterinary Services is open Monday through Saturday from 9:00 AM to 5:00 PM. The clinic is closed on Sundays.";
   }
 
   // Emergency / vomiting query
   if (/(emergency|urgent|sick|symptom|vomit|bleed|letharg|fever|help|suka|nagsuka|nagsusuka)/.test(q)) {
-    if (targetLang === "ceb") return "Kung ang imong pet adunay sintomas sama sa pag-suka o kawala sa gana, palihug dad-a ang imong pet sa Harbourside Veterinary Services sa operating hours (Lunes–Sabado 9:00 AM – 5:00 PM) para sa propesyonal nga pag-usisa ni Dr. Alfredo B. Badiola Jr.\n\n*Pahinumdom: Ang PawBot naghatag ra ug general guidance ug dili makahatag ug medical diagnosis.*";
-    if (targetLang === "tl") return "Kung ang inyong alaga ay may sintomas tulad ng pagsusuka o panghihina, mangyaring dalhin po ang inyong alaga sa Harbourside Veterinary Services sa operating hours (Lunes–Sabado 9:00 AM – 5:00 PM) para sa pagsusuri ni Dr. Alfredo B. Badiola Jr.\n\n*Paalala: Ang PawBot ay nagbibigay ng general educational guidance lamang at hindi nagbibigay ng medical diagnosis.*";
-    return "If your pet is showing concerning symptoms or feeling sick, please bring your pet to Harbourside Veterinary Services during operating hours (**Monday–Saturday 9:00 AM – 5:00 PM**) for professional examination by **Dr. Alfredo B. Badiola Jr.**\n\n*Note: PawBot provides general educational guidance only and cannot provide a definitive medical diagnosis.*";
+    if (targetLang === "ceb") return "Kung ang imong pet adunay sintomas sama sa pag-suka o kawala sa gana, palihug dad-a ang imong pet sa Harbourside Veterinary Services sa operating hours (Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM) para sa propesyonal nga pag-usisa ni Dr. Alfredo B. Badiola Jr.\n\nPahinumdom: Ang PawBot naghatag ra ug general educational guidance ug dili makahatag ug medical diagnosis.";
+    if (targetLang === "tl") return "Kung ang inyong alaga ay may sintomas tulad ng pagsusuka o panghihina, mangyaring dalhin po ang inyong alaga sa Harbourside Veterinary Services sa operating hours (Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM) para sa pagsusuri ni Dr. Alfredo B. Badiola Jr.\n\nPaalala: Ang PawBot ay nagbibigay ng general educational guidance lamang at hindi nagbibigay ng medical diagnosis.";
+    return "If your pet is showing concerning symptoms or feeling sick, please bring your pet to Harbourside Veterinary Services during operating hours (Monday to Saturday, 9:00 AM to 5:00 PM) for examination by Dr. Alfredo B. Badiola Jr.\n\nPlease note that PawBot provides general educational guidance only and cannot provide a medical diagnosis. If your pet is in an emergency condition, seek veterinary care as soon as possible.";
   }
 
   // Greetings
   if (/hello|hi|hey|good (morning|afternoon|evening)|kumusta|maayong/.test(q)) {
-    if (targetLang === "ceb") return `Maayong adlaw ${ctx.userName.split(" ")[0]}! 🐾 Welcome sa Harbourside Veterinary Services! Ako si PawBot, ang imong virtual assistant. Unsaon nako pagtabang nimo karon?`;
-    if (targetLang === "tl") return `Kumusta po ${ctx.userName.split(" ")[0]}! 🐾 Welcome sa Harbourside Veterinary Services! Ako si PawBot, ang inyong virtual assistant. Ano po ang maitutulong ko sa inyo?`;
-    return `Welcome to Harbourside Veterinary Services! I'm PawBot, your virtual assistant. How can I assist you today?`;
+    if (targetLang === "ceb") return `Maayong adlaw! Welcome sa Harbourside Veterinary Services. Ako si PawBot, ang imong virtual assistant. Unsaon nako pagtabang nimo karon?`;
+    if (targetLang === "tl") return `Maligayang pagdating sa Harbourside Veterinary Services. Ako si PawBot, ang inyong virtual assistant. Paano ko po kayo matutulungan ngayong araw?`;
+    return `Welcome to Harbourside Veterinary Services. I'm PawBot, your virtual assistant. How may I assist you today?`;
   }
 
   // Appointment query
   if (/(appointment|schedule|visit|booking|book|next.*(appt|visit)|when.*(see|visit|appointment)|my.*appointment)/.test(q)) {
     if (!ctx.appointments.length) {
-      if (targetLang === "ceb") return "Wala kay umaabot nga appointment. Mahimo kang makahangyo ug appointment pinaagi sa **Appointments** sa portal (Lunes–Sabado 9:00 AM – 5:00 PM).";
-      if (targetLang === "tl") return "Wala ka pong nakatakdang appointment. Maaari ka pong mag-request ng appointment sa **Appointments** section ng inyong portal (Lunes–Sabado 9:00 AM – 5:00 PM).";
+      if (targetLang === "ceb") return "Wala kay umaabot nga appointment. Mahimo kang makahangyo ug appointment pinaagi sa Appointments section sa imong portal. Ang clinic open Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM.";
+      if (targetLang === "tl") return "Wala ka pong nakatakdang appointment. Maaari ka pong mag-request ng appointment sa Appointments section ng inyong portal. Ang clinic ay bukas Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM.";
       return ctx.role === "owner"
-        ? "You don't have any upcoming appointments. You can request an appointment through **Appointments** in your portal (Mon–Sat, 9:00 AM – 5:00 PM)."
-        : "No upcoming appointments on the schedule. Check **Schedule** to book visits.";
+        ? "You do not have any upcoming appointments scheduled. You can request an appointment through the Appointments section in your portal. The clinic is open Monday to Saturday from 9:00 AM to 5:00 PM."
+        : "There are no upcoming appointments currently scheduled. You can review and manage appointments in the Schedule section.";
     }
     const list = ctx.appointments
       .slice(0, 5)
       .map(
         (a) =>
-          `• **${a.pet_name ?? "Pet"}** — ${formatDatePH(a.date)} at ${a.time} (${a.status})${a.reason ? `: ${a.reason}` : ""}`
+          `• Pet: ${a.pet_name ?? "Pet"} — ${formatDatePH(a.date)} at ${a.time} (${a.status})${a.reason ? ` — ${a.reason}` : ""}`
       )
       .join("\n");
-    if (targetLang === "ceb") return `Aniay imong umaabot nga appointment:\n\n${list}\n\n*Oras sa Clinic: Lunes–Sabado 9:00 AM – 5:00 PM (Sirado sa Domingo).*`;
-    if (targetLang === "tl") return `Ito po ang inyong nakatakdang appointment:\n\n${list}\n\n*Oras ng Clinic: Lunes–Sabado 9:00 AM – 5:00 PM (Sarado sa Linggo).*`;
-    return `Here ${ctx.appointments.length === 1 ? "is your next appointment" : "are your upcoming appointments"}:\n\n${list}\n\n*Clinic Hours: Mon–Sat 9:00 AM – 5:00 PM (Closed Sunday).*`;
+    if (targetLang === "ceb") return `Aniay imong umaabot nga appointment:\n\n${list}\n\nAng clinic open Lunes hangtod Sabado, 9:00 AM hangtod 5:00 PM.`;
+    if (targetLang === "tl") return `Ito po ang inyong nakatakdang appointment:\n\n${list}\n\nAng clinic ay bukas Lunes hanggang Sabado, 9:00 AM hanggang 5:00 PM.`;
+    return `Here is your upcoming appointment schedule:\n\n${list}\n\nThe clinic is open Monday to Saturday from 9:00 AM to 5:00 PM.`;
   }
 
   // Vaccination query
   if (/(vaccin|shot|due|booster|immuniz|bakuna)/.test(q)) {
     const due = ctx.vaccinations.filter((v) => v.next_due && (daysFromTodayPH(v.next_due) ?? 99) <= 30);
     if (!due.length) {
-      if (targetLang === "ceb") return ctx.vaccinations.length ? "Ang tanang bakuna sa imong pet up to date para sa sunod 30 ka adlaw. ✅" : "Wala koy nakit-an nga rekord sa bakuna. Palihug pakig-connect sa staff o doctor.";
-      if (targetLang === "tl") return ctx.vaccinations.length ? "Ang lahat po ng bakuna ng inyong alaga ay up to date sa susunod na 30 araw. ✅" : "Wala pa pong nakatalang rekord ng bakuna. Mangyaring magtanong sa staff o kay Dr. Alfredo B. Badiola Jr.";
+      if (targetLang === "ceb") return ctx.vaccinations.length ? "Ang tanang bakuna sa imong pet up to date para sa sunod 30 ka adlaw." : "Wala koy nakit-an nga rekord sa bakuna. Palihug pakig-connect sa staff o doctor.";
+      if (targetLang === "tl") return ctx.vaccinations.length ? "Ang lahat po ng bakuna ng inyong alaga ay up to date sa susunod na 30 araw." : "Wala pa pong nakatalang rekord ng bakuna. Mangyaring magtanong sa staff o kay Dr. Alfredo B. Badiola Jr.";
       return ctx.vaccinations.length
-        ? "All your pets' vaccinations look up to date for the next 30 days. ✅"
-        : "I don't see vaccination records logged yet. Please ask Dr. Alfredo B. Badiola Jr. or clinic staff to check your pet's record.";
+        ? "All vaccination records for your pets are up to date for the next 30 days."
+        : "I do not see any vaccination records logged yet. Please consult Dr. Alfredo B. Badiola Jr. or clinic staff to review your pet's records.";
     }
     const list = due
       .map((v) => {
         const days = daysFromTodayPH(v.next_due);
-        const status = days !== null && days < 0 ? "⚠️ overdue" : days === 0 ? "📅 due today" : "📅 due soon";
-        return `• **${v.pet_name}** — ${v.vaccine_type}: ${formatDatePH(v.next_due)} ${status}`;
+        const status = days !== null && days < 0 ? "overdue" : days === 0 ? "due today" : "due soon";
+        return `• Pet: ${v.pet_name} — ${v.vaccine_type}: ${formatDatePH(v.next_due)} (${status})`;
       })
       .join("\n");
-    return `Vaccination status:\n\n${list}\n\nRequest an appointment with Dr. Alfredo B. Badiola Jr. for boosters (Mon–Sat 9:00 AM–5:00 PM).`;
+    return `Here is the current vaccination status:\n\n${list}\n\nYou may request an appointment for vaccination boosters during clinic hours (Monday to Saturday, 9:00 AM to 5:00 PM).`;
   }
 
   // Pet list query
@@ -330,45 +330,49 @@ export function generateLocalChatReply(
     if (!ctx.pets.length) {
       if (targetLang === "ceb") return "Wala koy nakit-an nga nakarehistro nga pet sa imong account. Palihug kontaka ang clinic staff.";
       if (targetLang === "tl") return "Wala po akong nakitang nakarehistrong alaga sa inyong account. Mangyaring kontakin ang clinic staff.";
-      return "I don't see registered pets on your account yet. Contact the clinic to add your pet's profile.";
+      return "I do not see any registered pets on your account yet. You can contact the clinic staff to add your pet's profile.";
     }
-    const list = ctx.pets.map((p) => `• **${p.name}**${p.species ? ` (${p.species})` : ""}`).join("\n");
+    const list = ctx.pets.map((p) => `• ${p.name}${p.species ? ` (${p.species})` : ""}`).join("\n");
     if (targetLang === "ceb") return `Ang imong mga nakarehistro nga pet:\n${list}`;
     if (targetLang === "tl") return `Ang inyong mga nakarehistrong alaga:\n${list}`;
-    return `Your registered pets:\n${list}`;
+    return `Here are your registered pets:\n${list}`;
   }
 
   // Medical Record query
   if (/(record|medical.*record|history|view.*record)/.test(q)) {
-    return `You can view your pet's medical records, vaccination history, deworming history, and care timeline directly in the **My Pets** / **Pet Profile** section of your portal.`;
+    return `You can view your pet's medical records, vaccination history, deworming history, and care timeline directly in the Pet Profile section of your portal.`;
   }
 
   // General fallback using retrieved knowledge if available
   if (retrievedKnowledge.length > 0) {
-    const kSummary = retrievedKnowledge.map((k) => `• **${k.title}**: ${k.content}`).join("\n\n");
+    const kSummary = retrievedKnowledge.map((k) => `• ${k.title}: ${k.content}`).join("\n\n");
     if (targetLang === "ceb") return `Aniay impormasyon gikan sa Harbourside Veterinary Services:\n\n${kSummary}`;
     if (targetLang === "tl") return `Ito po ang impormasyon mula sa Harbourside Veterinary Services:\n\n${kSummary}`;
-    return `Here is information from Harbourside Veterinary Services:\n\n${kSummary}`;
+    return `Here is relevant information from Harbourside Veterinary Services:\n\n${kSummary}`;
   }
 
   if (targetLang === "ceb") {
-    return `Welcome sa Harbourside Veterinary Services! Ako si PawBot, ang imong virtual assistant. Makatabang ako sa:\n• Oras sa clinic (Lunes–Sabado 9:00 AM – 5:00 PM)\n• Impormasyon sa pagkontak & lokasyon\n• Pag-check sa appointments & bakuna\n\nPara sa medikal nga mga suliran, palihug konsulta ni Dr. Alfredo B. Badiola Jr.`;
+    return `Welcome sa Harbourside Veterinary Services. Ako si PawBot, ang imong virtual assistant. Makatabang ako sa clinic hours, contact details, appointments, ug bakuna. Unsaon nako pagtabang nimo karon?`;
   }
   if (targetLang === "tl") {
-    return `Welcome sa Harbourside Veterinary Services! Ako si PawBot, ang inyong virtual assistant. Makakatulong po ako sa:\n• Clinic hours (Lunes–Sabado 9:00 AM – 5:00 PM)\n• Contact information & lokasyon\n• Pag-check ng appointments & bakuna\n\nPara sa medikal na usapin, mangyaring kumonsulta kay Dr. Alfredo B. Badiola Jr.`;
+    return `Maligayang pagdating sa Harbourside Veterinary Services. Ako si PawBot, ang inyong virtual assistant. Makakatulong po ako sa clinic hours, contact details, appointments, at bakuna. Paano ko po kayo matutulungan ngayong araw?`;
   }
 
-  return `Welcome to Harbourside Veterinary Services! I'm PawBot, your virtual assistant. I can help with:\n• **Clinic hours** (Mon–Sat 9:00 AM – 5:00 PM, Sun Closed)\n• **Contact information** & clinic location\n• Upcoming **appointments**\n• **Vaccination & Deworming** reminders\n• **Pet care** guidance\n\nFor medical concerns, please consult Dr. Alfredo B. Badiola Jr.`;
+  return `Welcome to Harbourside Veterinary Services. I'm PawBot, your virtual assistant. I can assist with general pet care information, appointments, clinic details, and vaccination records. How may I assist you today?`;
 }
 
-const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
-const GEMINI_MODELS = [DEFAULT_GEMINI_MODEL];
+// Standard generateContent model id. Override with GEMINI_MODEL if needed.
+const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+const GEMINI_MODELS = Array.from(
+  new Set([DEFAULT_GEMINI_MODEL, "gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.5-pro"])
+).filter(Boolean);
 
 function buildGeminiPayload(
   messages: { role: string; content: string }[],
   contextBlock: string,
   retrievedKnowledge: KnowledgeEntry[],
-  targetLanguage: "en" | "tl" | "ceb"
+  targetLanguage: "en" | "tl" | "ceb",
+  userRole: "admin" | "staff" | "owner" = "owner"
 ) {
   const knowledgeBlock = retrievedKnowledge.length
     ? retrievedKnowledge.map((k) => `[Category: ${k.category} | Title: ${k.title}]\n${k.content}`).join("\n\n")
@@ -376,9 +380,37 @@ function buildGeminiPayload(
 
   const langInstruction = getLanguageInstruction(targetLanguage);
 
-  const systemPrompt = `You are PawBot, the virtual assistant for Harbourside Veterinary Services in the Philippines (Asia/Manila timezone).
+  let roleInstruction = "";
+  if (userRole === "admin") {
+    roleInstruction = `ROLE GUIDANCE (ADMIN PAWBOT):
+- Provide clear, professional guidance on clinic & system workflows, appointment management, inventory control, laboratory transactions, and administrative features.
+- Adapt tone to be professional, direct, and system-oriented. Strictly adhere to standard Admin RBAC permissions.`;
+  } else if (userRole === "staff") {
+    roleInstruction = `ROLE GUIDANCE (STAFF PAWBOT):
+- Provide clear, concise operational guidance on clinic workflows, appointment scheduling, care record logging, FEFO inventory management, and laboratory workflows.
+- Strictly adhere to RBAC: do not reveal private pet-owner information unless authorized by Staff permissions.`;
+  } else {
+    roleInstruction = `ROLE GUIDANCE (PET OWNER PAWBOT):
+- Provide accessible, warm, and professional pet-care guidance, clinic location & contact details, appointment guidance, basic vaccination/deworming information, and system navigation.
+- Strictly adhere to RBAC: only discuss the user's own permitted pets and appointments. Never reveal another user's private data.`;
+  }
+
+  const systemPrompt = `You are PawBot, the formal, professional, natural, and conversational virtual assistant for Harbourside Veterinary Services in the Philippines (Asia/Manila timezone).
 
 ${langInstruction}
+
+${roleInstruction}
+
+CRITICAL RESPONSE STYLE & FORMATTING RULES:
+- Write in a formal, professional, natural, and conversational tone.
+- Speak naturally like a professional veterinary virtual assistant.
+- DO NOT use markdown bold formatting (DO NOT use **asterisks** around ordinary words or labels).
+- DO NOT use markdown section headings (DO NOT use ### or ## headers).
+- DO NOT use horizontal line dividers (DO NOT use --- or ___).
+- DO NOT use excessive bullet points or numbered lists. Use a simple bullet list only when it genuinely improves readability.
+- Write in clean, well-structured paragraphs (typically 1 to 4 short paragraphs per response).
+- Answer the user's actual question directly without repetitive preamble, intro fluff, or awkward greeting loops.
+- Include clinic contact information (address, phone numbers, email, hours) ONLY when relevant to the user's inquiry. Do not force contact info into every answer.
 
 CLIENT / BUSINESS NAME: Harbourside Veterinary Services
 SOFTWARE / SYSTEM NAME: Harbourside Veterinary Clinic Pet Care Management System with AI Chatbot Integration
@@ -390,10 +422,9 @@ Phone Numbers: 09212296819 or 09364158860
 Operating Hours: Monday through Saturday: 9:00 AM to 5:00 PM. Sunday: CLOSED.
 
 CRITICAL NAME DISTINCTIONS:
-- When introducing the business or welcoming the user: "Welcome to Harbourside Veterinary Services! I'm PawBot, your virtual assistant."
+- When introducing the business or welcoming the user: "Welcome to Harbourside Veterinary Services. I'm PawBot, your virtual assistant. How may I assist you today?"
 - When asked "What is the name of the clinic?": "The clinic is Harbourside Veterinary Services."
 - When asked "What system is this?": "This is the Harbourside Veterinary Clinic Pet Care Management System with AI Chatbot Integration."
-- Do NOT confuse the actual client/business name ("Harbourside Veterinary Services") with the software/system name ("Harbourside Veterinary Clinic").
 
 RETRIEVED CLINIC KNOWLEDGE BASE (PRIMARY SOURCE FOR CLINIC QUESTIONS):
 ${knowledgeBlock}
@@ -401,19 +432,19 @@ ${knowledgeBlock}
 GROUNDING & ANTI-HALLUCINATION RULES:
 - Base clinic-specific answers directly on the RETRIEVED CLINIC KNOWLEDGE BASE above.
 - Never invent clinic prices, fees, schedules, veterinarians, services, promotions, or policies.
-- NO HALLUCINATED PRICES: If specific prices or fees are requested and NOT present in the retrieved knowledge, explicitly state that prices are not currently available online and recommend contacting Harbourside Veterinary Services via email at harvetservices@gmail.com or phone at 09212296819 / 09364158860.
+- NO HALLUCINATED PRICES: If specific prices or fees are requested and NOT present in the retrieved knowledge, state naturally that specific pricing depends on the pet's size, weight, and condition, and is not available online. Recommend contacting Harbourside Veterinary Services at 09212296819 or 09364158860, or emailing harvetservices@gmail.com for current pricing.
 
 VETERINARY SAFETY & MEDICAL RULES:
-- Provide general educational information only.
-- Do NOT diagnose pets or prescribe medication/dosages.
-- Always recommend consulting Dr. Alfredo B. Badiola Jr. or visiting Harbourside Veterinary Services for medical concerns.
-- For emergencies or severe symptoms (e.g. severe vomiting, bleeding, lethargy, poisoning), advise seeking immediate veterinary care.
+- Provide general educational information only. Do NOT diagnose pets or prescribe medication/dosages.
+- Use natural expressions like: "This can have several possible causes, and a veterinarian would need to examine your pet to determine the cause."
+- For emergencies or severe symptoms (e.g. difficulty breathing, seizures, severe weakness, bleeding, poisoning), advise: "If your pet is experiencing an emergency condition, seek veterinary care as soon as possible."
+- Recommend consulting Dr. Alfredo B. Badiola Jr. or visiting Harbourside Veterinary Services for medical concerns.
 
 --- User's live clinic data ---
 ${contextBlock}
 --- End data ---
 
-Keep replies concise, warm, helpful, and professional. Respond in the requested language.`;
+Respond naturally and professionally in clean text without markdown asterisks or headers.`;
 
   const contents = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -426,45 +457,101 @@ Keep replies concise, warm, helpful, and professional. Respond in the requested 
 }
 
 /** Returns Gemini text, or null if unavailable (quota, auth, etc.). */
+export type GeminiReplyResult = {
+  text: string | null;
+  is503Error?: boolean;
+};
+
+/** Returns Gemini text or 503 status indicator for graceful fallback. */
 export async function generateGeminiReply(
   apiKey: string,
   messages: { role: string; content: string }[],
   contextBlock: string,
   langPref: SupportedLanguage = "auto",
-  retrievedKnowledge: KnowledgeEntry[] = []
-): Promise<string | null> {
+  retrievedKnowledge: KnowledgeEntry[] = [],
+  userRole: "admin" | "staff" | "owner" = "owner"
+): Promise<GeminiReplyResult> {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const targetLanguage = langPref !== "auto" ? langPref : detectLanguage(lastUserMsg);
 
-  const { systemPrompt, contents } = buildGeminiPayload(messages, contextBlock, retrievedKnowledge, targetLanguage);
+  const { systemPrompt, contents } = buildGeminiPayload(
+    messages,
+    contextBlock,
+    retrievedKnowledge,
+    targetLanguage,
+    userRole
+  );
+
+  let is503Error = false;
+  const startTime = Date.now();
+  const MAX_TOTAL_MS = 7000; // 7s overall cap to prevent Next.js proxy socket hang up / ECONNRESET
 
   for (const model of GEMINI_MODELS) {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text().catch(() => `HTTP ${response.status}`);
-      console.error(`Gemini ${model} error:`, response.status, err.slice(0, 200));
-      if ([400, 404, 429, 503].includes(response.status)) continue;
-      continue;
+    if (Date.now() - startTime > MAX_TOTAL_MS) {
+      console.warn(`[Gemini Warning] Total Gemini request time exceeded ${MAX_TOTAL_MS}ms. Falling back.`);
+      break;
     }
 
-    const data = (await response.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (text) return text;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const maxRetries = 1;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (Date.now() - startTime > MAX_TOTAL_MS) break;
+
+      try {
+        const response = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+          }),
+          signal: AbortSignal.timeout(4500),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => `HTTP ${response.status}`);
+          if (response.status === 503) {
+            is503Error = true;
+            console.warn(
+              `[Gemini Warning] Model ${model} status 503: High demand temporary error. Attempt ${attempt + 1}/${maxRetries + 1}.`
+            );
+            if (attempt < maxRetries && Date.now() - startTime < MAX_TOTAL_MS - 1000) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              continue;
+            }
+            break;
+          }
+
+          if (response.status === 404) {
+            console.warn(`[Gemini Warning] Model ${model} returned 404 (not found or deprecated). Skipping model.`);
+            break;
+          }
+
+          console.error(`[Gemini Error] Model ${model} status ${response.status}:`, errText.slice(0, 200));
+          break;
+        }
+
+        const data = (await response.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return { text };
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          console.warn(`[Gemini Warning] Model ${model} request timed out (4.5s cap).`);
+        } else {
+          console.error(`[Gemini Fetch Error] Model ${model}:`, e instanceof Error ? e.message : String(e));
+        }
+        if (attempt < maxRetries && Date.now() - startTime < MAX_TOTAL_MS - 1000) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
+    }
   }
 
-  return null;
+  return { text: null, is503Error };
 }
 
 

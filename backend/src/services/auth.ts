@@ -62,7 +62,18 @@ export function validatePasswordPolicy(password: string): { valid: boolean; erro
 }
 
 function getSecret() {
-  const secret = process.env.AUTH_SECRET || "harbourside_default_secure_auth_secret_key_2026";
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (!secret) {
+    throw new Error(
+      "AUTH_SECRET is not set. Refusing to sign or verify sessions without it. " +
+        "Set AUTH_SECRET in the backend environment (see backend/.env.example) to a long random value."
+    );
+  }
+  if (secret === "your-long-random-secret" || secret.length < 32) {
+    throw new Error(
+      "AUTH_SECRET is a placeholder or too short. Set a long random value (32+ characters) in the backend environment."
+    );
+  }
   return new TextEncoder().encode(secret);
 }
 
@@ -88,8 +99,11 @@ export async function createSessionToken(user: SessionUser) {
 }
 
 export async function verifySessionToken(token: string): Promise<SessionUser | null> {
+  // Resolve the secret outside the try/catch so a missing AUTH_SECRET fails loudly
+  // instead of being silently swallowed as an invalid-token result.
+  const secret = getSecret();
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, secret);
     if (!payload.id || !payload.email || !payload.role) return null;
     return {
       id: String(payload.id),

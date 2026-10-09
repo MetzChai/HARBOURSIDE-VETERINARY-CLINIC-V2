@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Calendar, Clock, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
-import { todayPH } from "@/lib/datetime";
+import { todayPH, toDateOnly } from "@/lib/datetime";
 
 interface AppointmentDashboardCardsProps {
   appointments: any[];
@@ -12,7 +12,7 @@ export default function AppointmentDashboardCards({ appointments = [] }: Appoint
   const today = todayPH();
 
   const todaysAppointments = appointments.filter(
-    (a) => a.date === today && ["Scheduled", "Approved", "Completed", "Pending", "Requested"].includes(a.status)
+    (a) => toDateOnly(a.date) === today && ["Scheduled", "Approved", "Completed", "Pending", "Requested", "Missed"].includes(a.status)
   ).length;
 
   const pendingRequests = appointments.filter(
@@ -20,11 +20,11 @@ export default function AppointmentDashboardCards({ appointments = [] }: Appoint
   ).length;
 
   const upcomingAppointments = appointments.filter(
-    (a) => a.date > today && ["Scheduled", "Approved", "Pending", "Requested"].includes(a.status)
+    (a) => toDateOnly(a.date) > today && ["Scheduled", "Approved", "Pending", "Requested"].includes(a.status)
   ).length;
 
   const completedToday = appointments.filter(
-    (a) => a.date === today && a.status === "Completed"
+    (a) => toDateOnly(a.date) === today && a.status === "Completed"
   ).length;
 
   const cancelledAppointments = appointments.filter(

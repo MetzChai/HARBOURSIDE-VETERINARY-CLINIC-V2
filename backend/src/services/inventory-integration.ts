@@ -75,7 +75,10 @@ export function buildInventoryDeductionPlan(
     }
   }
 
-  if (Array.isArray(rawMedications) && rawMedications.length > 0) {
+  if (Array.isArray(rawMedications)) {
+    if (rawMedications.length === 0) {
+      return { plan: [] };
+    }
     for (const entry of rawMedications) {
       if (!entry || typeof entry !== "object") continue;
       const itemId = String(
@@ -92,15 +95,13 @@ export function buildInventoryDeductionPlan(
           plan.push({
             itemId: item.id,
             quantity: qty,
-            reason: "Used for Care History",
+            reason: "Care History Prescription",
           });
         }
       }
     }
 
-    if (plan.length > 0) {
-      return validateInventoryDeductionPlan(plan, items);
-    }
+    return validateInventoryDeductionPlan(plan, items);
   }
 
   // 2. Check for direct explicit item ID passed in row payload

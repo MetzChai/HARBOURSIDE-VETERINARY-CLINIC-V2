@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { isAdmin } from "@/lib/roles";
 import { PageHeader } from "@/components/PageHeader";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 import { StatCard } from "@/components/StatCard";
 import { PageSkeleton } from "@/components/PageSkeleton";
 
@@ -443,9 +444,56 @@ export default function Inventory() {
     notes: "",
   });
 
+  // Edit Price Modal (Admin/Staff controlled price correction)
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [editingPriceTxn, setEditingPriceTxn] = useState<any | null>(null);
+  const [editPriceForm, setEditPriceForm] = useState({
+    unit_price: "0.00",
+    total_amount: "0.00",
+  });
+
   const [targetItem, setTargetItem] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+
+  const openEditPriceModal = (txn: any) => {
+    const item = items.find((i: any) => i.id === txn.item_id);
+    const uPrice = Number(txn.unit_price ?? txn.unit_cost ?? item?.unit_price ?? 0);
+    const qty = Number(txn.quantity ?? 1);
+    const tAmt = Number(txn.total_amount ?? (uPrice * qty));
+
+    setEditingPriceTxn(txn);
+    setEditPriceForm({
+      unit_price: uPrice.toFixed(2),
+      total_amount: tAmt.toFixed(2),
+    });
+    setShowEditPriceModal(true);
+  };
+
+  const handleSaveEditPrice = async () => {
+    if (!editingPriceTxn) return;
+    const uPrice = Math.max(0, parseFloat(editPriceForm.unit_price) || 0);
+    const tAmt = Math.max(0, parseFloat(editPriceForm.total_amount) || 0);
+
+    setSaving(true);
+    const { error } = await db
+      .from("inventory_transactions")
+      .update({
+        unit_price: uPrice,
+        total_amount: tAmt,
+      } as any)
+      .eq("id", editingPriceTxn.id);
+    setSaving(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Transaction price corrected successfully.");
+      setShowEditPriceModal(false);
+      setEditingPriceTxn(null);
+      invalidate("inventory_transactions");
+    }
+  };
 
   // Table Search & Filters
   const [search, setSearch] = useState("");
@@ -556,9 +604,22 @@ export default function Inventory() {
       const item = items.find((i) => i.id === itemId);
       const summary = itemSummaries[itemId] || getItemSummary(item, dbBatches, txns);
       const currentStock = summary.totalQty;
-      const itemTxns = [...txnsByItem[itemId]];
-      itemTxns.reverse(); // newest to oldest for backwards stock calculation
+      // Deterministic newest -> oldest order: date desc, then created_at desc, then id desc.
+      // Needed so a same-day Stock In and its auto-deduction always resolve in the same order.
+      const ts = (v: unknown) => {
+        const t = new Date(String(v ?? "")).getTime();
+        return Number.isNaN(t) ? 0 : t;
+      };
+      const itemTxns = [...txnsByItem[itemId]].sort((a, b) => {
+        const dateDiff = ts(b.date ?? b.created_at) - ts(a.date ?? a.created_at);
+        if (dateDiff !== 0) return dateDiff;
+        const createdDiff = ts(b.created_at) - ts(a.created_at);
+        if (createdDiff !== 0) return createdDiff;
+        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+      });
 
+      // Walk newest -> oldest, assigning the balance *before* undoing the txn:
+      // row balance = stock after that txn, then step back across it.
       let running = currentStock;
       itemTxns.forEach((txn) => {
         map[txn.id] = running;
@@ -1598,6 +1659,7 @@ export default function Inventory() {
                       <TableHead>Expiration Date</TableHead>
                       <TableHead>Performed By</TableHead>
                       <TableHead>Reason & Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1653,12 +1715,23 @@ export default function Inventory() {
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
                             {txn.reason ?? "—"} {txn.notes ? `(${txn.notes})` : ""}
                           </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-brand-navy hover:text-brand-navy hover:bg-brand-navy-light"
+                              onClick={() => openEditPriceModal(txn)}
+                              title="Edit transaction price"
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> Edit Price
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
                     {filteredTransactions.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
+                        <TableCell colSpan={12} className="py-12 text-center text-muted-foreground">
                           No stock movement history recorded.
                         </TableCell>
                       </TableRow>
@@ -1670,6 +1743,91 @@ export default function Inventory() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* DIALOG: CONTROLLED EDIT PRICE FOR HISTORICAL TRANSACTIONS */}
+      <Dialog open={showEditPriceModal} onOpenChange={setShowEditPriceModal}>
+        <DialogContent className="max-w-md p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
+            <DialogTitle className="font-heading text-lg flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-brand-navy" /> Edit Transaction Price
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Correct financial metadata for historical stock movements. Quantities and batch movements remain protected.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingPriceTxn && (() => {
+            const item = items.find((i: any) => i.id === editingPriceTxn.item_id);
+            const dateDisplay = editingPriceTxn.date ? formatDate(editingPriceTxn.date) : formatDate(editingPriceTxn.created_at);
+            return (
+              <div className="space-y-4 p-6">
+                <div className="grid grid-cols-2 gap-3 bg-muted/40 p-3 rounded-md border text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Item Name</span>
+                    <span className="font-semibold text-foreground">{item?.name || "Inventory Item"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Transaction Date</span>
+                    <span className="font-medium text-foreground">{dateDisplay}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Batch Number</span>
+                    <span className="font-mono text-foreground font-semibold">{editingPriceTxn.batch_no || "N/A"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Quantity (Protected)</span>
+                    <span className="font-bold text-foreground">{editingPriceTxn.quantity} {item?.unit || "unit"}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Unit Price (₱) *</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={editPriceForm.unit_price}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsedPrice = parseFloat(val) || 0;
+                        const qty = Number(editingPriceTxn.quantity ?? 1);
+                        setEditPriceForm({
+                          unit_price: val,
+                          total_amount: (parsedPrice * qty).toFixed(2),
+                        });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Total Amount (₱) *</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={editPriceForm.total_amount}
+                      onChange={(e) => setEditPriceForm({ ...editPriceForm, total_amount: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground italic border-t pt-2">
+                  Note: Total Amount is automatically calculated as Quantity × Unit Price. Adjusting price does not mutate stock quantities or batch records.
+                </p>
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setShowEditPriceModal(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveEditPrice} disabled={saving} className="bg-brand-navy text-white">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Price"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* DIALOG 1: ADD ITEM (ADMIN ONLY) */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
@@ -2340,25 +2498,22 @@ export default function Inventory() {
                     Select Batch <span className="text-destructive">*</span>
                   </Label>
                   {activeBatches.length > 0 ? (
-                    <Select
+                    <SearchableSelect
+                      options={activeBatches.map((b) => {
+                        const key = `${b.batch_no.toUpperCase()}___${b.expiration_date || "NO_EXP"}`;
+                        const expLabel = b.expiration_date ? formatDate(b.expiration_date) : "No Expiration";
+                        return {
+                          value: key,
+                          label: `Batch ${b.batch_no}`,
+                          sublabel: `Expires: ${expLabel} | Available: ${b.remaining_quantity} ${targetItem.unit || "unit"}`,
+                          keywords: `${b.batch_no} ${expLabel}`,
+                        };
+                      })}
                       value={stockOutForm.batch_key}
-                      onValueChange={(v) => setStockOutForm({ ...stockOutForm, batch_key: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select available batch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeBatches.map((b, idx) => {
-                          const key = `${b.batch_no.toUpperCase()}___${b.expiration_date || "NO_EXP"}`;
-                          const expLabel = b.expiration_date ? formatDate(b.expiration_date) : "No Expiration";
-                          return (
-                            <SelectItem key={`${key}-${idx}`} value={key}>
-                              Batch {b.batch_no} — Exp {expLabel} ({b.remaining_quantity} {targetItem.unit || "unit"})
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
+                      onChange={(v) => setStockOutForm({ ...stockOutForm, batch_key: v })}
+                      placeholder="Select available batch..."
+                      searchPlaceholder="Search batch number..."
+                    />
                   ) : (
                     <div className="text-xs text-destructive p-2 bg-destructive/10 rounded border border-destructive/20">
                       No available stock batches found for this item.

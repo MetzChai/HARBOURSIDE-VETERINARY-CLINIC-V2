@@ -548,3 +548,42 @@ CREATE TABLE IF NOT EXISTS clinic_knowledge (
 DROP TRIGGER IF EXISTS trg_clinic_knowledge_updated ON clinic_knowledge;
 CREATE TRIGGER trg_clinic_knowledge_updated BEFORE UPDATE ON clinic_knowledge FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- ===== chat_conversations =====
+CREATE TABLE IF NOT EXISTS chat_conversations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_user_id ON chat_conversations(user_id);
+
+DROP TRIGGER IF EXISTS trg_chat_conversations_updated ON chat_conversations;
+CREATE TRIGGER trg_chat_conversations_updated BEFORE UPDATE ON chat_conversations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ===== chat_messages =====
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+  role text NOT NULL,
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conv_id ON chat_messages(conversation_id);
+
+-- ===== user_notifications =====
+CREATE TABLE IF NOT EXISTS user_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  notification_id text NOT NULL,
+  read_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT uq_user_notifications_user_notif UNIQUE (user_id, notification_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_notif_user_id ON user_notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_notif_notif_id ON user_notifications(notification_id);
+
+

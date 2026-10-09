@@ -43,6 +43,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { CLINIC_SERVICES } from "@/lib/appointment-slots";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 
 type TransactionRow = {
   id: string;
@@ -138,6 +139,18 @@ export default function LabTransactions() {
   // Maps for quick relational lookups
   const petMap = useMemo(() => new Map(pets.map((p) => [p.id, p])), [pets]);
   const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o])), [owners]);
+
+  const petOptions: SearchableOption[] = useMemo(() => {
+    return pets.map((p) => {
+      const ownerName = ownerMap.get(p.owner_id)?.name || "Owner";
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: `Owner: ${ownerName} • ${p.species || "Pet"}`,
+        keywords: `${p.name} ${ownerName} ${p.species || ""} ${p.breed || ""}`,
+      };
+    });
+  }, [pets, ownerMap]);
   const apptMap = useMemo(() => new Map(appointments.map((a) => [a.id, a])), [appointments]);
   const careMap = useMemo(() => new Map(careRecords.map((c) => [c.id, c])), [careRecords]);
 
@@ -1334,24 +1347,16 @@ export default function LabTransactions() {
           <div className="space-y-3 pt-2 text-xs">
             <div className="space-y-1">
               <Label className="text-xs font-bold text-[#1B3A5C]">Select Pet & Owner *</Label>
-              <Select
+              <SearchableSelect
+                options={petOptions}
                 value={txnForm.pet_id}
-                onValueChange={(v) => {
+                onChange={(v) => {
                   const pet = petMap.get(v);
                   setTxnForm({ ...txnForm, pet_id: v, owner_id: pet?.owner_id || txnForm.owner_id });
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Pet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pets.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({ownerMap.get(p.owner_id)?.name || "Owner"})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select Pet & Owner..."
+                searchPlaceholder="Type pet name or owner..."
+              />
             </div>
 
             <div className="space-y-1.5">

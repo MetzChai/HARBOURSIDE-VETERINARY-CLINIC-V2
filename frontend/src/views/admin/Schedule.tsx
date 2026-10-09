@@ -44,6 +44,7 @@ import {
 } from "@/lib/appointment-slots";
 import AppointmentDashboardCards from "@/components/AppointmentDashboardCards";
 import AppointmentCalendar from "@/components/AppointmentCalendar";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -102,6 +103,18 @@ export default function Schedule() {
   const petMap = useMemo(() => new Map(pets.map((p) => [p.id, p])), [pets]);
   const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o.name])), [owners]);
 
+  const petOptions: SearchableOption[] = useMemo(() => {
+    return pets.map((p) => {
+      const ownerName = ownerMap.get(p.owner_id) || "No owner assigned";
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: `Owner: ${ownerName} • ${p.species || "Pet"}`,
+        keywords: `${p.name} ${ownerName} ${p.species || ""} ${p.breed || ""}`,
+      };
+    });
+  }, [pets, ownerMap]);
+
   const getPetName = (a: any) => {
     if (a.pet_id && petMap.has(a.pet_id)) return petMap.get(a.pet_id)?.name;
     if (a.notes?.startsWith("Walk-in pet: ")) return a.notes.replace("Walk-in pet: ", "").split(" | ")[0];
@@ -128,7 +141,7 @@ export default function Schedule() {
       appointments
         .filter(
           (a) =>
-            a.date === form.date &&
+            toDateOnly(a.date) === toDateOnly(form.date) &&
             a.id !== editingId &&
             ["Scheduled", "Approved", "Pending", "Requested"].includes(a.status)
         )
@@ -238,6 +251,11 @@ export default function Schedule() {
       return;
     }
 
+    if (form.date === todayPH() && form.time && form.time <= nowTimePH()) {
+      toast.error("That time slot has already passed today. Please select an available future time slot.");
+      return;
+    }
+
     const dateObj = new Date(`${form.date}T12:00:00+08:00`);
     if (!isNaN(dateObj.getTime()) && dateObj.getDay() === 0) {
       toast.error("Harbourside Veterinary Clinic is closed on Sundays. Please select a date from Monday to Saturday.");
@@ -250,7 +268,7 @@ export default function Schedule() {
         (a) =>
           a.id !== editingId &&
           a.pet_id === form.pet_id &&
-          a.date === form.date &&
+          toDateOnly(a.date) === toDateOnly(form.date) &&
           a.time === form.time &&
           a.status !== "Cancelled"
       );
@@ -617,7 +635,7 @@ export default function Schedule() {
                               </Badge>
                             </SelectTrigger>
                             <SelectContent>
-                              {APPOINTMENT_STATUSES.map((s) => (
+                              {APPOINTMENT_STATUSES.filter((s) => a.status !== "Missed" || s !== "Completed").map((s) => (
                                 <SelectItem key={s} value={s}>
                                   {s}
                                 </SelectItem>
@@ -671,7 +689,7 @@ export default function Schedule() {
                               </Button>
                             )}
 
-                            {a.status !== "Completed" && a.status !== "Cancelled" && (
+                            {a.status !== "Completed" && a.status !== "Cancelled" && a.status !== "Missed" && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -728,18 +746,13 @@ export default function Schedule() {
 
             <div className="space-y-1.5">
               <Label>Pet *</Label>
-              <Select value={form.pet_id} onValueChange={(val) => setForm({ ...form, pet_id: val })}>
-                <SelectTrigger>
-                  <SelectValue placeholder={form.type === "walk_in" ? "Select pet (or enter walk-in name below)" : "Select pet"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {pets.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.species || "Pet"})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={petOptions}
+                value={form.pet_id}
+                onChange={(val) => setForm({ ...form, pet_id: val })}
+                placeholder={form.type === "walk_in" ? "Select pet (or enter walk-in name below)" : "Select pet"}
+                searchPlaceholder="Search pet by name or owner..."
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -755,7 +768,9 @@ export default function Schedule() {
                       toast.error("Appointments cannot be booked in the past.");
                       setForm({ ...form, date: todayPH(), time: "" });
                     } else {
-                      setForm({ ...form, date: val, time: "" });
+                      const nTime = nowTimePH();
+                      const isPassedToday = val === todayPH() && form.time && form.time <= nTime;
+                      setForm({ ...form, date: val, time: isPassedToday ? "" : form.time });
                     }
                   }}
                 />
@@ -841,7 +856,7 @@ export default function Schedule() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {APPOINTMENT_STATUSES.map((s) => (
+                    {APPOINTMENT_STATUSES.filter((s) => form.status !== "Missed" || s !== "Completed").map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>
@@ -947,7 +962,7 @@ export default function Schedule() {
                 <Button variant="outline" onClick={() => setShowViewModal(false)}>
                   Close
                 </Button>
-                {selectedAppointment.status !== "Completed" && (
+                {selectedAppointment.status !== "Completed" && selectedAppointment.status !== "Missed" && (
                   <Button
                     onClick={() => {
                       setShowViewModal(false);

@@ -12,6 +12,7 @@ import chatRoutes from "./routes/chat.js";
 import uploadRoutes from "./routes/upload.js";
 import appointmentRoutes from "./routes/appointments.js";
 import staffRoutes from "./routes/staff.js";
+import notificationRoutes from "./routes/notifications.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -37,21 +38,28 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Backend running at http://localhost:${port}`);
   console.log(`Frontend URL: ${frontendUrl}`);
   const gemini = process.env.GEMINI_API_KEY?.trim();
-  const geminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+  const geminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
   console.log(`[backend] Gemini model: ${geminiModel}`);
   console.log(`Gemini AI: ${gemini ? "configured" : "not set (PawBot uses local fallback)"}`);
   const resendKey = process.env.RESEND_API_KEY?.trim();
   console.log(`Resend Email Service: ${resendKey ? "configured" : "not set (emails will be simulated in console)"}`);
+
+  import("./services/data.js")
+    .then(({ ensureExtraTables }) => {
+      void ensureExtraTables();
+    })
+    .catch((err) => console.error("[data] Failed to ensure extra tables:", err));
 
   import("./services/message-dispatch.js")
     .then(({ processPendingScheduledMessages }) => {
@@ -71,3 +79,10 @@ app.listen(port, () => {
     })
     .catch((err) => console.error("[appointments] Missed status checker failed to start:", err));
 });
+
+// Next.js proxies /api/* with its own keep-alive; keep backend sockets alive a bit
+// longer than the proxy's default idle window so reused sockets aren't reset
+// (ECONNRESET / "socket hang up") under parallel requests. headersTimeout must be
+// greater than keepAliveTimeout.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;

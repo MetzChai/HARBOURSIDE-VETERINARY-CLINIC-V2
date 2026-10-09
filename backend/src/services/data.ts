@@ -258,6 +258,8 @@ export async function checkAndUpdateMissedAppointments(): Promise<void> {
   }
 }
 
+let lastMissedAppointmentsScan = 0;
+
 export async function querySelect(opts: {
   user: SessionUser;
   table: string;
@@ -271,7 +273,8 @@ export async function querySelect(opts: {
   await authorizeTableAccess(opts.user, table, "select");
 
   const pool = getPool();
-  if (table === "appointments") {
+  if (table === "appointments" && Date.now() - lastMissedAppointmentsScan >= 60_000) {
+    lastMissedAppointmentsScan = Date.now();
     await checkAndUpdateMissedAppointments();
   }
   if (table === "messages") {
@@ -502,7 +505,18 @@ async function sanitizeOwnerMessageInsert(user: SessionUser, row: Record<string,
   });
 }
 
+let ensureInventorySchemaPromise: Promise<void> | null = null;
+
 async function ensureInventorySchema(poolOrClient: any) {
+  if (ensureInventorySchemaPromise) return ensureInventorySchemaPromise;
+  ensureInventorySchemaPromise = runEnsureInventorySchema(poolOrClient).catch((e) => {
+    ensureInventorySchemaPromise = null;
+    throw e;
+  });
+  return ensureInventorySchemaPromise;
+}
+
+async function runEnsureInventorySchema(poolOrClient: any) {
   await poolOrClient.query(`ALTER TABLE inventory_items ALTER COLUMN category TYPE text USING category::text`);
   await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS item_code text`);
   await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS description text`);
@@ -549,6 +563,18 @@ async function ensureInventorySchema(poolOrClient: any) {
   await poolOrClient.query(`UPDATE inventory_items SET unit_price = 0 WHERE unit_price IS NULL`);
   await poolOrClient.query(`UPDATE inventory_transactions SET unit_price = 0 WHERE unit_price IS NULL`);
   await poolOrClient.query(`UPDATE inventory_transactions SET total_amount = 0 WHERE total_amount IS NULL`);
+
+  // Correct historical ₱0.00 transactions when item has a valid unit_price
+  await poolOrClient.query(`
+    UPDATE inventory_transactions t
+    SET unit_price = i.unit_price,
+        total_amount = t.quantity * i.unit_price
+    FROM inventory_items i
+    WHERE t.item_id = i.id
+      AND (t.unit_price IS NULL OR t.unit_price = 0)
+      AND (t.total_amount IS NULL OR t.total_amount = 0)
+      AND i.unit_price > 0
+  `);
 
   // Ensure lab_transactions columns exist
   await poolOrClient.query(`ALTER TABLE lab_transactions ADD COLUMN IF NOT EXISTS transaction_number text`);
@@ -656,8 +682,8 @@ async function applyCareInventoryAdjustment(
   if (recordId) {
     const txnPrefix = `CARE-${recordId.slice(0, 8)}`;
     const { rows: oldTxns } = await poolOrClient.query(
-      `SELECT id, inventory_batch_id, item_id, quantity FROM inventory_transactions WHERE transaction_no = $1 AND type = 'out'`,
-      [txnPrefix]
+      `SELECT id, inventory_batch_id, item_id, quantity FROM inventory_transactions WHERE (transaction_no = $1 OR notes LIKE $2) AND type = 'out'`,
+      [txnPrefix, `%Care history record ${recordId}%`]
     );
     if (oldTxns.length > 0) {
       for (const oldTxn of oldTxns) {
@@ -673,8 +699,8 @@ async function applyCareInventoryAdjustment(
         );
       }
       await poolOrClient.query(
-        `DELETE FROM inventory_transactions WHERE transaction_no = $1 AND type = 'out'`,
-        [txnPrefix]
+        `DELETE FROM inventory_transactions WHERE (transaction_no = $1 OR notes LIKE $2) AND type = 'out'`,
+        [txnPrefix, `%Care history record ${recordId}%`]
       );
     }
   }
@@ -712,7 +738,7 @@ async function applyCareInventoryAdjustment(
 
     const totalAvailable = activeBatches.reduce((acc: number, b: any) => acc + Number(b.remaining_quantity ?? 0), 0);
     if (totalAvailable < step.quantity) {
-      throw new Error(`Insufficient available stock for ${item?.name || step.itemId}.`);
+      throw new Error(`Insufficient non-expired stock for ${item?.name || step.itemId}. Available: ${totalAvailable}, Requested: ${step.quantity}`);
     }
 
     let remainingNeeded = step.quantity;
@@ -1407,6 +1433,36 @@ export async function queryDelete(opts: {
     }
   }
 
+  if (["care_records", "vaccinations", "dewormings"].includes(table)) {
+    const idFilter = opts.filters.find((f) => f.column === "id");
+    if (idFilter?.value) {
+      const recordId = String(idFilter.value);
+      const txnPrefix = `CARE-${recordId.slice(0, 8)}`;
+      const { rows: oldTxns } = await pool.query(
+        `SELECT id, inventory_batch_id, item_id, quantity FROM inventory_transactions WHERE (transaction_no = $1 OR notes LIKE $2) AND type = 'out'`,
+        [txnPrefix, `%Care history record ${recordId}%`]
+      );
+      if (oldTxns.length > 0) {
+        for (const oldTxn of oldTxns) {
+          if (oldTxn.inventory_batch_id) {
+            await pool.query(
+              `UPDATE inventory_batches SET remaining_quantity = remaining_quantity + $1, updated_at = now() WHERE id = $2`,
+              [Number(oldTxn.quantity ?? 0), oldTxn.inventory_batch_id]
+            );
+          }
+          await pool.query(
+            `UPDATE inventory_items SET quantity = COALESCE((SELECT SUM(remaining_quantity) FROM inventory_batches WHERE inventory_item_id = $1), 0), updated_at = now() WHERE id = $1`,
+            [oldTxn.item_id]
+          );
+        }
+        await pool.query(
+          `DELETE FROM inventory_transactions WHERE (transaction_no = $1 OR notes LIKE $2) AND type = 'out'`,
+          [txnPrefix, `%Care history record ${recordId}%`]
+        );
+      }
+    }
+  }
+
   let paramIdx = 1;
   const values: unknown[] = [];
   const whereParts = opts.filters.map((f) => {
@@ -1432,149 +1488,183 @@ export async function queryUpdate(opts: {
 
   const pool = getPool();
   const data = { ...opts.data };
+  const useTransaction = ["care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions", "lab_transactions", "lab_transaction_items"].includes(table);
+  const client = useTransaction ? await pool.connect() : null;
+  const poolOrClient = client ?? pool;
 
   if (["lab_transactions", "lab_transaction_items", "care_records", "vaccinations", "dewormings", "inventory_items", "inventory_batches", "inventory_transactions"].includes(table)) {
-    await ensureInventorySchema(pool);
+    await ensureInventorySchema(poolOrClient);
   }
 
-  if (table === "appointments") {
-    if (data.date !== undefined) {
-      data.date = toDateOnly(data.date);
-    }
-    if (data.time !== undefined) {
-      const timeMatch = String(data.time).match(/(\d{1,2}:\d{2})/);
-      data.time = timeMatch?.[1] ?? String(data.time).slice(0, 5);
+  try {
+    if (client) await client.query("BEGIN");
+
+    if (table === "appointments") {
+      if (data.date !== undefined) {
+        data.date = toDateOnly(data.date);
+      }
+      if (data.time !== undefined) {
+        const timeMatch = String(data.time).match(/(\d{1,2}:\d{2})/);
+        data.time = timeMatch?.[1] ?? String(data.time).slice(0, 5);
+      }
+
+      if (isClinicUser(opts.user.role)) {
+        const idFilter = opts.filters.find((f) => f.column === "id");
+        const appointmentId = idFilter?.value ? String(idFilter.value) : undefined;
+
+        if (data.status === "Scheduled" && appointmentId) {
+          const { rows } = await poolOrClient.query(`SELECT date, time FROM appointments WHERE id = $1`, [appointmentId]);
+          const current = rows[0] as { date?: string | Date; time?: string } | undefined;
+          if (current) {
+            const slotDate = data.date ? String(data.date) : toDateOnly(current.date);
+            const slotTime = data.time ? String(data.time) : String(current.time ?? "");
+            if (slotDate && slotTime) {
+              await assertAppointmentSlotAvailable(slotDate, slotTime, appointmentId);
+            }
+          }
+        }
+      }
     }
 
-    if (isClinicUser(opts.user.role)) {
+    if (table === "lab_transactions") {
       const idFilter = opts.filters.find((f) => f.column === "id");
-      const appointmentId = idFilter?.value ? String(idFilter.value) : undefined;
+      if (idFilter?.value) {
+        const txnId = String(idFilter.value);
+        const { rows: currentTxn } = await poolOrClient.query(
+          `SELECT subtotal, total_amount, amount_paid, discount, additional_fees, payment_status FROM lab_transactions WHERE id = $1`,
+          [txnId]
+        );
+        if (currentTxn.length) {
+          const c = currentTxn[0];
+          const subtotal = data.subtotal !== undefined ? Number(data.subtotal) : Number(c.subtotal ?? c.total_amount ?? 0);
+          const discount = data.discount !== undefined ? Number(data.discount) : Number(c.discount ?? 0);
+          const fees = data.additional_fees !== undefined ? Number(data.additional_fees) : Number(c.additional_fees ?? 0);
+          let amountPaid = data.amount_paid !== undefined ? Number(data.amount_paid) : Number(c.amount_paid ?? 0);
 
-      if (data.status === "Scheduled" && appointmentId) {
-        const { rows } = await pool.query(`SELECT date, time FROM appointments WHERE id = $1`, [appointmentId]);
-        const current = rows[0] as { date?: string | Date; time?: string } | undefined;
-        if (current) {
-          const slotDate = data.date ? String(data.date) : toDateOnly(current.date);
-          const slotTime = data.time ? String(data.time) : String(current.time ?? "");
-          if (slotDate && slotTime) {
-            await assertAppointmentSlotAvailable(slotDate, slotTime, appointmentId);
+          const totalAmount = data.total_amount !== undefined ? Number(data.total_amount) : Number((subtotal - discount + fees).toFixed(2));
+
+          if (data.payment_status === "Paid" && amountPaid < totalAmount) {
+            amountPaid = totalAmount;
           }
-        }
-      }
-    }
-  }
 
-  if (table === "lab_transactions") {
-    const idFilter = opts.filters.find((f) => f.column === "id");
-    if (idFilter?.value) {
-      const txnId = String(idFilter.value);
-      const { rows: currentTxn } = await pool.query(
-        `SELECT subtotal, total_amount, amount_paid, discount, additional_fees, payment_status FROM lab_transactions WHERE id = $1`,
-        [txnId]
-      );
-      if (currentTxn.length) {
-        const c = currentTxn[0];
-        const subtotal = data.subtotal !== undefined ? Number(data.subtotal) : Number(c.subtotal ?? c.total_amount ?? 0);
-        const discount = data.discount !== undefined ? Number(data.discount) : Number(c.discount ?? 0);
-        const fees = data.additional_fees !== undefined ? Number(data.additional_fees) : Number(c.additional_fees ?? 0);
-        let amountPaid = data.amount_paid !== undefined ? Number(data.amount_paid) : Number(c.amount_paid ?? 0);
-
-        const totalAmount = data.total_amount !== undefined ? Number(data.total_amount) : Number((subtotal - discount + fees).toFixed(2));
-
-        if (data.payment_status === "Paid" && amountPaid < totalAmount) {
-          amountPaid = totalAmount;
-        }
-
-        let paymentStatus = data.payment_status ? String(data.payment_status) : (c.payment_status || "Pending");
-        if (data.amount_paid !== undefined || data.total_amount !== undefined || data.subtotal !== undefined || data.payment_status !== undefined) {
-          if (amountPaid >= totalAmount && totalAmount > 0) {
-            paymentStatus = "Paid";
-          } else if (amountPaid > 0 && amountPaid < totalAmount) {
-            paymentStatus = "Partially Paid";
-          } else if (amountPaid === 0) {
-            paymentStatus = "Unpaid";
+          let paymentStatus = data.payment_status ? String(data.payment_status) : (c.payment_status || "Pending");
+          if (data.amount_paid !== undefined || data.total_amount !== undefined || data.subtotal !== undefined || data.payment_status !== undefined) {
+            if (amountPaid >= totalAmount && totalAmount > 0) {
+              paymentStatus = "Paid";
+            } else if (amountPaid > 0 && amountPaid < totalAmount) {
+              paymentStatus = "Partially Paid";
+            } else if (amountPaid === 0) {
+              paymentStatus = "Unpaid";
+            }
           }
+
+          data.subtotal = subtotal;
+          data.discount = discount;
+          data.additional_fees = fees;
+          data.total_amount = totalAmount;
+          data.total = totalAmount;
+          data.amount_paid = amountPaid;
+          data.payment_status = paymentStatus;
+          data.status = paymentStatus;
         }
-
-        data.subtotal = subtotal;
-        data.discount = discount;
-        data.additional_fees = fees;
-        data.total_amount = totalAmount;
-        data.total = totalAmount;
-        data.amount_paid = amountPaid;
-        data.payment_status = paymentStatus;
-        data.status = paymentStatus;
       }
     }
-  }
 
-  const keys = Object.keys(data).map(quoteIdent);
-  let values = Object.values(data);
+    const keys = Object.keys(data).map(quoteIdent);
+    let values = Object.values(data);
 
-  let shouldSyncCare = false;
-  let appointmentIdForSync: string | undefined;
-  let previousAppointmentStatus: string | undefined;
-  if (table === "appointments") {
-    const idFilter = opts.filters.find((f) => f.column === "id");
-    appointmentIdForSync = idFilter?.value ? String(idFilter.value) : undefined;
-    if (appointmentIdForSync) {
-      const { rows } = await pool.query(`SELECT status FROM appointments WHERE id = $1`, [appointmentIdForSync]);
-      previousAppointmentStatus = rows[0]?.status as string | undefined;
-      if (data.status === "Completed") {
-        shouldSyncCare = previousAppointmentStatus !== "Completed";
+    let shouldSyncCare = false;
+    let appointmentIdForSync: string | undefined;
+    let previousAppointmentStatus: string | undefined;
+    if (table === "appointments") {
+      const idFilter = opts.filters.find((f) => f.column === "id");
+      appointmentIdForSync = idFilter?.value ? String(idFilter.value) : undefined;
+      if (appointmentIdForSync) {
+        const { rows } = await poolOrClient.query(`SELECT status FROM appointments WHERE id = $1`, [appointmentIdForSync]);
+        previousAppointmentStatus = rows[0]?.status as string | undefined;
+        if (data.status === "Completed") {
+          if (previousAppointmentStatus === "Missed") {
+            throw new Error("Appointments marked as Missed cannot be completed.");
+          }
+          shouldSyncCare = previousAppointmentStatus !== "Completed";
+        }
       }
     }
-  }
 
-  let paramIdx = values.length + 1;
-  const whereParts = opts.filters.map((f) => {
-    const part = `${quoteIdent(f.column)} = $${paramIdx}`;
-    paramIdx++;
-    values.push(f.value);
-    return part;
-  });
+    let paramIdx = values.length + 1;
+    const whereParts = opts.filters.map((f) => {
+      const part = `${quoteIdent(f.column)} = $${paramIdx}`;
+      paramIdx++;
+      values.push(f.value);
+      return part;
+    });
 
-  const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
-  const query = `UPDATE ${quoteIdent(table)} SET ${setClause} WHERE ${whereParts.join(" AND ")}`;
-  await pool.query(query, values);
+    const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
+    const query = `UPDATE ${quoteIdent(table)} SET ${setClause} WHERE ${whereParts.join(" AND ")}`;
+    await poolOrClient.query(query, values);
 
-  if (table === "inventory_batches") {
-    const idFilter = opts.filters.find((f) => f.column === "id");
-    if (idFilter?.value) {
-      await pool.query(
-        `UPDATE inventory_items SET quantity = COALESCE((SELECT SUM(remaining_quantity) FROM inventory_batches WHERE inventory_item_id = (SELECT inventory_item_id FROM inventory_batches WHERE id = $1)), 0), updated_at = now() WHERE id = (SELECT inventory_item_id FROM inventory_batches WHERE id = $1)`,
-        [idFilter.value]
-      );
+    if (table === "inventory_batches") {
+      const idFilter = opts.filters.find((f) => f.column === "id");
+      if (idFilter?.value) {
+        await poolOrClient.query(
+          `UPDATE inventory_items SET quantity = COALESCE((SELECT SUM(remaining_quantity) FROM inventory_batches WHERE inventory_item_id = (SELECT inventory_item_id FROM inventory_batches WHERE id = $1)), 0), updated_at = now() WHERE id = (SELECT inventory_item_id FROM inventory_batches WHERE id = $1)`,
+          [idFilter.value]
+        );
+      }
     }
-  }
 
-  if (table === "appointments" && appointmentIdForSync && isClinicUser(opts.user.role) && (data.status || data.date || data.time)) {
-    try {
-      const { notifyOwnerOnAppointmentChange } = await import("./message-dispatch.js");
-      await notifyOwnerOnAppointmentChange({
-        appointmentId: appointmentIdForSync,
-        previousStatus: previousAppointmentStatus,
-        nextStatus: data.status ? String(data.status) : previousAppointmentStatus,
-        dateChanged: data.date !== undefined || data.time !== undefined,
-        sentBy: opts.user.fullName || opts.user.email || "Clinic",
-      });
-    } catch (err) {
-      console.error("[messages] Appointment notice failed:", err);
+    if (["care_records", "vaccinations", "dewormings"].includes(table)) {
+      const idFilter = opts.filters.find((f) => f.column === "id");
+      if (idFilter?.value) {
+        const recordId = String(idFilter.value);
+        const petId = data.pet_id ? String(data.pet_id) : undefined;
+        await applyCareInventoryAdjustment(poolOrClient, table, data, recordId, petId);
+        if (table === "care_records") {
+          await syncCareLabTransaction(
+            poolOrClient,
+            recordId,
+            petId,
+            (data.date ?? data.record_date) as string | Date | null | undefined
+          );
+        }
+      }
     }
-  }
 
-  if (shouldSyncCare && appointmentIdForSync) {
-    try {
-      const result = await syncCareRecordFromCompletedAppointment(appointmentIdForSync);
-      return { careRecorded: result.recorded, careSkipReason: result.skipReason };
-    } catch (err) {
-      console.error("[care-sync] Failed after appointment completed:", err);
-      const message = err instanceof Error ? err.message : "Care record sync failed";
-      return { careRecorded: false, careSkipReason: message };
+    if (table === "appointments" && appointmentIdForSync && isClinicUser(opts.user.role) && (data.status || data.date || data.time)) {
+      try {
+        const { notifyOwnerOnAppointmentChange } = await import("./message-dispatch.js");
+        await notifyOwnerOnAppointmentChange({
+          appointmentId: appointmentIdForSync,
+          previousStatus: previousAppointmentStatus,
+          nextStatus: data.status ? String(data.status) : previousAppointmentStatus,
+          dateChanged: data.date !== undefined || data.time !== undefined,
+          sentBy: opts.user.fullName || opts.user.email || "Clinic",
+        });
+      } catch (err) {
+        console.error("[messages] Appointment notice failed:", err);
+      }
     }
-  }
 
-  return {};
+    if (client) await client.query("COMMIT");
+
+    if (shouldSyncCare && appointmentIdForSync) {
+      try {
+        const result = await syncCareRecordFromCompletedAppointment(appointmentIdForSync);
+        return { careRecorded: result.recorded, careSkipReason: result.skipReason };
+      } catch (err) {
+        console.error("[care-sync] Failed after appointment completed:", err);
+        const message = err instanceof Error ? err.message : "Care record sync failed";
+        return { careRecorded: false, careSkipReason: message };
+      }
+    }
+
+    return {};
+  } catch (err) {
+    if (client) await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    if (client) client.release();
+  }
 }
 
 async function resolveAppointmentPetId(
@@ -2591,3 +2681,42 @@ export async function getAllUsersForAdmin() {
     lastLogin: r.last_login ? new Date(r.last_login as Date).toISOString() : null,
   }));
 }
+
+export async function ensureExtraTables(): Promise<void> {
+  const pool = getPool();
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_conversations (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_chat_conversations_user_id ON chat_conversations(user_id);
+
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id uuid NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        role text NOT NULL,
+        content text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_conv_id ON chat_messages(conversation_id);
+
+      CREATE TABLE IF NOT EXISTS user_notifications (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        notification_id text NOT NULL,
+        read_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT uq_user_notifications_user_notif UNIQUE (user_id, notification_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_notif_user_id ON user_notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_notif_notif_id ON user_notifications(notification_id);
+    `);
+  } catch (err) {
+    console.error("[data] Error ensuring extra tables:", err);
+  }
+}
+

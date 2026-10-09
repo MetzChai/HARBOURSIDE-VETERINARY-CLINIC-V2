@@ -1,5 +1,5 @@
 import { getPool } from "../lib/db.js";
-import { hashPassword, type AppRole } from "./auth.js";
+import { hashPassword, validatePasswordPolicy, type AppRole } from "./auth.js";
 import { ensureUserProfile } from "./data.js";
 
 export type ClinicAccount = {
@@ -36,8 +36,9 @@ export async function createStaffAccount(opts: {
   const pool = getPool();
   const normalized = opts.email.toLowerCase().trim();
 
-  if (opts.password.length < 6) {
-    throw new Error("Password must be at least 6 characters.");
+  const passValidation = validatePasswordPolicy(opts.password);
+  if (!passValidation.valid) {
+    throw new Error(passValidation.error || "Password does not meet complexity requirements.");
   }
 
   const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalized]);

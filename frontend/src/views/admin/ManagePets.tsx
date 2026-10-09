@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 import {
   PawPrint,
   Pencil,
@@ -212,6 +213,15 @@ export default function ManagePets() {
 
   const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o])), [owners]);
 
+  const ownerOptions: SearchableOption[] = useMemo(() => {
+    return owners.map((o) => ({
+      value: o.id,
+      label: o.name,
+      sublabel: `${o.owner_code || "OWN"}${o.contact ? ` • ${o.contact}` : ""}${o.email ? ` • ${o.email}` : ""}`,
+      keywords: `${o.name} ${o.owner_code || ""} ${o.contact || ""} ${o.email || ""}`,
+    }));
+  }, [owners]);
+
   const openAdd = () => {
     setForm({
       ...emptyForm,
@@ -231,7 +241,7 @@ export default function ManagePets() {
       species: pet.species || "Dog",
       breed: pet.breed || "",
       gender: pet.gender || "Male",
-      dob: pet.dob || "",
+      dob: pet.dob ? String(pet.dob).slice(0, 10) : "",
       estimated_age: pet.estimated_age || "",
       color: pet.color || "",
       weight: pet.weight || "",
@@ -1046,18 +1056,13 @@ export default function ManagePets() {
 
               <div className="space-y-1">
                 <Label className="text-xs">Owner *</Label>
-                <Select value={form.owner_id} onValueChange={(v) => setForm({ ...form, owner_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select owner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {owners.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.name} ({o.owner_code || "OWN"})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={ownerOptions}
+                  value={form.owner_id}
+                  onChange={(v) => setForm({ ...form, owner_id: v })}
+                  placeholder="Select owner..."
+                  searchPlaceholder="Search owner by name or contact..."
+                />
               </div>
             </div>
 

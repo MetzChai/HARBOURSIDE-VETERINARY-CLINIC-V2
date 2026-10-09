@@ -38,7 +38,7 @@ All dates, timestamps, log entries, reminders, and printable reports use **Phili
 | **Care History** | Centralized medical visit logs (Check-ups, Vaccinations, Treatments, Dewormings) linked to pet profiles and inventory auto-deduction |
 | **Inventory** | Stock management for Medicines, Vaccines, Dewormers, and Medical Supplies with stock-in/out transactions, low-stock warnings, and expiration tracking |
 | **Lab & Transactions** | Clinic billing records (`TXN-100234`), Cash/GCash payment methods, payment status (`Pending`/`Paid`), one-click payment confirmation, printable receipts, and Laboratory test records (`LAB-100234`) |
-| **Communications** | Multi-channel messaging hub (`In-App`, `Email`, `SMS`, multi-channel delivery), message templates, 24h appointment reminders, vaccination/deworming reminders, and top header notification bell integration |
+| **Communications** | Multi-channel messaging hub (`In-App`, `Email`, multi-channel delivery), message templates, 24h appointment reminders, vaccination/deworming reminders, and top header notification bell integration |
 | **Reports** | Navigation center with 8 specialized historical reports (Appointments, Care History, Pets, Owners, Inventory, Transactions, Communications, Staff Activity), Recharts analytics, search, date range filters, CSV export, and official print layout |
 | **PawBot** | AI chat assistant integrated into the bottom-right of the portal |
 
@@ -52,7 +52,7 @@ All dates, timestamps, log entries, reminders, and printable reports use **Phili
 | **Care History** | Complete medical record history for owned pets |
 | **Vaccinations** | Track vaccination schedules and upcoming due dates |
 | **Transactions** | Read-only payment transaction statement view (`/user/transactions`) and receipt printing |
-| **Messages** | Message history log (`/user/messages`) of received clinic emails, SMS notifications, and in-app alerts |
+| **Messages** | Message history log (`/user/messages`) of received clinic emails and in-app alerts |
 | **PawBot** | AI chat assistant for appointment guidance, vaccine reminders, and pet care advice |
 
 ---
@@ -103,7 +103,7 @@ flowchart LR
 - **jose** for JWT session tokens
 - **bcryptjs** for password hashing
 - **multer** for image uploads
-- **Nodemailer** for email delivery simulation
+- **Resend** for email delivery (verification, reminders; simulated in console when `RESEND_API_KEY` is unset)
 - **Google Gemini** for PawBot AI assistant
 
 ---
@@ -218,7 +218,7 @@ curl http://localhost:4000/health
    - Automatically generates a pending **Clinic Transaction** (`TXN-XXXXXX`) in `lab_transactions`.
 
 ### 2. Multi-Channel Communications & Reminders
-- Dispatches messages via **In-App Notification**, **Email**, or **SMS**.
+- Dispatches messages via **In-App Notification** or **Email**.
 - Pre-configured templates: `Appointment Approved`, `Appointment Reminder`, `Vaccination Reminder`, `Deworming Reminder`, `General Announcement`, and `Custom Message`.
 - Every message automatically updates the recipient's top header `<NotificationBell />`.
 

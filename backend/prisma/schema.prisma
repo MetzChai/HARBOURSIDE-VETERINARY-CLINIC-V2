@@ -88,6 +88,8 @@ model User {
   roles        UserRole[]
   owners       Owner[]
   loginHistory LoginHistory[]
+  chatConversations ChatConversation[]
+  userNotifications UserNotification[]
 
   @@map("users")
 }
@@ -131,17 +133,28 @@ model LoginHistory {
 }
 
 model Owner {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String?  @map("user_id") @db.Uuid
-  name      String
-  contact   String?
-  email     String?
-  address   String?
-  imageUrl  String?  @map("image_url")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String?   @map("user_id") @db.Uuid
+  ownerCode               String?   @map("owner_code")
+  name                    String
+  firstName               String?   @map("first_name")
+  middleName              String?   @map("middle_name")
+  lastName                String?   @map("last_name")
+  gender                  String?
+  birthDate               DateTime? @map("birth_date") @db.Date
+  contact                 String?
+  email                   String?
+  address                 String?
+  imageUrl                String?   @map("image_url")
+  emergencyContactName    String?   @map("emergency_contact_name")
+  emergencyContactNumber  String?   @map("emergency_contact_number")
+  googleAccount           String?   @map("google_account")
+  accountStatus           String    @default("Active") @map("account_status")
+  isWalkIn                Boolean   @default(false) @map("is_walk_in")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user         User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   pets         Pet[]
   appointments Appointment[]
   messages     Message[]
@@ -392,4 +405,47 @@ model ClinicKnowledge {
 
   @@map("clinic_knowledge")
 }
+
+model ChatConversation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("chat_messages")
+}
+
+model UserNotification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  notificationId String    @map("notification_id")
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationId])
+  @@index([userId])
+  @@index([notificationId])
+  @@map("user_notifications")
+}
+
 

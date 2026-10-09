@@ -24,10 +24,25 @@ import { processPrescribedMedications } from "@/lib/careHistoryStock";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 
 function toInputDate(value?: string | null) {
   if (!value) return "";
   return String(value).slice(0, 10);
+}
+
+function getCategoryLabel(category?: string | null): string {
+  if (!category) return "Other";
+  const catMap: Record<string, string> = {
+    medication: "Medicine",
+    medicine: "Medicine",
+    vaccine: "Vaccine",
+    dewormer: "Dewormer",
+    supply: "Medical Supply",
+    medical_supply: "Medical Supply",
+    lab_supply: "Laboratory Supply",
+  };
+  return catMap[category.toLowerCase().trim()] ?? (category.charAt(0).toUpperCase() + category.slice(1));
 }
 
 function formatCareTypeLabel(type?: string | null) {
@@ -110,6 +125,56 @@ export default function CareHistory() {
     return map;
   }, [inventoryItems, dbBatches]);
 
+  const ownerMap = useMemo(() => new Map(owners.map((o: any) => [o.id, o.name])), [owners]);
+  const petMap = useMemo(() => new Map(pets.map((p: any) => [p.id, p])), [pets]);
+
+  const petOptions: SearchableOption[] = useMemo(() => {
+    return pets.map((p: any) => {
+      const ownerName = p.owner_id ? ownerMap.get(p.owner_id) || "—" : "—";
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: `Owner: ${ownerName} • ${p.species || "Pet"}`,
+        keywords: `${p.name} ${ownerName} ${p.species || ""} ${p.breed || ""}`,
+      };
+    });
+  }, [pets, ownerMap]);
+
+  const appointmentOptions: SearchableOption[] = useMemo(() => {
+    const list: SearchableOption[] = [
+      { value: "none", label: "None (Direct record entry)", sublabel: "No linked appointment" },
+    ];
+    appointments.forEach((a: any) => {
+      const p = petMap.get(a.pet_id);
+      const petName = p?.name || "Pet";
+      const ownerName = p?.owner_id ? ownerMap.get(p.owner_id) || "—" : "—";
+      const dateStr = a.date ? formatDate(a.date) : "—";
+      list.push({
+        value: a.id,
+        label: `${dateStr} — ${petName}`,
+        sublabel: `Owner: ${ownerName} | Status: ${a.status}${a.reason ? ` (${a.reason})` : ""}`,
+        keywords: `${dateStr} ${petName} ${ownerName} ${a.reason || ""} ${a.status}`,
+      });
+    });
+    return list;
+  }, [appointments, petMap, ownerMap]);
+
+  const inventoryOptions: SearchableOption[] = useMemo(() => {
+    return inventoryItems.map((item: any) => {
+      const info = availableStockMap[item.id] || { totalQty: 0, unit: item.unit || "unit", category: item.category || "supply", unitPrice: Number(item.unit_price ?? item.purchase_price ?? 0) };
+      const formattedPrice = `₱${Number(info.unitPrice || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const formattedCategory = getCategoryLabel(info.category || item.category);
+      const isOut = info.totalQty <= 0;
+      return {
+        value: item.id,
+        label: item.name,
+        sublabel: `${formattedCategory} • ${info.totalQty} ${info.unit || "unit"} • ${formattedPrice}${isOut ? " (Out of Stock)" : ""}`,
+        keywords: `${item.name} ${info.category} ${item.item_code || ""}`,
+        disabled: isOut,
+      };
+    });
+  }, [inventoryItems, availableStockMap]);
+
   const handleAddMedicationRow = () => {
     setMedicationsList((prev) => [
       ...prev,
@@ -185,9 +250,6 @@ export default function CareHistory() {
     outcome: "Completed",
     notes: "",
   });
-
-  const ownerMap = new Map(owners.map((o) => [o.id, o.name]));
-  const petMap = new Map(pets.map((p) => [p.id, p]));
 
   const searchParams = useSearchParams();
   const aptId = searchParams?.get("aptId");
@@ -855,7 +917,7 @@ export default function CareHistory() {
 
       {/* Add / Edit Care Record Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Edit Care History Record" : "Add Care History Record"}
@@ -875,43 +937,26 @@ export default function CareHistory() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Appointment</Label>
-                  <Select
+                  <SearchableSelect
+                    options={appointmentOptions}
                     value={form.appointment_id}
-                    onValueChange={(val) => setForm({ ...form, appointment_id: val })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select completed appointment (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None (Direct record entry)</SelectItem>
-                      {appointments.map((a) => {
-                        const p = petMap.get(a.pet_id);
-                        return (
-                          <SelectItem key={a.id} value={a.id}>
-                            {a.date} ({p?.name || "Pet"}) — {a.reason || a.status}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                    onChange={(val) => setForm({ ...form, appointment_id: val })}
+                    placeholder="Select completed appointment (optional)"
+                    searchPlaceholder="Search by date, pet, or owner..."
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Pet *</Label>
-                  <Select value={form.pet_id} onValueChange={(val) => setForm({ ...form, pet_id: val })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select pet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pets.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} ({p.species || "Pet"})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={petOptions}
+                    value={form.pet_id}
+                    onChange={(val) => setForm({ ...form, pet_id: val })}
+                    placeholder="Search pet by name or owner..."
+                    searchPlaceholder="Type pet name or owner..."
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Pet Owner</Label>
@@ -1030,12 +1075,12 @@ export default function CareHistory() {
                   onClick={handleAddMedicationRow}
                   className="h-7 text-xs gap-1"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Add Another Product
+                  <Plus className="h-3.5 w-3.5" /> Add Medication / Product
                 </Button>
               </div>
 
               {medicationsList.length > 0 ? (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {medicationsList.map((row, idx) => {
                     const stockInfo = availableStockMap[row.inventory_item_id] || {
                       totalQty: 0,
@@ -1044,79 +1089,114 @@ export default function CareHistory() {
                     };
                     const lineTotal = (stockInfo.unitPrice || 0) * (row.quantity || 0);
                     return (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-card p-3 rounded-lg border border-border/60 text-xs">
-                        <div className="col-span-12 sm:col-span-5 space-y-1">
-                          <Label className="text-[11px]">
-                            Product / Medication <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={row.inventory_item_id}
-                            onValueChange={(val) => handleMedicationItemChange(idx, val)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Select inventory product" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-56">
-                              {inventoryItems.map((item: any) => {
-                                const info = availableStockMap[item.id] || { totalQty: 0, unit: "unit", category: "supply" };
-                                return (
-                                  <SelectItem key={item.id} value={item.id}>
-                                    {item.name} ({info.category}) — Available: {info.totalQty} {info.unit}
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="col-span-4 sm:col-span-2 space-y-1">
-                          <Label className="text-[11px]">Quantity *</Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            className="h-8 text-xs"
-                            value={row.quantity}
-                            onChange={(e) => handleMedicationQtyChange(idx, parseInt(e.target.value, 10) || 1)}
-                          />
-                        </div>
-
-                        <div className="col-span-8 sm:col-span-4 space-y-1">
-                          <Label className="text-[11px]">Instructions / Notes</Label>
-                          <Input
-                            className="h-8 text-xs"
-                            value={row.notes || ""}
-                            onChange={(e) => handleMedicationNotesChange(idx, e.target.value)}
-                            placeholder="e.g. 2 tabs twice daily..."
-                          />
-                        </div>
-
-                        <div className="col-span-11 sm:col-span-1 flex justify-end pb-0.5">
+                      <div key={idx} className="bg-card p-3 rounded-lg border border-border/60 text-xs space-y-2">
+                        <div className="flex items-center justify-between font-medium text-[11px] text-muted-foreground border-b pb-1.5">
+                          <span>{idx + 1}. Medication / Product</span>
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                             onClick={() => handleRemoveMedicationRow(idx)}
-                            title="Remove medication"
+                            title="Remove product"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3 mr-1" /> Remove
                           </Button>
                         </div>
 
+                        <div className="grid grid-cols-12 gap-2 items-start">
+                          <div className="col-span-12 sm:col-span-6 space-y-1">
+                            <Label className="text-[11px]">
+                              Product / Medication <span className="text-destructive">*</span>
+                            </Label>
+                            <SearchableSelect
+                              options={inventoryOptions}
+                              value={row.inventory_item_id}
+                              onChange={(val) => handleMedicationItemChange(idx, val)}
+                              placeholder="Type medication name..."
+                              searchPlaceholder="Search by item name..."
+                            />
+                          </div>
+
+                          <div className="col-span-6 sm:col-span-3 space-y-1">
+                            <Label className="text-[11px]">Quantity Used *</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              className="h-9 text-xs font-semibold"
+                              value={row.quantity}
+                              onChange={(e) => handleMedicationQtyChange(idx, parseInt(e.target.value, 10) || 1)}
+                            />
+                          </div>
+
+                          <div className="col-span-6 sm:col-span-3 space-y-1">
+                            <Label className="text-[11px]">Unit</Label>
+                            <Input
+                              disabled
+                              className="h-9 text-xs bg-muted font-medium text-foreground"
+                              value={stockInfo.unit || row.unit || "unit"}
+                            />
+                          </div>
+                        </div>
+
                         {row.inventory_item_id ? (
-                          <div className="col-span-12 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-border/50 pt-2">
-                            <span>Available: <strong className="text-foreground">{stockInfo.totalQty} {stockInfo.unit}</strong></span>
-                            <span>Unit Price: <strong className="text-foreground">₱{Number(stockInfo.unitPrice || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                            <span>Total: <strong className="text-brand-navy">₱{lineTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                          <div className="flex flex-wrap items-center justify-between bg-muted/30 p-2 rounded border border-border/40 text-[11px]">
+                            <div className="flex gap-3 text-muted-foreground">
+                              <span>Available Stock: <strong className="text-foreground">{stockInfo.totalQty} {stockInfo.unit}</strong></span>
+                              <span>Unit Price: <strong className="text-foreground">₱{Number(stockInfo.unitPrice || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground mr-1">Line Total:</span>
+                              <strong className="text-brand-navy font-mono text-xs font-bold">
+                                ₱{lineTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </strong>
+                            </div>
                           </div>
                         ) : null}
                       </div>
                     );
                   })}
+
+                  {/* GRAND TOTAL ROW */}
+                  {(() => {
+                    const grandTotal = medicationsList.reduce((acc, r) => {
+                      const info = availableStockMap[r.inventory_item_id];
+                      return acc + ((info?.unitPrice || 0) * (r.quantity || 0));
+                    }, 0);
+
+                    return (
+                      <div className="flex items-center justify-between border-t border-border/60 pt-3 mt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddMedicationRow}
+                          className="h-8 text-xs gap-1.5"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Medication / Product
+                        </Button>
+                        <div className="text-right">
+                          <span className="text-xs text-muted-foreground mr-2 font-medium">Total:</span>
+                          <span className="text-base font-bold text-brand-navy font-mono">
+                            ₱{grandTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
-                <div className="text-center py-4 border border-dashed rounded-lg text-xs text-muted-foreground bg-card/50">
-                  No inventory products added to this care record yet.
+                <div className="text-center py-6 border border-dashed rounded-lg text-xs text-muted-foreground bg-card/50 space-y-2">
+                  <p>No inventory products or medications added to this care record.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddMedicationRow}
+                    className="h-7 text-xs gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Medication / Product
+                  </Button>
                 </div>
               )}
             </div>
@@ -1200,7 +1280,7 @@ export default function CareHistory() {
 
       {/* Read-Only View Record Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto overscroll-contain">
           {selectedRecord && (
             <>
               <DialogHeader>

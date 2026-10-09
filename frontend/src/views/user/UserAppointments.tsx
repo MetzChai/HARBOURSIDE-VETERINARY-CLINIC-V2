@@ -21,16 +21,26 @@ import {
   getStatusBadgeClass,
 } from "@/lib/appointment-slots";
 import { formatDate } from "@/lib/age";
-import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatDateTimePH, formatNowPH } from "@/lib/datetime";
+import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatDateTimePH, formatNowPH, nowTimePH } from "@/lib/datetime";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
 
 export default function UserAppointments() {
   const { data: appointments = [], isLoading } = useMyAppointments();
   const { data: pets = [] } = useMyPets();
   const queryClient = useQueryClient();
+
+  const petOptions: SearchableOption[] = useMemo(() => {
+    return pets.map((p: any) => ({
+      value: p.id,
+      label: p.name,
+      sublabel: `${p.species || "Pet"}${p.breed ? ` • ${p.breed}` : ""}`,
+      keywords: `${p.name} ${p.species || ""} ${p.breed || ""}`,
+    }));
+  }, [pets]);
 
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,6 +82,11 @@ export default function UserAppointments() {
 
     if (isBeforeTodayPH(form.date)) {
       toast.error("Appointments cannot be requested in the past.");
+      return;
+    }
+
+    if (form.date === todayPH() && form.time && form.time <= nowTimePH()) {
+      toast.error("That time slot has already passed today. Please select an available future time slot.");
       return;
     }
 
@@ -359,18 +374,13 @@ export default function UserAppointments() {
                 <div className="space-y-4 pt-2">
                   <div className="space-y-1.5">
                     <Label>Select Pet *</Label>
-                    <Select value={form.pet_id} onValueChange={(v) => setForm({ ...form, pet_id: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select pet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {pets.map((p: any) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.species || "Pet"})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={petOptions}
+                      value={form.pet_id}
+                      onChange={(v) => setForm({ ...form, pet_id: v })}
+                      placeholder="Search pet by name..."
+                      searchPlaceholder="Type pet name..."
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -386,7 +396,9 @@ export default function UserAppointments() {
                             toast.error("Appointments cannot be requested for past dates.");
                             setForm({ ...form, date: todayPH(), time: "" });
                           } else {
-                            setForm({ ...form, date: val, time: "" });
+                            const nTime = nowTimePH();
+                            const isPassedToday = val === todayPH() && form.time && form.time <= nTime;
+                            setForm({ ...form, date: val, time: isPassedToday ? "" : form.time });
                           }
                         }}
                       />

@@ -24,9 +24,8 @@ export function channelIncludesEmail(channel: string) {
   return ch === "ALL" || ch.includes("EMAIL");
 }
 
-export function channelIncludesSms(channel: string) {
-  const ch = (channel || "").toUpperCase();
-  return ch === "ALL" || ch.includes("SMS");
+export function channelIncludesSms(_channel: string) {
+  return false;
 }
 
 export function isOwnerOriginated(payload: Record<string, unknown>) {
@@ -109,21 +108,6 @@ export async function deliverClinicMessage(payload: Record<string, unknown>) {
   const subject = String(payload.subject || payload.message_type || "Harbourside Veterinary Clinic");
   const body = String(payload.body ?? "");
   const wantsEmail = channelIncludesEmail(channel);
-  const wantsSms = channelIncludesSms(channel);
-
-  if (wantsSms) {
-    const { phone } = await resolveRecipient(payload);
-    if (phone) {
-      console.log(`[SMS SIMULATION] To: ${phone}\nSubject: ${subject}\n${body}\n`);
-    } else if (!payload.owner_id) {
-      const recipients = await listBroadcastRecipients();
-      for (const r of recipients) {
-        if (r.contact) console.log(`[SMS SIMULATION] To: ${r.contact}\nSubject: ${subject}\n${body}\n`);
-      }
-    } else {
-      console.log(`[SMS SIMULATION] Skipped — no phone on file for owner ${payload.owner_id}`);
-    }
-  }
 
   if (!wantsEmail) return;
 

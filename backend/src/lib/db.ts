@@ -97,6 +97,9 @@ export function getPool() {
     pool = new Pool({ connectionString: resolveDatabaseUrl() });
     pool.on("connect", applySessionTimezone);
     pool.on("acquire", applySessionTimezone);
+    pool.on("error", (err) => {
+      console.error("[database] Neon Pool background connection error:", err);
+    });
   }
   return pool;
 }
