@@ -115,7 +115,7 @@ class UpdateBuilder {
 
 class SelectBuilder {
   private filters: Filter[] = [];
-  private _order?: { column: string; ascending: boolean };
+  private _orders: Array<{ column: string; ascending: boolean }> = [];
   private _single = false;
   private _maybeSingle = false;
 
@@ -132,7 +132,7 @@ class SelectBuilder {
   }
 
   order(column: string, opts?: { ascending?: boolean }) {
-    this._order = { column, ascending: opts?.ascending ?? true };
+    this._orders.push({ column, ascending: opts?.ascending ?? true });
     return this;
   }
 
@@ -170,7 +170,7 @@ class SelectBuilder {
           table: this.table,
           select: this._select,
           filters: this.filters,
-          order: this._order,
+          order: this._orders.length === 1 ? this._orders[0] : this._orders.length > 1 ? this._orders : undefined,
           single: this._single,
           maybeSingle: this._maybeSingle,
         }),

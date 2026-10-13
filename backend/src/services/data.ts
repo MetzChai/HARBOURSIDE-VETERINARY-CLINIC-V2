@@ -265,7 +265,7 @@ export async function querySelect(opts: {
   table: string;
   select?: string;
   filters?: Filter[];
-  order?: { column: string; ascending?: boolean };
+  order?: { column: string; ascending?: boolean } | Array<{ column: string; ascending?: boolean }>;
   single?: boolean;
   maybeSingle?: boolean;
 }) {
@@ -339,9 +339,48 @@ export async function querySelect(opts: {
 
   if (where.length) query += ` WHERE ${where.join(" AND ")}`;
 
-  if (opts.order?.column) {
-    const dir = opts.order.ascending === false ? "DESC" : "ASC";
-    query += ` ORDER BY ${tableAlias}.${quoteIdent(opts.order.column)} ${dir}`;
+  const rawOrders: { column: string; ascending?: boolean }[] = Array.isArray(opts.order)
+    ? opts.order
+    : opts.order?.column
+    ? [opts.order]
+    : [];
+
+  const orderClauses: string[] = [];
+  for (const o of rawOrders) {
+    if (!o || typeof o.column !== "string") continue;
+    const dir = o.ascending === false ? "DESC" : "ASC";
+    orderClauses.push(`${tableAlias}.${quoteIdent(o.column)} ${dir}`);
+  }
+
+  // Consistent secondary tie-breakers for lab_transactions and lab_records
+  if (table === "lab_transactions") {
+    const hasDate = rawOrders.some((o) => o.column === "date");
+    if (hasDate) {
+      if (!rawOrders.some((o) => o.column === "created_at")) {
+        orderClauses.push(`${tableAlias}."created_at" DESC`);
+      }
+      if (!rawOrders.some((o) => o.column === "id")) {
+        orderClauses.push(`${tableAlias}."id" DESC`);
+      }
+    } else if (orderClauses.length === 0) {
+      orderClauses.push(`${tableAlias}."date" DESC`, `${tableAlias}."created_at" DESC`, `${tableAlias}."id" DESC`);
+    }
+  } else if (table === "lab_records") {
+    const hasDateConducted = rawOrders.some((o) => o.column === "date_conducted");
+    if (hasDateConducted) {
+      if (!rawOrders.some((o) => o.column === "created_at")) {
+        orderClauses.push(`${tableAlias}."created_at" DESC`);
+      }
+      if (!rawOrders.some((o) => o.column === "id")) {
+        orderClauses.push(`${tableAlias}."id" DESC`);
+      }
+    } else if (orderClauses.length === 0) {
+      orderClauses.push(`${tableAlias}."date_conducted" DESC`, `${tableAlias}."created_at" DESC`, `${tableAlias}."id" DESC`);
+    }
+  }
+
+  if (orderClauses.length > 0) {
+    query += ` ORDER BY ${orderClauses.join(", ")}`;
   }
 
   if (opts.single || opts.maybeSingle) query += " LIMIT 1";

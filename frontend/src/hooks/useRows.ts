@@ -1,13 +1,20 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "@/lib/db-client";
 
+export type OrderOption = { column: string; ascending?: boolean };
+
 export function useRows<T = any>(
   table: string,
-  opts?: { orderBy?: string; ascending?: boolean; select?: string }
+  opts?: {
+    orderBy?: string;
+    ascending?: boolean;
+    orders?: OrderOption[];
+    select?: string;
+  }
 ) {
   const select = opts?.select ?? "*";
   const query = useQuery({
-    queryKey: [table, select, opts?.orderBy, opts?.ascending],
+    queryKey: [table, select, opts?.orderBy, opts?.ascending, opts?.orders],
     // Cap refetch fan-out (CareHistory fires 6 parallel queries) and avoid
     // retry storms when the /api/data proxy hiccups with ECONNRESET.
     staleTime: 30_000,
@@ -16,7 +23,13 @@ export function useRows<T = any>(
     refetchOnWindowFocus: false,
     queryFn: async () => {
       let q = db.from(table).select(select);
-      if (opts?.orderBy) q = q.order(opts.orderBy, { ascending: opts.ascending ?? true });
+      if (opts?.orders && opts.orders.length > 0) {
+        for (const ord of opts.orders) {
+          q = q.order(ord.column, { ascending: ord.ascending ?? true });
+        }
+      } else if (opts?.orderBy) {
+        q = q.order(opts.orderBy, { ascending: opts.ascending ?? true });
+      }
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data ?? []) as T[];

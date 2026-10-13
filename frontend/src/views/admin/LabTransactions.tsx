@@ -38,7 +38,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH, todayPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, toDateOnly } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
@@ -118,15 +118,25 @@ export default function LabTransactions() {
   const isAdmin = role === "admin";
 
   const { data: rawTransactions = [], isLoading: loadingTxns } = useRows<TransactionRow>("lab_transactions", {
-    orderBy: "created_at",
+    orderBy: "date",
     ascending: false,
+    orders: [
+      { column: "date", ascending: false },
+      { column: "created_at", ascending: false },
+      { column: "id", ascending: false },
+    ],
   });
 
   const { data: transactionItems = [] } = useRows<TransactionItemRow>("lab_transaction_items");
 
-  const { data: labRecords = [], isLoading: loadingLabs } = useRows<LabRecordRow>("lab_records", {
-    orderBy: "created_at",
+  const { data: rawLabRecords = [], isLoading: loadingLabs } = useRows<LabRecordRow>("lab_records", {
+    orderBy: "date_conducted",
     ascending: false,
+    orders: [
+      { column: "date_conducted", ascending: false },
+      { column: "created_at", ascending: false },
+      { column: "id", ascending: false },
+    ],
   });
 
   const { data: pets = [] } = useRows<any>("pets", { orderBy: "name" });
@@ -235,9 +245,9 @@ export default function LabTransactions() {
   };
   const [labForm, setLabForm] = useState(emptyLabForm);
 
-  // Normalize transactions dataset with monetary precision
+  // Normalize transactions dataset with monetary precision and sort newest -> oldest by transaction date
   const transactions = useMemo(() => {
-    return rawTransactions.map((t) => {
+    const list = rawTransactions.map((t) => {
       const items = itemsByTxnId.get(t.id) || [];
       const itemsSum = items.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
       const rawSub = Number(t.subtotal ?? t.total_amount ?? t.total ?? 0);
@@ -281,7 +291,30 @@ export default function LabTransactions() {
         services_rendered: t.services_rendered || "Veterinary Medical Service",
       };
     });
+
+    return list.slice().sort((a, b) => {
+      const dateA = toDateOnly(a.date || a.created_at);
+      const dateB = toDateOnly(b.date || b.created_at);
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (createdA !== createdB) return createdB - createdA;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
   }, [rawTransactions, itemsByTxnId]);
+
+  // Sort lab records newest -> oldest by date conducted, with created_at and id as tie-breakers
+  const labRecords = useMemo(() => {
+    return rawLabRecords.slice().sort((a, b) => {
+      const dateA = toDateOnly(a.date_conducted || a.created_at);
+      const dateB = toDateOnly(b.date_conducted || b.created_at);
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (createdA !== createdB) return createdB - createdA;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
+  }, [rawLabRecords]);
 
   // Metric Totals
   const metrics = useMemo(() => {
@@ -380,6 +413,7 @@ export default function LabTransactions() {
       status: status,
       processed_by: user?.email || "Clinic Staff",
       notes: txnForm.notes.trim() || null,
+      ...(editTxn ? {} : { date: todayPH() }),
     };
 
     const { error } = editTxn
@@ -584,7 +618,7 @@ export default function LabTransactions() {
 
   const filterByDate = (dateStr?: string | null) => {
     if (!dateStr) return true;
-    const d = dateStr.slice(0, 10);
+    const d = toDateOnly(dateStr);
     if (dateFrom && d < dateFrom) return false;
     if (dateTo && d > dateTo) return false;
     return true;
