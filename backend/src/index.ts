@@ -49,7 +49,7 @@ const server = app.listen(port, () => {
   console.log(`Backend running at http://localhost:${port}`);
   console.log(`Frontend URL: ${frontendUrl}`);
   const gemini = process.env.GEMINI_API_KEY?.trim();
-  const geminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+  const geminiModel = process.env.GEMINI_MODEL?.trim() || "gemini-flash-lite-latest";
   console.log(`[backend] Gemini model: ${geminiModel}`);
   console.log(`Gemini AI: ${gemini ? "configured" : "not set (PawBot uses local fallback)"}`);
   const resendKey = process.env.RESEND_API_KEY?.trim();

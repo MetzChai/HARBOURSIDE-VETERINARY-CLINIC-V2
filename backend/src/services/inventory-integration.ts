@@ -50,10 +50,19 @@ function findMatches(items: InventoryItemLike[], categoryAliases: string[], labe
   const normalizedLabel = normalizeText(label);
   if (!normalizedLabel) return [];
 
-  return items.filter((item) => {
+  const matched = items.filter((item) => {
     if (!isCategoryMatch(item.category, categoryAliases)) return false;
     const normalizedName = normalizeText(item.name);
     return normalizedName.includes(normalizedLabel) || normalizedLabel.includes(normalizedName);
+  });
+
+  return matched.sort((a, b) => {
+    const aNorm = normalizeText(a.name);
+    const bNorm = normalizeText(b.name);
+    if (aNorm === normalizedLabel && bNorm !== normalizedLabel) return -1;
+    if (bNorm === normalizedLabel && aNorm !== normalizedLabel) return 1;
+    // Prefer more specific product name (longer name)
+    return bNorm.length - aNorm.length;
   });
 }
 

@@ -38,7 +38,7 @@ import {
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatNowPH } from "@/lib/datetime";
+import { todayPH, isBeforeTodayPH, daysFromTodayPH, formatNowPH, toDateOnly } from "@/lib/datetime";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { isAdmin } from "@/lib/roles";
@@ -131,7 +131,7 @@ export function getBatchCalculatedStatus(
 ): ItemStatus {
   if (remainingQty <= 0) return "Out of Stock";
   if (!expirationDate) return "Available";
-  const expStr = String(expirationDate).slice(0, 10);
+  const expStr = toDateOnly(expirationDate);
   const days = daysFromTodayPH(expStr);
   if (days === null) return "Available";
   if (days < 0 || isBeforeTodayPH(expStr)) return "Expired";
@@ -154,12 +154,8 @@ function getItemBatches(item: any, dbBatches: any[] = [], allTxns: any[] = []): 
         const initQty = Number(b.initial_quantity ?? 0);
         const remQty = Number(b.remaining_quantity ?? 0);
         const consQty = Math.max(0, initQty - remQty);
-        const expDate = b.expiration_date ? String(b.expiration_date).slice(0, 10) : null;
-        const recDate = b.received_date
-          ? String(b.received_date).slice(0, 10)
-          : b.created_at
-          ? String(b.created_at).slice(0, 10)
-          : todayPH();
+        const expDate = b.expiration_date ? toDateOnly(b.expiration_date) : null;
+        const recDate = toDateOnly(b.received_date) || toDateOnly(b.created_at) || todayPH();
 
         return {
           id: b.id,
@@ -194,14 +190,14 @@ function getItemBatches(item: any, dbBatches: any[] = [], allTxns: any[] = []): 
     if (txn.type === "in") {
       const bNo = (txn.batch_no || item.batch_no || "LEGACY-001").trim();
       const expDate = txn.expiration_date
-        ? String(txn.expiration_date).slice(0, 10)
+        ? toDateOnly(txn.expiration_date)
         : item.expiration_date
-        ? String(item.expiration_date).slice(0, 10)
+        ? toDateOnly(item.expiration_date)
         : null;
       const key = `${bNo.toUpperCase()}___${expDate || "NO_EXP"}`;
 
       const qty = Number(txn.quantity ?? 0);
-      const dateRec = txn.date ? String(txn.date).slice(0, 10) : String(txn.created_at || "").slice(0, 10);
+      const dateRec = toDateOnly(txn.date) || toDateOnly(txn.created_at) || todayPH();
 
       if (batchMap.has(key)) {
         const existing = batchMap.get(key)!;
@@ -224,7 +220,7 @@ function getItemBatches(item: any, dbBatches: any[] = [], allTxns: any[] = []): 
   // Fallback if no stock in transaction exists yet
   if (batchMap.size === 0) {
     const bNo = (item.batch_no || "LEGACY-001").trim();
-    const expDate = item.expiration_date ? String(item.expiration_date).slice(0, 10) : null;
+    const expDate = item.expiration_date ? toDateOnly(item.expiration_date) : null;
     const key = `${bNo.toUpperCase()}___${expDate || "NO_EXP"}`;
     const qty = Number(item.quantity ?? 0);
     batchMap.set(key, {
@@ -233,7 +229,7 @@ function getItemBatches(item: any, dbBatches: any[] = [], allTxns: any[] = []): 
       initial_quantity: qty,
       remaining_quantity: qty,
       consumed_quantity: 0,
-      date_received: item.created_at ? String(item.created_at).slice(0, 10) : todayPH(),
+      date_received: toDateOnly(item.created_at) || todayPH(),
       status: getBatchCalculatedStatus(qty, expDate),
     });
   }
@@ -250,7 +246,7 @@ function getItemBatches(item: any, dbBatches: any[] = [], allTxns: any[] = []): 
     if (txn.type === "out") {
       let remainingToDeduct = Number(txn.quantity ?? 0);
       const targetBatchNo = txn.batch_no ? String(txn.batch_no).trim().toUpperCase() : null;
-      const targetExpDate = txn.expiration_date ? String(txn.expiration_date).slice(0, 10) : null;
+      const targetExpDate = txn.expiration_date ? toDateOnly(txn.expiration_date) : null;
 
       if (targetBatchNo) {
         const match = batches.find(
@@ -606,15 +602,16 @@ export default function Inventory() {
       const currentStock = summary.totalQty;
       // Deterministic newest -> oldest order: date desc, then created_at desc, then id desc.
       // Needed so a same-day Stock In and its auto-deduction always resolve in the same order.
-      const ts = (v: unknown) => {
-        const t = new Date(String(v ?? "")).getTime();
+      const dateKey = (txn: any) => toDateOnly(txn.date || txn.created_at);
+      const createdTs = (txn: any) => {
+        const t = new Date(String(txn.created_at ?? "")).getTime();
         return Number.isNaN(t) ? 0 : t;
       };
       const itemTxns = [...txnsByItem[itemId]].sort((a, b) => {
-        const dateDiff = ts(b.date ?? b.created_at) - ts(a.date ?? a.created_at);
-        if (dateDiff !== 0) return dateDiff;
-        const createdDiff = ts(b.created_at) - ts(a.created_at);
-        if (createdDiff !== 0) return createdDiff;
+        const dComp = dateKey(b).localeCompare(dateKey(a));
+        if (dComp !== 0) return dComp;
+        const cDiff = createdTs(b) - createdTs(a);
+        if (cDiff !== 0) return cDiff;
         return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
       });
 
@@ -765,7 +762,7 @@ export default function Inventory() {
       unit: item.unit ?? "vial",
       unit_price: String(item.unit_price ?? item.purchase_price ?? "0.00"),
       reorder_level: String(item.reorder_level ?? 5),
-      expiration_date: item.expiration_date ? String(item.expiration_date).slice(0, 10) : "",
+      expiration_date: item.expiration_date ? toDateOnly(item.expiration_date) : "",
       batch_no: item.batch_no ?? "",
       quantity: summary.totalQty,
     });
@@ -854,7 +851,7 @@ export default function Inventory() {
       quantity: "1",
       unit_price: String(item.unit_price ?? item.purchase_price ?? "0.00"),
       batch_no: "",
-      expiration_date: item.expiration_date ? String(item.expiration_date).slice(0, 10) : "",
+      expiration_date: item.expiration_date ? toDateOnly(item.expiration_date) : "",
       reason: STOCK_IN_REASONS[0],
       notes: "",
     });
@@ -1023,7 +1020,7 @@ export default function Inventory() {
     setEditingBatch(batch);
     setEditBatchForm({
       batch_no: batch.batch_no,
-      expiration_date: batch.expiration_date ? String(batch.expiration_date).slice(0, 10) : "",
+      expiration_date: batch.expiration_date ? toDateOnly(batch.expiration_date) : "",
       initial_quantity: String(batch.initial_quantity),
       remaining_quantity: String(batch.remaining_quantity),
       reason: "Data Entry Correction",
@@ -1666,6 +1663,11 @@ export default function Inventory() {
                     {filteredTransactions.map((txn) => {
                       const item = items.find((i) => i.id === txn.item_id);
                       const isAuto = (txn.reason ?? "").toLowerCase().includes("care history");
+                      const isAdjustment =
+                        (txn.reason ?? "").toLowerCase().includes("reversal") ||
+                        (txn.reason ?? "").toLowerCase().includes("adjustment") ||
+                        (txn.reason ?? "").toLowerCase().includes("correction") ||
+                        (txn.transaction_no ?? "").startsWith("TXN-ADJ");
                       const remaining = remainingStockMap[txn.id] ?? "—";
                       const dateDisplay = txn.date ? formatDate(txn.date) : formatDate(txn.created_at);
                       const batchDisplay = txn.batch_no || (isAuto ? "FEFO (Auto)" : "DEFAULT-LOT");
@@ -1683,6 +1685,10 @@ export default function Inventory() {
                             {isAuto ? (
                               <Badge variant="outline" className="bg-brand-teal-light text-brand-teal border-brand-teal/30">
                                 Automatic Care History Deduction
+                              </Badge>
+                            ) : isAdjustment ? (
+                              <Badge variant="outline" className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">
+                                Audit Adjustment / Reversal
                               </Badge>
                             ) : txn.type === "in" ? (
                               <Badge variant="outline" className="bg-brand-green-light text-brand-green border-brand-green/30">
@@ -2240,6 +2246,11 @@ export default function Inventory() {
                           .filter((t) => t.item_id === viewingItem.id)
                           .map((txn) => {
                             const isAuto = (txn.reason ?? "").toLowerCase().includes("care history");
+                            const isAdjustment =
+                              (txn.reason ?? "").toLowerCase().includes("reversal") ||
+                              (txn.reason ?? "").toLowerCase().includes("adjustment") ||
+                              (txn.reason ?? "").toLowerCase().includes("correction") ||
+                              (txn.transaction_no ?? "").startsWith("TXN-ADJ");
                             return (
                               <TableRow key={txn.id}>
                                 <TableCell className="text-muted-foreground">
@@ -2249,6 +2260,8 @@ export default function Inventory() {
                                 <TableCell>
                                   {isAuto ? (
                                     <span className="text-brand-teal font-medium">Auto Deduction</span>
+                                  ) : isAdjustment ? (
+                                    <span className="text-blue-600 dark:text-blue-400 font-medium">Audit Reversal</span>
                                   ) : txn.type === "in" ? (
                                     <span className="text-brand-green font-medium">Stock In</span>
                                   ) : (

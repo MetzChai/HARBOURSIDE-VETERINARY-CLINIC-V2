@@ -365,9 +365,9 @@ export async function querySelect(opts: {
     } else if (orderClauses.length === 0) {
       orderClauses.push(`${tableAlias}."date" DESC`, `${tableAlias}."created_at" DESC`, `${tableAlias}."id" DESC`);
     }
-  } else if (table === "lab_records") {
-    const hasDateConducted = rawOrders.some((o) => o.column === "date_conducted");
-    if (hasDateConducted) {
+  } else if (table === "inventory_transactions") {
+    const hasDate = rawOrders.some((o) => o.column === "date");
+    if (hasDate) {
       if (!rawOrders.some((o) => o.column === "created_at")) {
         orderClauses.push(`${tableAlias}."created_at" DESC`);
       }
@@ -375,7 +375,7 @@ export async function querySelect(opts: {
         orderClauses.push(`${tableAlias}."id" DESC`);
       }
     } else if (orderClauses.length === 0) {
-      orderClauses.push(`${tableAlias}."date_conducted" DESC`, `${tableAlias}."created_at" DESC`, `${tableAlias}."id" DESC`);
+      orderClauses.push(`${tableAlias}."date" DESC`, `${tableAlias}."created_at" DESC`, `${tableAlias}."id" DESC`);
     }
   }
 
@@ -567,6 +567,7 @@ async function runEnsureInventorySchema(poolOrClient: any) {
   await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS manufacture_date date`);
   await poolOrClient.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS batch_no text`);
   await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS transaction_no text`);
+  await poolOrClient.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_inv_transactions_txn_no ON inventory_transactions(transaction_no)`);
   await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS unit_cost numeric DEFAULT 0`);
   await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
   await poolOrClient.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_amount NUMERIC(12,2) NOT NULL DEFAULT 0`);
@@ -613,6 +614,16 @@ async function runEnsureInventorySchema(poolOrClient: any) {
       AND (t.unit_price IS NULL OR t.unit_price = 0)
       AND (t.total_amount IS NULL OR t.total_amount = 0)
       AND i.unit_price > 0
+  `);
+
+  // Correct historical care inventory transaction dates to match the care record's actual date
+  await poolOrClient.query(`
+    UPDATE inventory_transactions it
+    SET date = cr.date
+    FROM care_records cr
+    WHERE it.transaction_no = ('CARE-' || SUBSTRING(cr.id::text, 1, 8))
+      AND it.type = 'out'
+      AND it.date <> cr.date
   `);
 
   // Ensure lab_transactions columns exist
@@ -697,6 +708,71 @@ async function runEnsureInventorySchema(poolOrClient: any) {
     END $$;
   `);
 
+  // Permanent Idempotent Repair: Link Orphaned Transactions to Batches
+  await poolOrClient.query(`
+    UPDATE inventory_transactions
+    SET inventory_batch_id = '7433cfd3-d1f3-4679-a0d6-9c36b0ecbd47',
+        batch_no = 'LEGACY-004'
+    WHERE transaction_no = 'TXN-IN-750941'
+      AND inventory_batch_id IS NULL;
+  `);
+
+  await poolOrClient.query(`
+    UPDATE inventory_transactions
+    SET inventory_batch_id = 'ded42644-e562-4c8a-bdc6-01567b92a756',
+        batch_no = 'SYR5-0726-A'
+    WHERE transaction_no = 'TXN-IN-185115'
+      AND inventory_batch_id IS NULL;
+  `);
+
+  // Permanent Idempotent Repair: Backfill Missing Opening Stock Audit Records
+  await poolOrClient.query(`
+    INSERT INTO inventory_transactions (
+      item_id,
+      inventory_batch_id,
+      type,
+      quantity,
+      batch_no,
+      expiration_date,
+      reason,
+      notes,
+      recorded_by,
+      date,
+      transaction_no,
+      unit_cost,
+      unit_price,
+      total_amount
+    )
+    SELECT
+      b.inventory_item_id,
+      b.id,
+      'in',
+      b.initial_quantity,
+      b.batch_no,
+      b.expiration_date,
+      'Initial Opening Stock',
+      'Historical migration opening balance',
+      'System Migration',
+      COALESCE(b.received_date, b.created_at::date),
+      'TXN-OPEN-' || SUBSTRING(b.id::text, 1, 8),
+      COALESCE(i.unit_price, 0),
+      COALESCE(i.unit_price, 0),
+      (b.initial_quantity * COALESCE(i.unit_price, 0))
+    FROM inventory_batches b
+    JOIN inventory_items i ON b.inventory_item_id = i.id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM inventory_transactions it
+      WHERE it.inventory_batch_id = b.id AND it.type = 'in'
+    );
+  `);
+
+  // Reconcile item quantities with sum of active batches
+  await poolOrClient.query(`
+    UPDATE inventory_items i
+    SET quantity = COALESCE((SELECT SUM(remaining_quantity) FROM inventory_batches WHERE inventory_item_id = i.id), 0),
+        updated_at = now();
+  `);
+
   try {
     const { rows: records } = await poolOrClient.query(`SELECT id, pet_id, date FROM care_records`);
     for (const rec of records) {
@@ -717,6 +793,22 @@ async function applyCareInventoryAdjustment(
   if (!["care_records", "vaccinations", "dewormings"].includes(table)) return;
   if (payload.skip_stock_deduction || payload.skip_inventory_deduction) return;
   await ensureInventorySchema(poolOrClient);
+
+  // Merge with existing record if updating, to retain original date, medications, and fields if partial payload
+  let effectivePayload = { ...payload };
+  if (recordId && ["care_records", "vaccinations", "dewormings"].includes(table)) {
+    const { rows: existingRows } = await poolOrClient.query(
+      `SELECT * FROM ${quoteIdent(table)} WHERE id = $1`,
+      [recordId]
+    );
+    if (existingRows.length) {
+      effectivePayload = { ...existingRows[0], ...payload };
+    }
+  }
+
+  const rawDate = effectivePayload.date ?? effectivePayload.record_date ?? effectivePayload.date_given;
+  const movementDate = toDateOnly(rawDate) || todayPH();
+  const effectivePetId = petId || (effectivePayload.pet_id ? String(effectivePayload.pet_id) : null);
 
   if (recordId) {
     const txnPrefix = `CARE-${recordId.slice(0, 8)}`;
@@ -756,7 +848,7 @@ async function applyCareInventoryAdjustment(
     status?: string | null;
     unit_price?: number | string | null;
   }>;
-  const plan = buildInventoryDeductionPlan(table, payload, inventoryItems);
+  const plan = buildInventoryDeductionPlan(table, effectivePayload, inventoryItems);
   const validation = validateInventoryDeductionPlan(plan.plan, inventoryItems);
   if (plan.plan.length && validation.error) {
     throw new Error(validation.error);
@@ -766,18 +858,21 @@ async function applyCareInventoryAdjustment(
     const item = inventoryItems.find((i) => i.id === step.itemId);
     const unitPrice = Number(item?.unit_price ?? 0);
 
-    // FEFO Multi-Batch Deduction across active, non-expired batches
+    // FEFO Multi-Batch Deduction across active, available, non-expired batches
     const { rows: activeBatches } = await poolOrClient.query(
       `SELECT id, batch_no, expiration_date, remaining_quantity 
        FROM inventory_batches 
-       WHERE inventory_item_id = $1 AND remaining_quantity > 0 AND (expiration_date >= CURRENT_DATE OR expiration_date IS NULL)
+       WHERE inventory_item_id = $1 
+         AND remaining_quantity > 0 
+         AND (expiration_date >= $2::date OR expiration_date IS NULL)
+         AND (received_date <= $2::date OR received_date IS NULL)
        ORDER BY expiration_date ASC NULLS LAST, created_at ASC`,
-      [step.itemId]
+      [step.itemId, movementDate]
     );
 
     const totalAvailable = activeBatches.reduce((acc: number, b: any) => acc + Number(b.remaining_quantity ?? 0), 0);
     if (totalAvailable < step.quantity) {
-      throw new Error(`Insufficient non-expired stock for ${item?.name || step.itemId}. Available: ${totalAvailable}, Requested: ${step.quantity}`);
+      throw new Error(`Insufficient available stock for ${item?.name || step.itemId} on ${movementDate}. Available: ${totalAvailable}, Requested: ${step.quantity}`);
     }
 
     let remainingNeeded = step.quantity;
@@ -794,7 +889,7 @@ async function applyCareInventoryAdjustment(
 
       await poolOrClient.query(
         `INSERT INTO inventory_transactions (item_id, inventory_batch_id, type, quantity, batch_no, expiration_date, reason, pet_id, date, transaction_no, unit_cost, unit_price, total_amount, notes, staff_name)
-         VALUES ($1, $2, 'out', $3, $4, $5, $6, $7, CURRENT_DATE, $8, $9, $9, $10, $11, $12)`,
+         VALUES ($1, $2, 'out', $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13)`,
         [
           step.itemId,
           batch.id,
@@ -802,7 +897,8 @@ async function applyCareInventoryAdjustment(
           batch.batch_no,
           batch.expiration_date,
           step.reason,
-          petId ?? null,
+          effectivePetId,
+          movementDate,
           `CARE-${recordId?.slice(0, 8) ?? "AUTO"}`,
           unitPrice,
           stepTotalAmount,
@@ -832,7 +928,7 @@ async function syncCareLabTransaction(
 
   // 1. Fetch Care Record details
   const { rows: careRows } = await poolOrClient.query(
-    `SELECT id, pet_id, appointment_id, record_type, diagnosis, treatment, medication, vaccine_used, dewormer_used, vet
+    `SELECT id, pet_id, appointment_id, record_type, diagnosis, treatment, medication, vaccine_used, dewormer_used, vet, date
      FROM care_records WHERE id = $1`,
     [recordId]
   );
@@ -847,13 +943,8 @@ async function syncCareLabTransaction(
     ownerId = petRows[0]?.owner_id ?? null;
   }
 
-  // 3. Format Date string
-  const dateValue =
-    recordDate instanceof Date
-      ? recordDate.toISOString().slice(0, 10)
-      : recordDate
-      ? String(recordDate).slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
+  // 3. Format Date string using care record's date in Philippine Time
+  const dateValue = toDateOnly(recordDate || careRecord.date) || todayPH();
 
   // 4. Fetch medication inventory transactions generated by FEFO
   const txnPrefix = `CARE-${recordId.slice(0, 8)}`;
@@ -879,26 +970,47 @@ async function syncCareLabTransaction(
     labTxnId = String(existing[0].id);
     currentAmountPaid = Number(existing[0].amount_paid ?? 0);
   } else {
-    const txnNumber = `TXN-${Date.now().toString().slice(-6)}`;
-    const { rows: inserted } = await poolOrClient.query(
-      `INSERT INTO lab_transactions (
-        transaction_number, pet_id, owner_id, care_record_id, appointment_id, date, vet,
-        services_rendered, total_amount, subtotal, amount_paid, payment_method, payment_status, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 'Cash', 'Pending', 'Pending', $9)
-      RETURNING id`,
-      [
-        txnNumber,
-        effectivePetId ?? null,
-        ownerId,
-        recordId,
-        careRecord.appointment_id ?? null,
-        dateValue,
-        careRecord.vet || "Clinic Staff",
-        "Veterinary Services & Medication",
-        "Auto-generated from Care History record.",
-      ]
-    );
-    labTxnId = String(inserted[0].id);
+    // If not found by care_record_id, check if a lab transaction was already created by appointment
+    let apptTxn: any = null;
+    if (careRecord.appointment_id) {
+      const { rows: byAppt } = await poolOrClient.query(
+        `SELECT id, amount_paid FROM lab_transactions WHERE appointment_id = $1 AND (care_record_id IS NULL OR care_record_id = $2) LIMIT 1`,
+        [careRecord.appointment_id, recordId]
+      );
+      if (byAppt.length) {
+        apptTxn = byAppt[0];
+      }
+    }
+
+    if (apptTxn) {
+      labTxnId = String(apptTxn.id);
+      currentAmountPaid = Number(apptTxn.amount_paid ?? 0);
+      await poolOrClient.query(
+        `UPDATE lab_transactions SET care_record_id = $1 WHERE id = $2 AND care_record_id IS NULL`,
+        [recordId, labTxnId]
+      );
+    } else {
+      const txnNumber = `TXN-${Date.now().toString().slice(-6)}`;
+      const { rows: inserted } = await poolOrClient.query(
+        `INSERT INTO lab_transactions (
+          transaction_number, pet_id, owner_id, care_record_id, appointment_id, date, vet,
+          services_rendered, total_amount, subtotal, amount_paid, payment_method, payment_status, status, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 'Cash', 'Pending', 'Pending', $9)
+        RETURNING id`,
+        [
+          txnNumber,
+          effectivePetId ?? null,
+          ownerId,
+          recordId,
+          careRecord.appointment_id ?? null,
+          dateValue,
+          careRecord.vet || "Clinic Staff",
+          "Veterinary Services & Medication",
+          "Auto-generated from Care History record.",
+        ]
+      );
+      labTxnId = String(inserted[0].id);
+    }
   }
 
   // 6. Remove old Care History items to avoid duplication on resave
@@ -1202,17 +1314,19 @@ export async function queryInsert(opts: {
         const expDate = payload.expiration_date ?? payload.expirationDate ?? null;
         const initialQty = Number(payload.initial_quantity ?? payload.initialQuantity ?? payload.quantity ?? 0);
         const remainingQty = Number(payload.remaining_quantity ?? payload.remainingQuantity ?? initialQty);
+        const recDate = toDateOnly(payload.received_date ?? payload.date_received) || todayPH();
 
         const upsertQuery = `
-          INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity, received_date)
+          VALUES ($1, $2, $3, $4, $5, $6)
           ON CONFLICT (inventory_item_id, batch_no, expiration_date) DO UPDATE
           SET initial_quantity = inventory_batches.initial_quantity + EXCLUDED.initial_quantity,
               remaining_quantity = inventory_batches.remaining_quantity + EXCLUDED.remaining_quantity,
+              received_date = COALESCE(inventory_batches.received_date, EXCLUDED.received_date),
               updated_at = now()
           RETURNING *;
         `;
-        const { rows: inserted } = await (client ?? pool).query(upsertQuery, [itemId, batchNo, expDate, initialQty, remainingQty]);
+        const { rows: inserted } = await (client ?? pool).query(upsertQuery, [itemId, batchNo, expDate, initialQty, remainingQty, recDate]);
         if (opts.returning && inserted.length) results.push(inserted[0] as Record<string, unknown>);
 
         // Sync InventoryItem.quantity to equal SUM(remaining_quantity)
@@ -1241,22 +1355,24 @@ export async function queryInsert(opts: {
         const initQty = Number(payload.quantity ?? 0);
         const itemUnitPrice = Number(payload.unit_price ?? payload.unitPrice ?? 0);
         const initTotalAmount = Number((initQty * itemUnitPrice).toFixed(2));
+        const initRecDate = toDateOnly(payload.received_date ?? payload.date_received) || todayPH();
 
         const { rows: createdBatch } = await (client ?? pool).query(
-          `INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity)
-           VALUES ($1, $2, $3, $4, $4)
+          `INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity, received_date)
+           VALUES ($1, $2, $3, $4, $4, $5)
            ON CONFLICT (inventory_item_id, batch_no, expiration_date) DO UPDATE
            SET initial_quantity = inventory_batches.initial_quantity + EXCLUDED.initial_quantity,
                remaining_quantity = inventory_batches.remaining_quantity + EXCLUDED.remaining_quantity,
+               received_date = COALESCE(inventory_batches.received_date, EXCLUDED.received_date),
                updated_at = now()
            RETURNING id;`,
-          [newItemId, initBatchNo, initExpDate, initQty]
+          [newItemId, initBatchNo, initExpDate, initQty, initRecDate]
         );
 
         if (initQty > 0) {
           await (client ?? pool).query(
             `INSERT INTO inventory_transactions (item_id, inventory_batch_id, type, quantity, batch_no, expiration_date, reason, notes, recorded_by, date, transaction_no, unit_cost, unit_price, total_amount)
-             VALUES ($1, $2, 'in', $3, $4, $5, 'Initial Stock', 'Item created', $6, CURRENT_DATE, $7, $8, $8, $9)`,
+             VALUES ($1, $2, 'in', $3, $4, $5, 'Initial Stock', 'Item created', $6, $7, $8, $9, $9, $10)`,
             [
               newItemId,
               createdBatch[0]?.id || null,
@@ -1264,6 +1380,7 @@ export async function queryInsert(opts: {
               initBatchNo,
               initExpDate,
               opts.user.email || "Admin",
+              initRecDate,
               `TXN-IN-${Date.now().toString().slice(-6)}`,
               itemUnitPrice,
               initTotalAmount,
@@ -1298,15 +1415,17 @@ export async function queryInsert(opts: {
 
         if (!isAuditOnly) {
           if (!batchId && itemId && type === "in") {
+            const inDate = toDateOnly(payload.date) || todayPH();
             const { rows: upsertedBatch } = await (client ?? pool).query(
-              `INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity)
-               VALUES ($1, $2, $3, $4, $4)
+              `INSERT INTO inventory_batches (inventory_item_id, batch_no, expiration_date, initial_quantity, remaining_quantity, received_date)
+               VALUES ($1, $2, $3, $4, $4, $5)
                ON CONFLICT (inventory_item_id, batch_no, expiration_date) DO UPDATE
                SET initial_quantity = inventory_batches.initial_quantity + EXCLUDED.initial_quantity,
                    remaining_quantity = inventory_batches.remaining_quantity + EXCLUDED.remaining_quantity,
+                   received_date = COALESCE(inventory_batches.received_date, EXCLUDED.received_date),
                    updated_at = now()
                RETURNING id;`,
-              [itemId, batchNo, expDate, qty]
+              [itemId, batchNo, expDate, qty, inDate]
             );
             if (upsertedBatch.length) {
               batchId = upsertedBatch[0].id;
@@ -1818,6 +1937,7 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
       "care_records",
       {
         pet_id: petId,
+        date: recordDate,
         record_type: careType,
         vaccine_used: careType === "vaccination" ? reason : null,
         dewormer_used: careType === "deworming" ? reason : null,
@@ -1829,41 +1949,9 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
       petId
     );
 
-    // Auto-create Clinic Transaction
-    const petRes = await pool.query(`SELECT owner_id FROM pets WHERE id = $1`, [petId]);
-    const ownerId = petRes.rows[0]?.owner_id ?? null;
-
-    const txnExisting = await pool.query(`SELECT id FROM lab_transactions WHERE appointment_id = $1`, [appointmentId]);
-    if (!txnExisting.rows.length) {
-      const txnNumber = `TXN-${Date.now().toString().slice(-6)}`;
-      const serviceName =
-        careType === "vaccination"
-          ? "Vaccination Service"
-          : careType === "deworming"
-          ? "Deworming Service"
-          : careType === "treatment"
-          ? "Medical Treatment Service"
-          : "General Veterinary Check-up";
-
-      await pool.query(
-        `INSERT INTO lab_transactions (
-          transaction_number, appointment_id, pet_id, owner_id, care_record_id, date,
-          services_rendered, total_amount, payment_method, payment_status, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          txnNumber,
-          appointmentId,
-          petId,
-          ownerId,
-          insertedId,
-          recordDate,
-          serviceName,
-          500.0,
-          "Cash",
-          "Pending",
-          "Auto-generated from completed appointment.",
-        ]
-      );
+    // Auto-create/sync Clinic Transaction
+    if (insertedId) {
+      await syncCareLabTransaction(pool, insertedId, petId, recordDate);
     }
 
     return { recorded: true };
@@ -1903,6 +1991,7 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
       "care_records",
       {
         pet_id: petId,
+        date: recordDate,
         record_type: careType,
         vaccine_used: careType === "vaccination" ? reason : null,
         dewormer_used: careType === "deworming" ? reason : null,
@@ -1913,6 +2002,10 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
       insertedId,
       petId
     );
+
+    if (insertedId) {
+      await syncCareLabTransaction(pool, insertedId, petId, recordDate);
+    }
     return { recorded: true };
   }
 }

@@ -344,6 +344,7 @@ ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS inventory_batch_id u
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS recorded_by text;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS transaction_no text;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inv_transactions_txn_no ON inventory_transactions(transaction_no);
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS total_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 
