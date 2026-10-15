@@ -47,7 +47,7 @@ import {
 } from "recharts";
 import { useRows } from "@/hooks/useRows";
 import { formatDate, formatAge } from "@/lib/age";
-import { formatNowPH, todayPH, daysFromTodayPH, isBeforeTodayPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, toDateOnly, daysFromTodayPH, isBeforeTodayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { canViewReports } from "@/lib/roles";
 import { toast } from "sonner";
@@ -64,8 +64,89 @@ type ReportType =
   | "communication"
   | "staff";
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 10;
 const COLORS = ["#E5192C", "#7F1D1D", "#16A34A", "#D97706", "#8E24AA", "#F57C00", "#0284C7"];
+
+export function getRoleDisplay(role?: string | null): {
+  label: string;
+  badgeVariant: "default" | "secondary" | "outline";
+  className: string;
+} {
+  const normalized = (role || "").toLowerCase().trim();
+  switch (normalized) {
+    case "admin":
+      return {
+        label: "Administrator",
+        badgeVariant: "default",
+        className: "bg-red-700 hover:bg-red-800 text-white border-0 font-medium",
+      };
+    case "staff":
+      return {
+        label: "Clinic Staff",
+        badgeVariant: "secondary",
+        className: "bg-brand-teal-light text-brand-teal border border-brand-teal/30 font-medium",
+      };
+    case "owner":
+      return {
+        label: "Pet Owner",
+        badgeVariant: "outline",
+        className: "bg-brand-navy-light text-brand-navy border border-brand-navy/30 font-medium",
+      };
+    default:
+      return {
+        label: "Unknown",
+        badgeVariant: "outline",
+        className: "bg-muted text-muted-foreground border-border font-medium",
+      };
+  }
+}
+
+function PaginationControls({
+  currentPage,
+  totalItems,
+  pageSize = ITEMS_PER_PAGE,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalItems: number;
+  pageSize?: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
+      <span>
+        Showing {Math.min((currentPage - 1) * pageSize + 1, totalItems)} to{" "}
+        {Math.min(currentPage * pageSize, totalItems)} of {totalItems} records
+      </span>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
+        </Button>
+        <span className="px-2 font-medium">
+          Page {currentPage} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function Reports() {
   const router = useRouter();
@@ -78,9 +159,31 @@ export default function Reports() {
   const { data: appointments = [], isLoading: apptLoading } = useRows<any>("appointments", { orderBy: "date", ascending: false });
   const { data: careRecords = [], isLoading: careLoading } = useRows<any>("care_records", { orderBy: "date", ascending: false });
   const { data: inventory = [], isLoading: invLoading } = useRows<any>("inventory_items", { orderBy: "name" });
-  const { data: transactions = [], isLoading: txnLoading } = useRows<any>("lab_transactions", { orderBy: "created_at", ascending: false });
+  const { data: inventoryTransactions = [], isLoading: invTxnLoading } = useRows<any>("inventory_transactions", {
+    orderBy: "date",
+    ascending: false,
+    orders: [
+      { column: "date", ascending: false },
+      { column: "created_at", ascending: false },
+      { column: "id", ascending: false },
+    ],
+  });
+  const { data: transactions = [], isLoading: txnLoading } = useRows<any>("lab_transactions", {
+    orderBy: "date",
+    ascending: false,
+    orders: [
+      { column: "date", ascending: false },
+      { column: "created_at", ascending: false },
+      { column: "id", ascending: false },
+    ],
+  });
   const { data: messages = [], isLoading: msgLoading } = useRows<any>("messages", { orderBy: "created_at", ascending: false });
-  const { data: profiles = [], isLoading: staffLoading } = useRows<any>("profiles", { orderBy: "created_at", ascending: false });
+  const { data: profiles = [], isLoading: staffLoading } = useRows<any>("profiles", {
+    orderBy: "created_at",
+    ascending: false,
+    staleTime: 5000,
+    refetchOnMount: "always",
+  });
 
   // Access Guard
   useEffect(() => {
@@ -119,6 +222,7 @@ export default function Reports() {
 
   const ownerMap = new Map(owners.map((o) => [o.id, o]));
   const petMap = new Map(pets.map((p) => [p.id, p]));
+  const itemMap = new Map(inventory.map((i) => [i.id, i]));
 
   // Report Cards Configuration
   const reportCards = [
@@ -188,10 +292,15 @@ export default function Reports() {
     },
   ];
 
-  // Date Filter Helper
+  // Date Range Validation & Filter Helper (Timezone-aware for Asia/Manila)
+  const isDateRangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+
   const filterByDate = (dateStr?: string | null) => {
-    if (!dateStr) return true;
-    const d = dateStr.slice(0, 10);
+    if (isDateRangeInvalid) return false;
+    if (!dateFrom && !dateTo) return true;
+    if (!dateStr) return false;
+    const d = toDateOnly(dateStr);
+    if (!d) return false;
     if (dateFrom && d < dateFrom) return false;
     if (dateTo && d > dateTo) return false;
     return true;
@@ -338,9 +447,9 @@ export default function Reports() {
     });
   }, [selectedReport, owners, search, dateFrom, dateTo, subFilter]);
 
-  // 5. Inventory
+  // 5. Inventory Stock
   const filteredInventory = useMemo(() => {
-    if (selectedReport !== "inventory") return [];
+    if (selectedReport !== "inventory" || subFilter === "movements") return [];
     return inventory.filter((i) => {
       const q = search.toLowerCase().trim();
       const nameStr = (i.name || "").toLowerCase();
@@ -355,15 +464,44 @@ export default function Reports() {
       if (subFilter === "low_stock") return qty > 0 && qty <= reorderLevel;
       if (subFilter === "out_of_stock") return qty <= 0;
       if (subFilter === "expiring") {
-        const days = i.expiration_date ? daysFromTodayPH(i.expiration_date) : null;
-        return days !== null && (days <= 30 || isBeforeTodayPH(i.expiration_date));
+        if (dateFrom || dateTo) {
+          if (!filterByDate(i.expiration_date)) return false;
+        } else {
+          const days = i.expiration_date ? daysFromTodayPH(i.expiration_date) : null;
+          if (days === null || (days > 30 && !isBeforeTodayPH(i.expiration_date))) return false;
+        }
+      } else {
+        if (dateFrom || dateTo) {
+          const matchesCreated = i.created_at ? filterByDate(i.created_at) : false;
+          const matchesUpdated = i.updated_at ? filterByDate(i.updated_at) : false;
+          if (!matchesCreated && !matchesUpdated) return false;
+        }
       }
+
       if (["medicine", "medication", "vaccine", "dewormer", "supply"].includes(subFilter)) {
         return categoryStr.includes(subFilter);
       }
       return true;
     });
-  }, [selectedReport, inventory, search, subFilter]);
+  }, [selectedReport, inventory, search, subFilter, dateFrom, dateTo, isDateRangeInvalid]);
+
+  // 5b. Inventory Movements
+  const filteredInventoryMovements = useMemo(() => {
+    if (selectedReport !== "inventory" || subFilter !== "movements") return [];
+    return inventoryTransactions.filter((tx) => {
+      const q = search.toLowerCase().trim();
+      const itemName = (itemMap.get(tx.item_id)?.name || "").toLowerCase();
+      const reason = (tx.reason || "").toLowerCase();
+      const notes = (tx.notes || "").toLowerCase();
+      const type = (tx.type || "").toLowerCase();
+
+      if (q && !itemName.includes(q) && !reason.includes(q) && !notes.includes(q) && !type.includes(q)) {
+        return false;
+      }
+      if (!filterByDate(tx.date || tx.created_at)) return false;
+      return true;
+    });
+  }, [selectedReport, subFilter, inventoryTransactions, itemMap, search, dateFrom, dateTo, isDateRangeInvalid]);
 
   // 6. Transactions
   const filteredTransactions = useMemo(() => {
@@ -380,7 +518,7 @@ export default function Reports() {
         return false;
       return true;
     });
-  }, [selectedReport, transactions, search, dateFrom, dateTo, subFilter, petMap, ownerMap]);
+  }, [selectedReport, transactions, search, dateFrom, dateTo, subFilter, petMap, ownerMap, isDateRangeInvalid]);
 
   // 7. Communications
   const filteredMessages = useMemo(() => {
@@ -396,19 +534,26 @@ export default function Reports() {
       if (subFilter !== "all" && m.channel.toLowerCase() !== subFilter.toLowerCase()) return false;
       return true;
     });
-  }, [selectedReport, messages, search, dateFrom, dateTo, subFilter, ownerMap]);
+  }, [selectedReport, messages, search, dateFrom, dateTo, subFilter, ownerMap, isDateRangeInvalid]);
 
   // 8. Staff Activity
   const filteredStaff = useMemo(() => {
     if (selectedReport !== "staff") return [];
     return profiles.filter((s) => {
       const q = search.toLowerCase().trim();
-      const nameStr = (s.full_name || s.email || "").toLowerCase();
-      const roleStr = (s.role || "").toLowerCase();
-      if (q && !nameStr.includes(q) && !roleStr.includes(q)) return false;
+      const nameStr = (s.full_name || "").toLowerCase();
+      const emailStr = (s.email || "").toLowerCase();
+      const roleRaw = (s.role || "").toLowerCase();
+      const roleDisplay = getRoleDisplay(s.role).label.toLowerCase();
+
+      if (q && !nameStr.includes(q) && !emailStr.includes(q) && !roleRaw.includes(q) && !roleDisplay.includes(q)) {
+        return false;
+      }
+      if (!filterByDate(s.created_at)) return false;
+      if (subFilter !== "all" && roleRaw !== subFilter.toLowerCase()) return false;
       return true;
     });
-  }, [selectedReport, profiles, search]);
+  }, [selectedReport, profiles, search, dateFrom, dateTo, subFilter, isDateRangeInvalid]);
 
   // --- RECHARTS CHART DATA COMPUTATIONS ---
   const apptChartData = useMemo(() => {
@@ -448,6 +593,21 @@ export default function Reports() {
   }, [filteredOwners]);
 
   const inventoryChartData = useMemo(() => {
+    if (subFilter === "movements") {
+      const counts: Record<string, number> = {
+        "Stock In": 0,
+        "Stock Out": 0,
+        "Care Deduction": 0,
+        Adjustment: 0,
+      };
+      filteredInventoryMovements.forEach((tx) => {
+        if (tx.type === "stock_in") counts["Stock In"]++;
+        else if (tx.type === "stock_out") counts["Stock Out"]++;
+        else if (tx.type === "care_deduction") counts["Care Deduction"]++;
+        else counts["Adjustment"]++;
+      });
+      return Object.keys(counts).map((name) => ({ name, count: counts[name] }));
+    }
     const counts: Record<string, number> = {
       "In Stock": 0,
       "Low Stock": 0,
@@ -466,7 +626,7 @@ export default function Reports() {
       else counts["In Stock"]++;
     });
     return Object.keys(counts).map((name) => ({ name, count: counts[name] }));
-  }, [filteredInventory]);
+  }, [filteredInventory, filteredInventoryMovements, subFilter]);
 
   const txnChartData = useMemo(() => {
     const counts: Record<string, number> = { Cash: 0, GCash: 0 };
@@ -488,18 +648,50 @@ export default function Reports() {
 
   const staffChartData = useMemo(() => {
     const counts: Record<string, number> = {};
-    careRecords.forEach((c) => {
-      const v = c.vet || "Clinic Staff";
-      counts[v] = (counts[v] || 0) + 1;
+    filteredStaff.forEach((s) => {
+      const label = getRoleDisplay(s.role).label;
+      counts[label] = (counts[label] || 0) + 1;
     });
-    if (Object.keys(counts).length === 0) {
-      filteredStaff.forEach((s) => {
-        const label = s.full_name || s.email?.split("@")[0] || "Staff";
-        counts[label] = 1;
-      });
-    }
     return Object.keys(counts).map((name) => ({ name, count: counts[name] }));
-  }, [careRecords, filteredStaff]);
+  }, [filteredStaff]);
+
+  // Paginated Data Slices
+  const paginatedAppointments = useMemo(
+    () => filteredAppointments.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredAppointments, currentPage]
+  );
+  const paginatedCareRecords = useMemo(
+    () => filteredCareRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredCareRecords, currentPage]
+  );
+  const paginatedPets = useMemo(
+    () => filteredPets.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredPets, currentPage]
+  );
+  const paginatedOwners = useMemo(
+    () => filteredOwners.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredOwners, currentPage]
+  );
+  const paginatedInventory = useMemo(
+    () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredInventory, currentPage]
+  );
+  const paginatedMovements = useMemo(
+    () => filteredInventoryMovements.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredInventoryMovements, currentPage]
+  );
+  const paginatedTransactions = useMemo(
+    () => filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredTransactions, currentPage]
+  );
+  const paginatedMessages = useMemo(
+    () => filteredMessages.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredMessages, currentPage]
+  );
+  const paginatedStaff = useMemo(
+    () => filteredStaff.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredStaff, currentPage]
+  );
 
   if (isLoading) {
     return <PageSkeleton rows={8} showStats />;
@@ -653,8 +845,16 @@ export default function Reports() {
                           <SelectItem value="pending">Pending Only</SelectItem>
                         </>
                       )}
+                      {selectedReport === "staff" && (
+                        <>
+                          <SelectItem value="admin">Administrator Accounts</SelectItem>
+                          <SelectItem value="staff">Clinic Staff Accounts</SelectItem>
+                          <SelectItem value="owner">Pet Owner Accounts</SelectItem>
+                        </>
+                      )}
                       {selectedReport === "inventory" && (
                         <>
+                          <SelectItem value="movements">Stock Movements & History</SelectItem>
                           <SelectItem value="low_stock">Low Stock Report</SelectItem>
                           <SelectItem value="out_of_stock">Out-of-Stock Report</SelectItem>
                           <SelectItem value="expiring">Expiring Items Report</SelectItem>
@@ -669,6 +869,14 @@ export default function Reports() {
                 </div>
               </div>
 
+              {/* Date Range Validation Warning Banner */}
+              {isDateRangeInvalid && (
+                <div className="flex items-center gap-2 p-2.5 text-xs text-destructive bg-destructive/10 rounded-md border border-destructive/20 font-medium">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Invalid Date Range: "Date From" cannot be after "Date To". Please adjust the dates.</span>
+                </div>
+              )}
+
               {/* Action Buttons: Export & Print */}
               <div className="flex items-center justify-end gap-2 border-t pt-3">
                 {isAdmin && (
@@ -681,10 +889,58 @@ export default function Reports() {
                       else if (selectedReport === "care") exportCSV(filteredCareRecords, "Care_History_Report");
                       else if (selectedReport === "pet") exportCSV(filteredPets, "Pet_Report");
                       else if (selectedReport === "owner") exportCSV(filteredOwners, "Owner_Report");
-                      else if (selectedReport === "inventory") exportCSV(filteredInventory, "Inventory_Report");
-                      else if (selectedReport === "transaction") exportCSV(filteredTransactions, "Transaction_Report");
+                      else if (selectedReport === "inventory") {
+                        if (subFilter === "movements") {
+                          exportCSV(
+                            filteredInventoryMovements.map((tx) => ({
+                              Date: formatDate(tx.date || tx.created_at),
+                              Item: itemMap.get(tx.item_id)?.name || "—",
+                              Type: tx.type,
+                              Quantity: tx.quantity,
+                              Unit: tx.unit || itemMap.get(tx.item_id)?.unit || "units",
+                              Reason: tx.reason || "",
+                              Notes: tx.notes || "",
+                              PerformedBy: tx.performed_by || "Staff",
+                            })),
+                            "Inventory_Movements_Report"
+                          );
+                        } else {
+                          exportCSV(
+                            filteredInventory.map((i) => {
+                              const qty = Number(i.quantity ?? 0);
+                              const reorder = Number(i.reorder_level ?? 5);
+                              let status = "Available";
+                              if (i.expiration_date && isBeforeTodayPH(i.expiration_date)) status = "Expired";
+                              else if (qty <= 0) status = "Out of Stock";
+                              else if (qty <= reorder) status = "Low Stock";
+
+                              return {
+                                "Item Code": i.item_code || i.id.slice(0, 8),
+                                "Item Name": i.name,
+                                Category: i.category || "Supply",
+                                Quantity: `${qty} ${i.unit || "unit"}`,
+                                "Reorder Level": reorder,
+                                "Expiration Date": i.expiration_date ? formatDate(i.expiration_date) : "N/A",
+                                "Date Added": i.created_at ? formatDate(i.created_at) : "N/A",
+                                Status: status,
+                              };
+                            }),
+                            "Inventory_Stock_Report"
+                          );
+                        }
+                      } else if (selectedReport === "transaction") exportCSV(filteredTransactions, "Transaction_Report");
                       else if (selectedReport === "communication") exportCSV(filteredMessages, "Communication_Report");
-                      else if (selectedReport === "staff") exportCSV(filteredStaff, "Staff_Activity_Report");
+                      else if (selectedReport === "staff") {
+                        exportCSV(
+                          filteredStaff.map((s) => ({
+                            Name: s.full_name || "Staff Member",
+                            Email: s.email || "—",
+                            Role: getRoleDisplay(s.role).label,
+                            RegisteredDate: formatDate(s.created_at),
+                          })),
+                          "Staff_Activity_Report"
+                        );
+                      }
                     }}
                   >
                     <Download className="h-3.5 w-3.5 mr-1" /> Export CSV / Excel
@@ -747,28 +1003,44 @@ export default function Reports() {
                         ])
                       );
                     } else if (selectedReport === "inventory") {
-                      printOfficialReport(
-                        "Inventory Stock & Expiration Report",
-                        ["Item Code", "Item Name", "Category", "Quantity", "Reorder Level", "Expiration Date", "Status"],
-                        filteredInventory.map((i) => {
-                          const qty = Number(i.quantity ?? 0);
-                          const reorder = Number(i.reorder_level ?? 5);
-                          let status = "Available";
-                          if (i.expiration_date && isBeforeTodayPH(i.expiration_date)) status = "Expired";
-                          else if (qty <= 0) status = "Out of Stock";
-                          else if (qty <= reorder) status = "Low Stock";
+                      if (subFilter === "movements") {
+                        printOfficialReport(
+                          "Inventory Movements & History Report",
+                          ["Date", "Item Name", "Type", "Quantity", "Reason / Notes", "Performed By"],
+                          filteredInventoryMovements.map((tx) => [
+                            formatDate(tx.date || tx.created_at),
+                            itemMap.get(tx.item_id)?.name || "—",
+                            tx.type || "Movement",
+                            `${tx.quantity} ${tx.unit || itemMap.get(tx.item_id)?.unit || "units"}`,
+                            tx.reason || tx.notes || "—",
+                            tx.performed_by || "Clinic Staff",
+                          ])
+                        );
+                      } else {
+                        printOfficialReport(
+                          "Inventory Stock & Expiration Report",
+                          ["Item Code", "Item Name", "Category", "Quantity", "Reorder Level", "Expiration Date", "Date Added", "Status"],
+                          filteredInventory.map((i) => {
+                            const qty = Number(i.quantity ?? 0);
+                            const reorder = Number(i.reorder_level ?? 5);
+                            let status = "Available";
+                            if (i.expiration_date && isBeforeTodayPH(i.expiration_date)) status = "Expired";
+                            else if (qty <= 0) status = "Out of Stock";
+                            else if (qty <= reorder) status = "Low Stock";
 
-                          return [
-                            i.item_code || i.id.slice(0, 8),
-                            i.name,
-                            i.category || "Supply",
-                            `${qty} ${i.unit || "unit"}`,
-                            String(reorder),
-                            i.expiration_date ? formatDate(i.expiration_date) : "N/A",
-                            status,
-                          ];
-                        })
-                      );
+                            return [
+                              i.item_code || i.id.slice(0, 8),
+                              i.name,
+                              i.category || "Supply",
+                              `${qty} ${i.unit || "unit"}`,
+                              String(reorder),
+                              i.expiration_date ? formatDate(i.expiration_date) : "N/A",
+                              i.created_at ? formatDate(i.created_at) : "—",
+                              status,
+                            ];
+                          })
+                        );
+                      }
                     } else if (selectedReport === "communication") {
                       printOfficialReport(
                         "Communications History Log",
@@ -800,7 +1072,7 @@ export default function Reports() {
                         filteredStaff.map((s) => [
                           s.full_name || "Staff Member",
                           s.email || "—",
-                          s.role || "staff",
+                          getRoleDisplay(s.role).label,
                           formatDate(s.created_at),
                         ])
                       );
@@ -955,7 +1227,7 @@ export default function Reports() {
                       : selectedReport === "owner"
                       ? filteredOwners.length
                       : selectedReport === "inventory"
-                      ? filteredInventory.length
+                      ? (subFilter === "movements" ? filteredInventoryMovements.length : filteredInventory.length)
                       : selectedReport === "transaction"
                       ? filteredTransactions.length
                       : selectedReport === "communication"
@@ -988,7 +1260,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAppointments.slice(0, 10).map((a) => (
+                    {paginatedAppointments.map((a) => (
                       <TableRow key={a.id}>
                         <TableCell className="font-mono text-xs font-bold text-primary">
                           {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
@@ -1019,6 +1291,12 @@ export default function Reports() {
                     )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredAppointments.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1042,7 +1320,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCareRecords.slice(0, 10).map((c) => (
+                    {paginatedCareRecords.map((c) => (
                       <TableRow key={c.id}>
                         <TableCell className="text-xs">{formatDate(c.date)}</TableCell>
                         <TableCell className="font-semibold text-xs text-primary">
@@ -1057,8 +1335,21 @@ export default function Reports() {
                         <TableCell className="text-xs">{c.vet || "Clinic Staff"}</TableCell>
                       </TableRow>
                     ))}
+                    {filteredCareRecords.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No care records match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredCareRecords.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1083,7 +1374,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPets.slice(0, 10).map((p) => (
+                    {paginatedPets.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-mono text-xs font-bold text-primary">
                           {p.pet_code || `PET-${p.id.slice(0, 6)}`}
@@ -1103,8 +1394,21 @@ export default function Reports() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {filteredPets.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No pet records match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredPets.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1129,7 +1433,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredOwners.slice(0, 10).map((o) => (
+                    {paginatedOwners.map((o) => (
                       <TableRow key={o.id}>
                         <TableCell className="font-mono text-xs font-bold text-primary">
                           {o.owner_code || `OWN-${o.id.slice(0, 6)}`}
@@ -1149,13 +1453,100 @@ export default function Reports() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {filteredOwners.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No owner records match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredOwners.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
 
-          {selectedReport === "inventory" && (
+          {selectedReport === "inventory" && subFilter === "movements" && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="font-heading text-base font-bold">
+                  Inventory Movement & Transaction History ({filteredInventoryMovements.length} Records)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Item Name</TableHead>
+                      <TableHead>Movement Type</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Reason / Notes</TableHead>
+                      <TableHead>Performed By</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedMovements.map((tx) => {
+                      const item = itemMap.get(tx.item_id);
+                      const typeLabel =
+                        tx.type === "stock_in"
+                          ? "Stock In"
+                          : tx.type === "stock_out"
+                          ? "Stock Out"
+                          : tx.type === "care_deduction"
+                          ? "Care Deduction"
+                          : tx.type === "adjustment"
+                          ? "Adjustment"
+                          : tx.type;
+                      const badgeVariant =
+                        tx.type === "stock_in"
+                          ? "bg-brand-green-light text-brand-green border-brand-green/30"
+                          : tx.type === "stock_out"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-brand-navy-light text-brand-navy border-brand-navy/30";
+                      return (
+                        <TableRow key={tx.id}>
+                          <TableCell className="text-xs">{formatDate(tx.date || tx.created_at)}</TableCell>
+                          <TableCell className="font-semibold text-xs">{item?.name || "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`capitalize text-xs ${badgeVariant}`}>
+                              {typeLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-bold text-xs">
+                            {tx.quantity} {tx.unit || item?.unit || "units"}
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[200px] truncate">{tx.reason || tx.notes || "—"}</TableCell>
+                          <TableCell className="text-xs">{tx.performed_by || "Clinic Staff"}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {filteredInventoryMovements.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No inventory movement records match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredInventoryMovements.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedReport === "inventory" && subFilter !== "movements" && (
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="font-heading text-base font-bold">
@@ -1166,23 +1557,65 @@ export default function Reports() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Item Code</TableHead>
                       <TableHead>Item Name</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Expiration Date</TableHead>
+                      <TableHead>Date Added</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInventory.slice(0, 10).map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell className="font-semibold text-xs">{i.name}</TableCell>
-                        <TableCell className="text-xs capitalize">{i.category || "Supply"}</TableCell>
-                        <TableCell className="font-bold text-xs">{i.quantity ?? 0} {i.unit || "units"}</TableCell>
-                        <TableCell className="text-xs">{i.expiration_date ? formatDate(i.expiration_date) : "—"}</TableCell>
+                    {paginatedInventory.map((i) => {
+                      const qty = Number(i.quantity ?? 0);
+                      const reorder = Number(i.reorder_level ?? 5);
+                      let status = "Available";
+                      let statusBadge = "bg-brand-green-light text-brand-green border-brand-green/30";
+                      if (i.expiration_date && isBeforeTodayPH(i.expiration_date)) {
+                        status = "Expired";
+                        statusBadge = "bg-red-50 text-red-700 border-red-200";
+                      } else if (qty <= 0) {
+                        status = "Out of Stock";
+                        statusBadge = "bg-red-50 text-red-700 border-red-200";
+                      } else if (qty <= reorder) {
+                        status = "Low Stock";
+                        statusBadge = "bg-amber-50 text-amber-700 border-amber-200";
+                      }
+
+                      return (
+                        <TableRow key={i.id}>
+                          <TableCell className="font-mono text-xs font-bold text-primary">
+                            {i.item_code || i.id.slice(0, 8)}
+                          </TableCell>
+                          <TableCell className="font-semibold text-xs">{i.name}</TableCell>
+                          <TableCell className="text-xs capitalize">{i.category || "Supply"}</TableCell>
+                          <TableCell className="font-bold text-xs">{qty} {i.unit || "units"}</TableCell>
+                          <TableCell className="text-xs">{i.expiration_date ? formatDate(i.expiration_date) : "—"}</TableCell>
+                          <TableCell className="text-xs">{i.created_at ? formatDate(i.created_at) : "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-xs ${statusBadge}`}>
+                              {status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {filteredInventory.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No inventory items match filters.
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredInventory.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1209,7 +1642,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTransactions.slice(0, 10).map((t) => (
+                    {paginatedTransactions.map((t) => (
                       <TableRow key={t.id}>
                         <TableCell className="font-mono text-xs font-bold text-primary">
                           {t.transaction_number || `TXN-${t.id.slice(0, 6)}`}
@@ -1240,8 +1673,21 @@ export default function Reports() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {filteredTransactions.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No transaction records match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredTransactions.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1265,7 +1711,7 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredMessages.slice(0, 10).map((m) => (
+                    {paginatedMessages.map((m) => (
                       <TableRow key={m.id}>
                         <TableCell className="text-xs">{formatDate(m.sent_at || m.created_at)}</TableCell>
                         <TableCell className="font-semibold text-xs">{ownerMap.get(m.owner_id)?.name || "—"}</TableCell>
@@ -1276,8 +1722,21 @@ export default function Reports() {
                         <TableCell className="text-xs max-w-[250px] truncate">{m.subject || m.body}</TableCell>
                       </TableRow>
                     ))}
+                    {filteredMessages.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No communication messages match filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredMessages.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}
@@ -1293,23 +1752,43 @@ export default function Reports() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Staff Name</TableHead>
+                      <TableHead>User / Staff Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>Authoritative Role</TableHead>
                       <TableHead>Registered Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStaff.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="font-semibold text-xs">{s.full_name || "Staff Member"}</TableCell>
-                        <TableCell className="text-xs">{s.email || "—"}</TableCell>
-                        <TableCell><Badge variant="outline" className="capitalize text-xs">{s.role || "staff"}</Badge></TableCell>
-                        <TableCell className="text-xs">{formatDate(s.created_at)}</TableCell>
+                    {paginatedStaff.map((s) => {
+                      const roleInfo = getRoleDisplay(s.role);
+                      return (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-semibold text-xs">{s.full_name || "User Account"}</TableCell>
+                          <TableCell className="text-xs">{s.email || "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant={roleInfo.badgeVariant} className={`${roleInfo.className} text-xs`}>
+                              {roleInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">{formatDate(s.created_at)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {filteredStaff.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                          No staff or user accounts match filters.
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalItems={filteredStaff.length}
+                  pageSize={ITEMS_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                />
               </CardContent>
             </Card>
           )}

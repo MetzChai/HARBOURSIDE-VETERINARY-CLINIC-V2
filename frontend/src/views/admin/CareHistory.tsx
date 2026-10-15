@@ -16,7 +16,7 @@ import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar, 
 import Link from "next/link";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH, isBeforeTodayPH } from "@/lib/datetime";
+import { formatNowPH, isBeforeTodayPH, todayPH, toDateOnly } from "@/lib/datetime";
 import { db } from "@/lib/db-client";
 import { VET_OPTIONS } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
@@ -264,7 +264,11 @@ export default function CareHistory() {
     const existingRecord = careRecords.find((r: any) => r.appointment_id === aptId);
     if (existingRecord) {
       if (editingId !== existingRecord.id || autoOpenedAptId !== aptId) {
-        openEditModal(existingRecord);
+        const recDate = existingRecord.date ? toDateOnly(existingRecord.date) : null;
+        const effectiveRecord = recDate && recDate < todayPH()
+          ? { ...existingRecord, date: todayPH() }
+          : existingRecord;
+        openEditModal(effectiveRecord);
         setAutoOpenedAptId(aptId);
       }
       return;
@@ -282,7 +286,7 @@ export default function CareHistory() {
         appointment_id: targetApt.id,
         pet_id: targetApt.pet_id || "",
         vet: targetApt.vet || VET_OPTIONS[0] || "",
-        date: toInputDate(targetApt.date),
+        date: todayPH(),
         record_type: normCare,
         chief_complaint: targetApt.reason || "",
         symptoms: "",
@@ -491,7 +495,7 @@ export default function CareHistory() {
       treatment: form.treatment.trim() || null,
       medication: medSummary,
       medication_qty: medicationsList.length ? medicationsList.reduce((acc, m) => acc + m.quantity, 0) : Number(form.medication_qty) || 1,
-      medications_json: medicationsList.length ? JSON.stringify(medicationsList) : null,
+      medications_json: JSON.stringify(medicationsList),
       vaccine_used: form.vaccine_used.trim() || null,
       next_vax_due: form.next_vax_due || null,
       dewormer_used: form.dewormer_used.trim() || null,
@@ -579,6 +583,7 @@ export default function CareHistory() {
     invalidate("care_records");
     invalidate("vaccinations");
     invalidate("dewormings");
+    invalidate("pets");
     invalidate("inventory_items");
     invalidate("inventory_batches");
     invalidate("inventory_transactions");
@@ -606,6 +611,13 @@ export default function CareHistory() {
 
     toast.success("Care History record deleted.");
     invalidate("care_records");
+    invalidate("vaccinations");
+    invalidate("dewormings");
+    invalidate("inventory_items");
+    invalidate("inventory_batches");
+    invalidate("inventory_transactions");
+    invalidate("lab_transactions");
+    invalidate("lab_transaction_items");
   };
 
   const handlePrint = (record?: any) => {

@@ -265,6 +265,7 @@ export async function querySelect(opts: {
   table: string;
   select?: string;
   filters?: Filter[];
+  dateRange?: { column: string; from?: string; to?: string };
   order?: { column: string; ascending?: boolean } | Array<{ column: string; ascending?: boolean }>;
   single?: boolean;
   maybeSingle?: boolean;
@@ -319,7 +320,17 @@ export async function querySelect(opts: {
     .join(" ");
 
   const selectClause = joinSelect ? `${baseSelect}, ${joinSelect}` : baseSelect;
-  let query = `SELECT ${selectClause} FROM ${tableName} ${tableAlias}`;
+  let fromClause = `${tableName} ${tableAlias}`;
+  if (table === "profiles") {
+    fromClause += ` LEFT JOIN LATERAL (
+      SELECT ur.role::text AS role
+      FROM user_roles ur
+      WHERE ur.user_id = ${tableAlias}.id
+      ORDER BY CASE ur.role WHEN 'admin' THEN 1 WHEN 'staff' THEN 2 WHEN 'owner' THEN 3 ELSE 4 END
+      LIMIT 1
+    ) ur ON true`;
+  }
+  let query = `SELECT ${selectClause}${table === "profiles" ? `, ur.role` : ""} FROM ${fromClause}`;
   if (joinClauses) query += ` ${joinClauses}`;
 
   const where: string[] = [];
@@ -335,6 +346,32 @@ export async function querySelect(opts: {
     where.push(`${col} = $${paramIdx}`);
     params.push(f.value);
     paramIdx++;
+  }
+
+  if (opts.dateRange && opts.dateRange.column) {
+    const rawCol = opts.dateRange.column;
+    const col = rawCol.includes(".") ? rawCol : `${tableAlias}.${quoteIdent(rawCol)}`;
+    const isTimestamp = !rawCol.toLowerCase().endsWith("date") || rawCol.toLowerCase().includes("at");
+
+    if (opts.dateRange.from) {
+      if (isTimestamp) {
+        where.push(`${col} >= ($${paramIdx}::date AT TIME ZONE 'Asia/Manila')`);
+      } else {
+        where.push(`${col} >= $${paramIdx}::date`);
+      }
+      params.push(opts.dateRange.from);
+      paramIdx++;
+    }
+
+    if (opts.dateRange.to) {
+      if (isTimestamp) {
+        where.push(`${col} < (($${paramIdx}::date + interval '1 day') AT TIME ZONE 'Asia/Manila')`);
+      } else {
+        where.push(`${col} <= $${paramIdx}::date`);
+      }
+      params.push(opts.dateRange.to);
+      paramIdx++;
+    }
   }
 
   if (where.length) query += ` WHERE ${where.join(" AND ")}`;
@@ -616,12 +653,36 @@ async function runEnsureInventorySchema(poolOrClient: any) {
       AND i.unit_price > 0
   `);
 
+  // Synchronize care records and inventory transactions for appointments completed today
+  await poolOrClient.query(`
+    UPDATE care_records cr
+    SET date = lt.date,
+        updated_at = now()
+    FROM lab_transactions lt
+    WHERE (cr.id = lt.care_record_id OR (cr.appointment_id IS NOT NULL AND cr.appointment_id = lt.appointment_id))
+      AND cr.date < lt.date
+      AND lt.date = CURRENT_DATE
+  `);
+
+  // Also fix any care record linked to an appointment completed today where the care record was set to the past scheduled date
+  await poolOrClient.query(`
+    UPDATE care_records cr
+    SET date = CURRENT_DATE,
+        updated_at = now()
+    FROM appointments a
+    WHERE cr.appointment_id = a.id
+      AND a.status = 'Completed'
+      AND a.updated_at::date = CURRENT_DATE
+      AND cr.date < CURRENT_DATE
+  `);
+
   // Correct historical care inventory transaction dates to match the care record's actual date
   await poolOrClient.query(`
     UPDATE inventory_transactions it
     SET date = cr.date
     FROM care_records cr
-    WHERE it.transaction_no = ('CARE-' || SUBSTRING(cr.id::text, 1, 8))
+    WHERE (it.transaction_no = ('CARE-' || SUBSTRING(cr.id::text, 1, 8))
+           OR it.notes LIKE ('%Care history record ' || cr.id::text || '%'))
       AND it.type = 'out'
       AND it.date <> cr.date
   `);
@@ -1738,11 +1799,18 @@ export async function queryUpdate(opts: {
       const idFilter = opts.filters.find((f) => f.column === "id");
       appointmentIdForSync = idFilter?.value ? String(idFilter.value) : undefined;
       if (appointmentIdForSync) {
-        const { rows } = await poolOrClient.query(`SELECT status FROM appointments WHERE id = $1`, [appointmentIdForSync]);
+        const { rows } = await poolOrClient.query(`SELECT status, date FROM appointments WHERE id = $1`, [appointmentIdForSync]);
         previousAppointmentStatus = rows[0]?.status as string | undefined;
+        const aptDate = rows[0]?.date ? toDateOnly(rows[0].date) : undefined;
         if (data.status === "Completed") {
           if (previousAppointmentStatus === "Missed") {
             throw new Error("Appointments marked as Missed cannot be completed.");
+          }
+          if (previousAppointmentStatus === "Requested" || previousAppointmentStatus === "Pending") {
+            throw new Error("Requested appointments must be approved before they can be marked as completed.");
+          }
+          if (aptDate && aptDate > todayPH()) {
+            throw new Error(`Appointments cannot be marked as completed before their scheduled date (${aptDate}).`);
           }
           shouldSyncCare = previousAppointmentStatus !== "Completed";
         }
@@ -1788,22 +1856,23 @@ export async function queryUpdate(opts: {
       }
     }
 
-    if (table === "appointments" && appointmentIdForSync && isClinicUser(opts.user.role) && (data.status || data.date || data.time)) {
-      try {
-        const { notifyOwnerOnAppointmentChange } = await import("./message-dispatch.js");
-        await notifyOwnerOnAppointmentChange({
-          appointmentId: appointmentIdForSync,
-          previousStatus: previousAppointmentStatus,
-          nextStatus: data.status ? String(data.status) : previousAppointmentStatus,
-          dateChanged: data.date !== undefined || data.time !== undefined,
-          sentBy: opts.user.fullName || opts.user.email || "Clinic",
-        });
-      } catch (err) {
-        console.error("[messages] Appointment notice failed:", err);
-      }
-    }
-
     if (client) await client.query("COMMIT");
+
+    if (table === "appointments" && appointmentIdForSync && isClinicUser(opts.user.role) && (data.status || data.date || data.time)) {
+      import("./message-dispatch.js")
+        .then(({ notifyOwnerOnAppointmentChange }) =>
+          notifyOwnerOnAppointmentChange({
+            appointmentId: appointmentIdForSync!,
+            previousStatus: previousAppointmentStatus,
+            nextStatus: data.status ? String(data.status) : previousAppointmentStatus,
+            dateChanged: data.date !== undefined || data.time !== undefined,
+            sentBy: opts.user.fullName || opts.user.email || "Clinic",
+          })
+        )
+        .catch((err) => {
+          console.error("[messages] Background appointment notice failed:", err);
+        });
+    }
 
     if (shouldSyncCare && appointmentIdForSync) {
       try {
@@ -1899,10 +1968,34 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
   const careType = rawCareType === "vaccine" ? "vaccination" : rawCareType;
   const reason = apt.reason?.trim() || (careType === "vaccination" ? "Vaccination" : careType === "deworming" ? "Deworming" : "Routine visit");
   const autoNote = "Auto-recorded from completed appointment.";
-  const recordDate = toDateOnly(apt.date);
+  const recordDate = todayPH();
 
-  const existing = await pool.query(`SELECT id FROM care_records WHERE appointment_id = $1`, [appointmentId]);
-  if (existing.rows.length) return { recorded: true };
+  const existing = await pool.query(`SELECT id, date FROM care_records WHERE appointment_id = $1`, [appointmentId]);
+  if (existing.rows.length) {
+    const existingRec = existing.rows[0];
+    const existingDate = toDateOnly(existingRec.date);
+    if (existingDate && existingDate < todayPH()) {
+      await pool.query(`UPDATE care_records SET date = $1, updated_at = now() WHERE id = $2`, [todayPH(), existingRec.id]);
+      await applyCareInventoryAdjustment(
+        pool,
+        "care_records",
+        {
+          pet_id: petId,
+          date: todayPH(),
+          record_type: careType,
+          vaccine_used: careType === "vaccination" ? reason : null,
+          dewormer_used: careType === "deworming" ? reason : null,
+          treatment: careType === "treatment" ? reason : null,
+          medication: reason,
+          notes: autoNote,
+        },
+        String(existingRec.id),
+        petId
+      );
+      await syncCareLabTransaction(pool, String(existingRec.id), petId, todayPH());
+    }
+    return { recorded: true };
+  }
 
   try {
     const insertResult = await pool.query(
@@ -1920,10 +2013,10 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
         apt.vet,
         reason,
         null,
-        null,
-        null,
-        null,
-        null,
+        careType === "treatment" ? reason : null,
+        careType === "vaccination" ? reason : null,
+        careType === "deworming" ? reason : null,
+        "Completed",
         apt.notes || autoNote,
       ]
     );
@@ -1978,10 +2071,10 @@ async function syncCareRecordFromCompletedAppointment(appointmentId: string): Pr
         apt.vet,
         reason,
         null,
-        null,
-        null,
-        null,
-        null,
+        careType === "treatment" ? reason : null,
+        careType === "vaccination" ? reason : null,
+        careType === "deworming" ? reason : null,
+        "Completed",
         apt.notes || `${autoNote} ${marker}`,
       ]
     );

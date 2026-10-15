@@ -14,6 +14,7 @@ router.post("/", requireAuth, async (req: AuthedRequest, res) => {
         table,
         select: req.body.select,
         filters: req.body.filters,
+        dateRange: req.body.dateRange,
         order: req.body.order,
         single: req.body.single,
         maybeSingle: req.body.maybeSingle,

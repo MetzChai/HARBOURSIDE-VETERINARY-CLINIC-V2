@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  XCircle,
   UserPlus,
   PlusCircle,
   FileText,
@@ -49,7 +50,7 @@ import {
 } from "recharts";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isWithinDaysFromTodayPH, toDateOnly } from "@/lib/datetime";
+import { todayPH, phMonthBuckets, daysFromTodayPH, isBeforeTodayPH, isOnOrBeforeTodayPH, isWithinDaysFromTodayPH, toDateOnly } from "@/lib/datetime";
 import { getStatusBadgeClass, CARE_TYPE_LABELS, normalizeCareType, formatTimeSlot } from "@/lib/appointment-slots";
 import { useAdminNotifications } from "@/hooks/useNotifications";
 import { type NotificationItem } from "@/lib/notifications";
@@ -290,6 +291,16 @@ export default function AdminDashboard() {
     if (!targetApt) return;
 
     if (status === "Completed") {
+      if (targetApt.status === "Pending" || targetApt.status === "Requested") {
+        toast.error("Requested appointments must be approved before they can be marked as completed.");
+        return;
+      }
+
+      if (!isOnOrBeforeTodayPH(targetApt.date)) {
+        toast.error(`Cannot complete appointment: The scheduled date (${formatDate(targetApt.date)}) has not arrived yet.`);
+        return;
+      }
+
       const petId = targetApt.pet_id;
       const pet = pets.find((p) => p.id === petId);
       const ownerId = targetApt.owner_id || pet?.owner_id;
@@ -309,20 +320,24 @@ export default function AdminDashboard() {
     }
 
     const nextStatus = status === "Approved" ? "Scheduled" : status;
-    const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    try {
+      const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
 
-    if (status === "Completed") {
-      toast.success("Appointment marked as Completed.");
-      invalidate("appointments");
-      invalidate("care_records");
-      router.push(`/admin/care-history?aptId=${id}`);
-    } else {
-      toast.success(`Appointment status updated to ${nextStatus}.`);
-      invalidate("appointments");
+      if (status === "Completed") {
+        toast.success("Appointment marked as Completed.");
+        invalidate("appointments");
+        invalidate("care_records");
+        router.push(`/admin/care-history?aptId=${id}`);
+      } else {
+        toast.success(`Appointment status updated to ${nextStatus}.`);
+        invalidate("appointments");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update appointment status");
     }
   };
 
@@ -604,25 +619,39 @@ export default function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-right pr-4">
                               <div className="flex items-center justify-end gap-1">
-                                {(a.status === "Pending" || a.status === "Requested") && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
-                                  >
-                                    Approve
-                                  </Button>
-                                )}
-                                {a.status !== "Completed" && a.status !== "Cancelled" && a.status !== "Missed" && (
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => updateAppointmentStatus(a.id, "Completed")}
-                                  >
-                                    Complete
-                                  </Button>
+                                {(a.status === "Pending" || a.status === "Requested") ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs bg-brand-navy-light text-brand-navy hover:bg-brand-navy/10 border-brand-navy/20 font-medium"
+                                      onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
+                                      title="Approve Appointment"
+                                    >
+                                      <CheckCircle2 className="h-3 w-3 mr-1 text-brand-navy" /> Approve
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-medium"
+                                      onClick={() => updateAppointmentStatus(a.id, "Cancelled")}
+                                      title="Reject Appointment"
+                                    >
+                                      <XCircle className="h-3 w-3 mr-1 text-red-600" /> Reject
+                                    </Button>
+                                  </>
+                                ) : (
+                                  (a.status === "Scheduled" || a.status === "Approved") && isOnOrBeforeTodayPH(a.date) && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-7 text-xs bg-brand-green-light text-brand-green hover:bg-brand-green/10 border-brand-green/20 font-medium"
+                                      onClick={() => updateAppointmentStatus(a.id, "Completed")}
+                                      title="Mark Appointment as Completed"
+                                    >
+                                      <CheckCircle2 className="h-3 w-3 mr-1 text-brand-green" /> Complete
+                                    </Button>
+                                  )
                                 )}
                               </div>
                             </TableCell>

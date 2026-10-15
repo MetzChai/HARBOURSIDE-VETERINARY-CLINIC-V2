@@ -175,10 +175,10 @@ export function buildInventoryDeductionPlan(
     }
 
     if (recordType === "treatment" || recordType === "checkup") {
-      const labelSources = [row.medication, row.treatment, row.diagnosis, row.notes]
-        .filter(Boolean)
-        .map((value) => String(value))
-        .join(" ");
+      const labelSources = String(row.medication ?? "").trim();
+      if (!labelSources) {
+        return { plan: [] };
+      }
       const matches = findMatches(items, ["medication", "medicine", "supply"], labelSources);
       for (const item of matches) {
         if (!plan.some((candidate) => candidate.itemId === item.id)) {

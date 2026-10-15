@@ -53,8 +53,8 @@ class InsertBuilder {
         signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
       });
     } catch (err) {
-      if (isAbortError(err)) throw new Error("Request timed out");
-      throw err;
+      if (isAbortError(err)) return { data: null, error: { message: "Request timed out. Please try again." } };
+      return { data: null, error: { message: err instanceof Error ? err.message : "Network error" } };
     }
     const json = await parseJson(res);
     if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
@@ -96,8 +96,8 @@ class UpdateBuilder {
         signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
       });
     } catch (err) {
-      if (isAbortError(err)) throw new Error("Request timed out");
-      throw err;
+      if (isAbortError(err)) return { data: null, error: { message: "Request timed out. Please try again." } };
+      return { data: null, error: { message: err instanceof Error ? err.message : "Network error" } };
     }
     const json = await parseJson(res);
     if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
@@ -116,6 +116,7 @@ class UpdateBuilder {
 class SelectBuilder {
   private filters: Filter[] = [];
   private _orders: Array<{ column: string; ascending: boolean }> = [];
+  private _dateRange?: { column: string; from?: string; to?: string };
   private _single = false;
   private _maybeSingle = false;
 
@@ -128,6 +129,13 @@ class SelectBuilder {
 
   eq(column: string, value: unknown) {
     this.filters.push({ column, value });
+    return this;
+  }
+
+  dateRange(column: string, from?: string, to?: string) {
+    if (from || to) {
+      this._dateRange = { column, from: from || undefined, to: to || undefined };
+    }
     return this;
   }
 
@@ -170,6 +178,7 @@ class SelectBuilder {
           table: this.table,
           select: this._select,
           filters: this.filters,
+          dateRange: this._dateRange,
           order: this._orders.length === 1 ? this._orders[0] : this._orders.length > 1 ? this._orders : undefined,
           single: this._single,
           maybeSingle: this._maybeSingle,
@@ -177,8 +186,8 @@ class SelectBuilder {
         signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
       });
     } catch (err) {
-      if (isAbortError(err)) throw new Error("Request timed out");
-      throw err;
+      if (isAbortError(err)) return { data: null, error: { message: "Request timed out. Please try again." } };
+      return { data: null, error: { message: err instanceof Error ? err.message : "Network error" } };
     }
     const json = await parseJson(res);
     if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };
@@ -219,8 +228,8 @@ class DeleteBuilder {
         signal: AbortSignal.timeout(DATA_TIMEOUT_MS),
       });
     } catch (err) {
-      if (isAbortError(err)) throw new Error("Request timed out");
-      throw err;
+      if (isAbortError(err)) return { data: null, error: { message: "Request timed out. Please try again." } };
+      return { data: null, error: { message: err instanceof Error ? err.message : "Network error" } };
     }
     const json = await parseJson(res);
     if (!res.ok) return { data: null, error: { message: json?.error ?? "Request failed" } };

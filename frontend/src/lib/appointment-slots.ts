@@ -13,6 +13,7 @@ export const APPOINTMENT_SLOTS = [
   "15:30",
   "16:00",
   "16:30",
+  "17:00",
 ] as const;
 
 export function formatTimeSlot(timeStr?: string | null): string {

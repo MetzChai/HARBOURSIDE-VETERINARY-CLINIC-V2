@@ -447,12 +447,34 @@ export default function UserPets() {
                     <p className="text-sm text-muted-foreground text-center py-6">No treatment records</p>
                   )}
                   {treatmentsByPet(viewPet.id).map((t: any) => (
-                    <div key={t.id} className="text-sm p-3 rounded-lg border bg-card space-y-1">
-                      <div className="flex justify-between">
-                        <span className="font-bold text-[#1B3A5C]">{t.treatment || "Treatment Procedure"}</span>
+                    <div key={t.id} className="text-sm p-3 rounded-lg border bg-card space-y-1.5">
+                      <div className="flex justify-between items-center border-b pb-1">
+                        <span className="font-bold text-[#1B3A5C]">{t.treatment || t.diagnosis || t.chief_complaint || "Treatment Procedure"}</span>
                         <span className="text-xs text-muted-foreground">{t.date ? formatDate(t.date) : "—"}</span>
                       </div>
-                      <p className="text-xs text-slate-700">{t.notes || "No notes provided"}</p>
+                      {t.vet && (
+                        <p className="text-xs text-muted-foreground">
+                          Attending Vet: <span className="font-semibold text-[#1B3A5C]">{t.vet}</span>
+                        </p>
+                      )}
+                      {t.chief_complaint && (
+                        <p className="text-xs text-slate-700"><strong>Reason / Complaint:</strong> {t.chief_complaint}</p>
+                      )}
+                      {t.diagnosis && (
+                        <p className="text-xs text-slate-700"><strong>Diagnosis:</strong> {t.diagnosis}</p>
+                      )}
+                      {t.treatment && t.treatment !== t.diagnosis && (
+                        <p className="text-xs text-slate-700"><strong>Procedure Performed:</strong> {t.treatment}</p>
+                      )}
+                      {t.medication && (
+                        <p className="text-xs text-slate-700"><strong>Medications:</strong> {t.medication}</p>
+                      )}
+                      {t.outcome && (
+                        <p className="text-xs text-emerald-700"><strong>Outcome:</strong> {t.outcome}</p>
+                      )}
+                      {t.notes && (
+                        <p className="text-xs text-slate-600 bg-muted/40 p-2 rounded">{t.notes}</p>
+                      )}
                     </div>
                   ))}
                 </TabsContent>

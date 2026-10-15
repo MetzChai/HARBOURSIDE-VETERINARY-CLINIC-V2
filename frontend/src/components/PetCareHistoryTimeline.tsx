@@ -50,6 +50,8 @@ export default function PetCareHistoryTimeline({ petId }: { petId: string }) {
   const { data: careRecords = [], isLoading } = useRows<any>("care_records", {
     orderBy: "date",
     ascending: false,
+    staleTime: 5000,
+    refetchOnMount: "always",
   });
 
   const petRecords = careRecords.filter((r) => r.pet_id === petId);

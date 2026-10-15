@@ -34,3 +34,39 @@ test("deducts matching dewormer inventory", () => {
   assert.equal(result.error, undefined);
   assert.deepEqual(result.plan, [{ itemId: "3", quantity: 1, reason: "Care History — Deworming" }]);
 });
+
+test("does not fail when treatment record has narrative notes but no medications selected", () => {
+  const result = buildInventoryDeductionPlan(
+    "care_records",
+    {
+      record_type: "treatment",
+      treatment: "Wound cleaned with gauze and povidone iodine, bandage applied",
+      medications_json: "[]",
+    },
+    [
+      { id: "10", name: "Gauze Pad", category: "supply", quantity: 0 },
+      { id: "11", name: "Povidone Iodine", category: "supply", quantity: 0 },
+    ]
+  );
+
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.plan, []);
+});
+
+test("does not fail when treatment record has narrative notes and medication is null/empty", () => {
+  const result = buildInventoryDeductionPlan(
+    "care_records",
+    {
+      record_type: "treatment",
+      treatment: "Gauze Pad used for wound dressing",
+      medication: null,
+    },
+    [
+      { id: "10", name: "Gauze Pad", category: "supply", quantity: 0 },
+    ]
+  );
+
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.plan, []);
+});
+

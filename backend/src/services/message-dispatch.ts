@@ -184,9 +184,14 @@ export async function notifyOwnerOnAppointmentChange(opts: {
         : `Appointment Updated for ${petName}`;
     body = `Dear ${ownerName},\n\nYour appointment for ${petName} is confirmed for ${when}${apt.reason ? ` (${apt.reason})` : ""}.\n\nPlease arrive 10 minutes early.\n\nHarbourside Veterinary Clinic`;
   } else if (next === "Cancelled") {
-    messageType = "Appointment Cancelled";
-    subject = `Appointment Cancellation for ${petName}`;
-    body = `Dear ${ownerName},\n\nYour appointment for ${petName} on ${when} has been cancelled.\n\nPlease contact the clinic or book a new slot in the portal if you still need a visit.\n\nHarbourside Veterinary Clinic`;
+    const wasRequested = opts.previousStatus === "Requested" || opts.previousStatus === "Pending";
+    messageType = wasRequested ? "Appointment Request Declined" : "Appointment Cancelled";
+    subject = wasRequested
+      ? `Appointment Request Update for ${petName}`
+      : `Appointment Cancellation for ${petName}`;
+    body = wasRequested
+      ? `Dear ${ownerName},\n\nWe are unable to accommodate your appointment request for ${petName} on ${when}.\n\nPlease contact the clinic or book another available slot in the Pet Owner Portal.\n\nHarbourside Veterinary Clinic`
+      : `Dear ${ownerName},\n\nYour appointment for ${petName} on ${when} has been cancelled.\n\nPlease contact the clinic or book a new slot in the portal if you still need a visit.\n\nHarbourside Veterinary Clinic`;
   } else if (next === "Completed") {
     messageType = "Custom Message";
     subject = `Visit completed for ${petName}`;

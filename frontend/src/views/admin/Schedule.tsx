@@ -32,7 +32,7 @@ import Link from "next/link";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH, todayPH, isBeforeTodayPH, nowTimePH, formatDateTimePH, toDateOnly } from "@/lib/datetime";
+import { formatNowPH, todayPH, isBeforeTodayPH, isOnOrBeforeTodayPH, nowTimePH, formatDateTimePH, toDateOnly } from "@/lib/datetime";
 import {
   APPOINTMENT_SLOTS,
   formatTimeSlot,
@@ -324,6 +324,16 @@ export default function Schedule() {
     if (!targetApt) return;
 
     if (status === "Completed") {
+      if (targetApt.status === "Pending" || targetApt.status === "Requested") {
+        toast.error("Requested appointments must be approved before they can be marked as completed.");
+        return;
+      }
+
+      if (!isOnOrBeforeTodayPH(targetApt.date)) {
+        toast.error(`Cannot complete appointment: The scheduled date (${formatDate(targetApt.date)}) has not arrived yet.`);
+        return;
+      }
+
       const petId = targetApt.pet_id;
       const ownerId = targetApt.owner_id || (petId ? petMap.get(petId)?.owner_id : null);
       const apptType = targetApt.care_type || targetApt.appointment_type || targetApt.type;
@@ -342,21 +352,25 @@ export default function Schedule() {
     }
 
     const nextStatus = status === "Approved" ? "Scheduled" : status;
-    const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    try {
+      const { error } = await db.from("appointments").update({ status: nextStatus } as any).eq("id", id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
 
-    if (status === "Completed") {
-      toast.success("Appointment marked as Completed.");
-      invalidate("appointments");
-      invalidate("care_records");
-      invalidate("pets");
-      router.push(`/admin/care-history?aptId=${id}`);
-    } else {
-      toast.success(`Appointment status updated to ${nextStatus}.`);
-      invalidate("appointments");
+      if (status === "Completed") {
+        toast.success("Appointment marked as Completed.");
+        invalidate("appointments");
+        invalidate("care_records");
+        invalidate("pets");
+        router.push(`/admin/care-history?aptId=${id}`);
+      } else {
+        toast.success(`Appointment status updated to ${nextStatus}.`);
+        invalidate("appointments");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update appointment status");
     }
   };
 
@@ -635,7 +649,12 @@ export default function Schedule() {
                               </Badge>
                             </SelectTrigger>
                             <SelectContent>
-                              {APPOINTMENT_STATUSES.filter((s) => a.status !== "Missed" || s !== "Completed").map((s) => (
+                              {APPOINTMENT_STATUSES.filter((s) => {
+                                if (a.status === "Missed" && s === "Completed") return false;
+                                if ((a.status === "Pending" || a.status === "Requested") && s === "Completed") return false;
+                                if (!isOnOrBeforeTodayPH(a.date) && s === "Completed") return false;
+                                return true;
+                              }).map((s) => (
                                 <SelectItem key={s} value={s}>
                                   {s}
                                 </SelectItem>
@@ -678,26 +697,39 @@ export default function Schedule() {
                               </Link>
                             )}
 
-                            {(a.status === "Pending" || a.status === "Requested") && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-brand-navy-light text-brand-navy hover:bg-brand-navy/10"
-                                onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
-                              >
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
-                              </Button>
-                            )}
-
-                            {a.status !== "Completed" && a.status !== "Cancelled" && a.status !== "Missed" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-brand-green-light text-brand-green hover:bg-brand-green/10"
-                                onClick={() => updateAppointmentStatus(a.id, "Completed")}
-                              >
-                                Complete
-                              </Button>
+                            {(a.status === "Pending" || a.status === "Requested") ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-brand-navy-light text-brand-navy hover:bg-brand-navy/10 border-brand-navy/20 font-medium"
+                                  onClick={() => updateAppointmentStatus(a.id, "Scheduled")}
+                                  title="Approve Appointment"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1 text-brand-navy" /> Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-medium"
+                                  onClick={() => updateAppointmentStatus(a.id, "Cancelled")}
+                                  title="Reject Appointment"
+                                >
+                                  <XCircle className="h-3 w-3 mr-1 text-red-600" /> Reject
+                                </Button>
+                              </>
+                            ) : (
+                              (a.status === "Scheduled" || a.status === "Approved") && isOnOrBeforeTodayPH(a.date) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-brand-green-light text-brand-green hover:bg-brand-green/10 border-brand-green/20 font-medium"
+                                  onClick={() => updateAppointmentStatus(a.id, "Completed")}
+                                  title="Mark Appointment as Completed"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1 text-brand-green" /> Complete
+                                </Button>
+                              )
                             )}
                           </div>
                         </TableCell>
@@ -856,7 +888,12 @@ export default function Schedule() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {APPOINTMENT_STATUSES.filter((s) => form.status !== "Missed" || s !== "Completed").map((s) => (
+                    {APPOINTMENT_STATUSES.filter((s) => {
+                      if (form.status === "Missed" && s === "Completed") return false;
+                      if ((form.status === "Pending" || form.status === "Requested") && s === "Completed") return false;
+                      if (!isOnOrBeforeTodayPH(form.date) && s === "Completed") return false;
+                      return true;
+                    }).map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>
@@ -958,21 +995,57 @@ export default function Schedule() {
                 )}
               </div>
 
-              <DialogFooter className="p-4 border-t bg-muted/30">
-                <Button variant="outline" onClick={() => setShowViewModal(false)}>
-                  Close
-                </Button>
-                {selectedAppointment.status !== "Completed" && selectedAppointment.status !== "Missed" && (
-                  <Button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      updateAppointmentStatus(selectedAppointment.id, "Completed");
-                    }}
-                    className="bg-brand-green hover:bg-brand-green/90"
-                  >
-                    Mark as Completed
+              <DialogFooter className="p-4 border-t bg-muted/30 flex justify-between sm:justify-between items-center">
+                <div>
+                  {(selectedAppointment.status === "Pending" || selectedAppointment.status === "Requested") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowViewModal(false);
+                        updateAppointmentStatus(selectedAppointment.id, "Cancelled");
+                      }}
+                      className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-medium"
+                    >
+                      <XCircle className="h-4 w-4 mr-1.5 text-red-600" /> Reject Request
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowViewModal(false)}>
+                    Close
                   </Button>
-                )}
+                  {(selectedAppointment.status === "Pending" || selectedAppointment.status === "Requested") && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setShowViewModal(false);
+                        updateAppointmentStatus(selectedAppointment.id, "Scheduled");
+                      }}
+                      className="bg-brand-navy hover:bg-brand-navy/90 text-white font-medium"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1.5" /> Approve Request
+                    </Button>
+                  )}
+                  {(selectedAppointment.status === "Scheduled" || selectedAppointment.status === "Approved") && (
+                    isOnOrBeforeTodayPH(selectedAppointment.date) ? (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setShowViewModal(false);
+                          updateAppointmentStatus(selectedAppointment.id, "Completed");
+                        }}
+                        className="bg-brand-green hover:bg-brand-green/90 text-white font-medium"
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark as Completed
+                      </Button>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-brand-navy bg-brand-navy-light/40 border-brand-navy/20 py-1 px-2.5">
+                        <Clock className="h-3 w-3 mr-1 text-brand-navy" /> Scheduled for {formatDate(selectedAppointment.date)}
+                      </Badge>
+                    )
+                  )}
+                </div>
               </DialogFooter>
             </>
           )}

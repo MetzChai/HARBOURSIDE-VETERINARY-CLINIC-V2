@@ -395,7 +395,15 @@ export default function Inventory() {
   const canManageItems = isAdmin(role);
   const { data: items = [], isLoading } = useRows<any>("inventory_items", { orderBy: "name" });
   const { data: dbBatches = [] } = useRows<any>("inventory_batches");
-  const { data: txns = [] } = useRows<any>("inventory_transactions", { orderBy: "date", ascending: false });
+  const { data: txns = [] } = useRows<any>("inventory_transactions", {
+    orderBy: "date",
+    ascending: false,
+    orders: [
+      { column: "date", ascending: false },
+      { column: "created_at", ascending: false },
+      { column: "id", ascending: false },
+    ],
+  });
   const invalidate = useInvalidate();
 
   // Dialog States
@@ -1012,6 +1020,7 @@ export default function Inventory() {
     toast.success(`Stock out of ${qty} ${targetItem.unit || "unit"} recorded from batch ${selectedBatch.batch_no}.`);
     setShowStockOutModal(false);
     invalidate("inventory_items");
+    invalidate("inventory_batches");
     invalidate("inventory_transactions");
   };
 

@@ -371,7 +371,7 @@ export default function ManagePets() {
       treatment: recordForm.treatment.trim() || null,
       medication: medSummary,
       medication_qty: medicationsList.length ? medicationsList.reduce((acc, m) => acc + m.quantity, 0) : 1,
-      medications_json: medicationsList.length ? JSON.stringify(medicationsList) : null,
+      medications_json: JSON.stringify(medicationsList),
       vaccine_used: recordForm.record_type === "vaccination" ? recordForm.vaccine_used.trim() || null : null,
       next_vax_due: recordForm.record_type === "vaccination" ? recordForm.next_vax_due || null : null,
       dewormer_used: recordForm.record_type === "deworming" ? recordForm.dewormer_used.trim() || null : null,
@@ -450,6 +450,7 @@ export default function ManagePets() {
     invalidate("care_records");
     invalidate("vaccinations");
     invalidate("dewormings");
+    invalidate("pets");
     invalidate("inventory_items");
     invalidate("inventory_batches");
     invalidate("inventory_transactions");
@@ -647,6 +648,7 @@ export default function ManagePets() {
     switch (s) {
       case "under_treatment":
       case "under treatment":
+      case "treatment":
         return <Badge className="bg-amber-500 text-white">Under Treatment</Badge>;
       case "recovered":
         return <Badge className="bg-brand-teal text-white">Recovered</Badge>;
@@ -1443,6 +1445,9 @@ export default function ManagePets() {
                 <TabsContent value="timeline" className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b">
                     <span className="text-xs font-semibold text-muted-foreground">Care History Medical Timeline</span>
+                    <Button size="sm" className="h-7 text-xs bg-[#1FA8A8] hover:bg-[#198a8a] text-white" onClick={() => openAddRecordModal("checkup")}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Medical Record
+                    </Button>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto pr-1">
                     <PetCareHistoryTimeline petId={viewPet.id} />
@@ -1500,6 +1505,9 @@ export default function ManagePets() {
                 <TabsContent value="vaccinations" className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b">
                     <span className="text-xs font-semibold text-muted-foreground">Vaccination Records ({petVaccinations(viewPet.id).length})</span>
+                    <Button size="sm" className="h-7 text-xs bg-[#1FA8A8] hover:bg-[#198a8a] text-white" onClick={() => openAddRecordModal("vaccination")}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Vaccination
+                    </Button>
                   </div>
                   <Table>
                     <TableHeader>
@@ -1542,6 +1550,9 @@ export default function ManagePets() {
                 <TabsContent value="treatments" className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b">
                     <span className="text-xs font-semibold text-muted-foreground">Treatment Records ({petTreatments(viewPet.id).length})</span>
+                    <Button size="sm" className="h-7 text-xs bg-[#1FA8A8] hover:bg-[#198a8a] text-white" onClick={() => openAddRecordModal("treatment")}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Treatment
+                    </Button>
                   </div>
                   <Table>
                     <TableHeader>
@@ -1586,6 +1597,9 @@ export default function ManagePets() {
                 <TabsContent value="dewormings" className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b">
                     <span className="text-xs font-semibold text-muted-foreground">Deworming Records ({petDewormings(viewPet.id).length})</span>
+                    <Button size="sm" className="h-7 text-xs bg-[#1FA8A8] hover:bg-[#198a8a] text-white" onClick={() => openAddRecordModal("deworming")}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Deworming
+                    </Button>
                   </div>
                   <Table>
                     <TableHeader>
@@ -1775,14 +1789,24 @@ export default function ManagePets() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Outcome / Status</Label>
+                <Label className="text-xs">Clinical Findings</Label>
                 <Input
                   className="h-9 text-xs"
-                  placeholder="e.g. Completed, Recovered, Follow-up in 1 wk"
-                  value={recordForm.outcome}
-                  onChange={(e) => setRecordForm({ ...recordForm, outcome: e.target.value })}
+                  placeholder="e.g. Clear lungs, mild inflammation"
+                  value={recordForm.findings}
+                  onChange={(e) => setRecordForm({ ...recordForm, findings: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Outcome / Status</Label>
+              <Input
+                className="h-9 text-xs"
+                placeholder="e.g. Completed, Recovered, Follow-up in 1 wk"
+                value={recordForm.outcome}
+                onChange={(e) => setRecordForm({ ...recordForm, outcome: e.target.value })}
+              />
             </div>
 
             <div className="space-y-1">
