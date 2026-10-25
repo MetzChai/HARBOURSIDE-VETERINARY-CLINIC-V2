@@ -50,7 +50,11 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const { data, error: signInError } = await authClient.signInWithPassword({ email, password });
+    const { data, error: signInError } = await authClient.signInWithPassword({
+      email,
+      password,
+      rememberMe,
+    });
     
     if (signInError || !data?.user) {
       if (signInError?.code === "ACCOUNT_LOCKED") {

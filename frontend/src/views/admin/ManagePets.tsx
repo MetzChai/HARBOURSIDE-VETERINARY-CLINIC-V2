@@ -2,7 +2,7 @@
 
 import { printDocument } from "@/lib/print";
 import { getImageUrl } from "@/lib/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,8 +44,9 @@ import { toast } from "sonner";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatAge, formatDate } from "@/lib/age";
-import { formatNowPH, todayPH, isBeforeTodayPH } from "@/lib/datetime";
-import { VET_OPTIONS } from "@/lib/appointment-slots";
+import { formatNowPH, todayPH, isBeforeTodayPH, validateBirthDate } from "@/lib/datetime";
+import { VET_OPTIONS, CLINIC_VETERINARIAN } from "@/lib/appointment-slots";
+import { TablePagination } from "@/components/TablePagination";
 import { useAuth } from "@/hooks/useAuth";
 import { processPrescribedMedications } from "@/lib/careHistoryStock";
 import { PageHeader } from "@/components/PageHeader";
@@ -80,7 +81,6 @@ type PetRow = {
   owners?: { name: string; contact?: string; email?: string } | null;
 };
 
-const ITEMS_PER_PAGE = 8;
 const SPECIES_OPTIONS = ["Dog", "Cat", "Bird", "Rabbit", "Reptile", "Other"];
 const STATUS_OPTIONS = ["Healthy", "Treatment", "Recovered", "Deceased"];
 const CAUSE_OF_DEATH_OPTIONS = [
@@ -139,6 +139,7 @@ export default function ManagePets() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterOwnerId, setFilterOwnerId] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals
   const [viewPet, setViewPet] = useState<PetRow | null>(null);
@@ -156,7 +157,7 @@ export default function ManagePets() {
   const emptyRecordForm = {
     record_type: "checkup" as "checkup" | "vaccination" | "treatment" | "deworming",
     date: todayPH(),
-    vet: VET_OPTIONS[0] || "Alfredo B. Badiola, Jr., DVM",
+    vet: CLINIC_VETERINARIAN,
     chief_complaint: "",
     symptoms: "",
     diagnosis: "",
@@ -267,7 +268,7 @@ export default function ManagePets() {
       ...emptyRecordForm,
       record_type: type,
       date: todayPH(),
-      vet: VET_OPTIONS[0] || "Alfredo B. Badiola, Jr., DVM",
+      vet: CLINIC_VETERINARIAN,
     });
     setMedicationsList([]);
     setShowRecordModal(true);
@@ -280,7 +281,7 @@ export default function ManagePets() {
     setRecordForm({
       record_type: normType,
       date: record.date ? String(record.date).slice(0, 10) : record.date_given ? String(record.date_given).slice(0, 10) : todayPH(),
-      vet: record.vet || VET_OPTIONS[0] || "",
+      vet: record.vet || CLINIC_VETERINARIAN,
       chief_complaint: record.chief_complaint || "",
       symptoms: record.symptoms || "",
       diagnosis: record.diagnosis || "",
@@ -459,9 +460,27 @@ export default function ManagePets() {
   };
 
   const handleSavePet = async () => {
-    if (!form.name.trim() || !form.owner_id) {
-      toast.error("Pet name and owner are required.");
+    if (!form.name.trim()) {
+      toast.error("Pet name is required.");
       return;
+    }
+
+    if (!form.owner_id) {
+      toast.error("Please select a pet owner.");
+      return;
+    }
+
+    if (!form.species?.trim()) {
+      toast.error("Species is required.");
+      return;
+    }
+
+    if (form.dob) {
+      const birthVal = validateBirthDate(form.dob);
+      if (!birthVal.valid) {
+        toast.error(birthVal.error || "Please enter a valid birth date.");
+        return;
+      }
     }
 
     const isDeceased = form.status === "Deceased";
@@ -473,6 +492,10 @@ export default function ManagePets() {
       }
       if (form.deceased_date > todayPH()) {
         toast.error("Date of death cannot be in the future.");
+        return;
+      }
+      if (form.dob && form.deceased_date < form.dob) {
+        toast.error("Date of death cannot be earlier than pet's birth date.");
         return;
       }
       if (!form.cause_of_death) {
@@ -573,12 +596,16 @@ export default function ManagePets() {
     });
   }, [pets, search, filterSpecies, filterStatus, filterOwnerId, ownerMap]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterSpecies, filterStatus, filterOwnerId]);
+
   // Pagination
-  const totalPages = Math.ceil(filteredPets.length / ITEMS_PER_PAGE) || 1;
+  const totalPages = Math.ceil(filteredPets.length / pageSize) || 1;
   const paginatedPets = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredPets.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredPets, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredPets.slice(start, start + pageSize);
+  }, [filteredPets, currentPage, pageSize]);
 
   const petAppointments = (petId: string) => appointments.filter((a) => a.pet_id === petId);
 
@@ -985,36 +1012,14 @@ export default function ManagePets() {
               </Table>
 
               {/* Pagination Controls */}
-              <div className="p-4 border-t flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Showing {filteredPets.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to{" "}
-                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredPets.length)} of {filteredPets.length} pets
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                  </Button>
-                  <span>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                  >
-                    Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                  </Button>
-                </div>
-              </div>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredPets.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="pets"
+              />
             </>
           )}
         </CardContent>
@@ -1114,6 +1119,7 @@ export default function ManagePets() {
                 <Label className="text-xs">Birth Date</Label>
                 <Input
                   type="date"
+                  max={todayPH()}
                   value={form.dob}
                   onChange={(e) => setForm({ ...form, dob: e.target.value })}
                 />
@@ -1691,22 +1697,13 @@ export default function ManagePets() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Attending Vet / Staff *</Label>
-                <Select
-                  value={recordForm.vet}
-                  onValueChange={(v) => setRecordForm({ ...recordForm, vet: v })}
-                >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Select vet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VET_OPTIONS.map((vet) => (
-                      <SelectItem key={vet} value={vet}>
-                        {vet}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Attending Vet / Staff</Label>
+                <Input
+                  className="h-9 text-xs bg-muted font-medium text-foreground cursor-not-allowed"
+                  value={recordForm.vet || CLINIC_VETERINARIAN}
+                  disabled
+                  readOnly
+                />
               </div>
             </div>
 

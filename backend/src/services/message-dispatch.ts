@@ -55,6 +55,11 @@ export function normalizeMessagePayload(row: Record<string, unknown>): Record<st
     sent_by: row.sent_by ? String(row.sent_by) : null,
     scheduled_at: scheduledAt,
     sent_at: isFuture ? null : row.sent_at || new Date().toISOString(),
+    in_reply_to_id: isUuid(row.in_reply_to_id)
+      ? row.in_reply_to_id
+      : isUuid(row.referenced_message_id)
+        ? row.referenced_message_id
+        : null,
   };
 }
 
@@ -68,6 +73,7 @@ export async function ensureMessagesSchema() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sent_by text`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS scheduled_at timestamptz`);
   await pool.query(`ALTER TABLE messages ALTER COLUMN sent_at DROP NOT NULL`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS in_reply_to_id uuid REFERENCES messages(id) ON DELETE SET NULL`);
   messagesSchemaReady = true;
 }
 

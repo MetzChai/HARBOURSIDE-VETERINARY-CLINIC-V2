@@ -121,21 +121,32 @@ export default function ManageStaff() {
     }
   };
 
-  const handleToggleStatus = async (account: UserRecord) => {
+  const [statusTarget, setStatusTarget] = useState<UserRecord | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  const handleToggleStatus = (account: UserRecord) => {
     if (account.id === user?.id) {
       toast.error("Administrators cannot deactivate their own account.");
       return;
     }
+    setStatusTarget(account);
+  };
 
-    const newStatus = account.accountStatus === "Active" ? "Deactivated" : "Active";
-    const actionLabel = newStatus === "Deactivated" ? "deactivate" : "reactivate";
+  const executeToggleStatus = async () => {
+    if (!statusTarget) return;
 
-    if (!confirm(`Are you sure you want to ${actionLabel} account for ${account.fullName}?`)) {
+    if (statusTarget.id === user?.id) {
+      toast.error("Administrators cannot deactivate their own account.");
+      setStatusTarget(null);
       return;
     }
 
+    const newStatus = statusTarget.accountStatus === "Active" ? "Deactivated" : "Active";
+    const actionLabel = newStatus === "Deactivated" ? "deactivate" : "reactivate";
+
+    setStatusLoading(true);
     try {
-      const res = await fetch(`/api/staff/users/${account.id}/status`, {
+      const res = await fetch(`/api/staff/users/${statusTarget.id}/status`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -144,12 +155,16 @@ export default function ManageStaff() {
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || `Failed to ${actionLabel} account.`);
+        setStatusLoading(false);
         return;
       }
-      toast.success(`Account ${account.fullName} is now ${newStatus}.`);
-      loadUsers();
+      toast.success(`Account for ${statusTarget.fullName} is now ${newStatus}.`);
+      setStatusTarget(null);
+      await loadUsers();
     } catch {
       toast.error(`Failed to ${actionLabel} account.`);
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -439,6 +454,65 @@ export default function ManageStaff() {
             </Button>
             <Button onClick={handleAdminResetPassword} disabled={saving} className="bg-brand-navy hover:bg-brand-navy/90 text-white">
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : "Reset Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Account Status Confirmation Modal */}
+      <Dialog open={!!statusTarget} onOpenChange={(open) => { if (!open && !statusLoading) setStatusTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-base font-bold text-brand-navy flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              Confirm Account {statusTarget?.accountStatus === "Active" ? "Deactivation" : "Reactivation"}
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              Are you sure you want to{" "}
+              <strong className={statusTarget?.accountStatus === "Active" ? "text-amber-700" : "text-brand-green"}>
+                {statusTarget?.accountStatus === "Active" ? "deactivate" : "reactivate"}
+              </strong>{" "}
+              the account for <strong className="text-foreground">{statusTarget?.fullName}</strong> ({statusTarget?.email})?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-md border border-border/60">
+            {statusTarget?.accountStatus === "Active" ? (
+              <p>
+                Deactivating this account will immediately revoke all active sessions and prevent the user from logging in.
+                Their records (pets, appointments, care history) will remain safe and preserved.
+              </p>
+            ) : (
+              <p>
+                Reactivating this account will restore the user&apos;s ability to sign in and access the system normally.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button variant="outline" size="sm" onClick={() => setStatusTarget(null)} disabled={statusLoading}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={statusLoading}
+              onClick={executeToggleStatus}
+              className={
+                statusTarget?.accountStatus === "Active"
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"
+                  : "bg-brand-green hover:bg-brand-green/90 text-white"
+              }
+            >
+              {statusLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  Updating Status...
+                </>
+              ) : statusTarget?.accountStatus === "Active" ? (
+                "Deactivate Account"
+              ) : (
+                "Reactivate Account"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

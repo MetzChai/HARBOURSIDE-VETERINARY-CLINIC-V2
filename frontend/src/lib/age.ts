@@ -1,9 +1,10 @@
-import { formatDatePH, formatDateTimePH, todayPH, toDateOnly } from "./datetime";
+import { formatDatePH, formatDateTimePH, todayPH, toDateOnly, isValidCalendarDate } from "./datetime";
 
 export function getAge(dob?: string | null): { years: number; months: number; weeks: number; days: number } | null {
   if (!dob) return null;
   const birth = toDateOnly(dob);
-  if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return null;
+  if (!birth || !isValidCalendarDate(birth)) return null;
+  if (birth > todayPH()) return null;
 
   const [by, bm, bd] = birth.split("-").map(Number);
   const [ty, tm, td] = todayPH().split("-").map(Number);
@@ -16,7 +17,7 @@ export function getAge(dob?: string | null): { years: number; months: number; we
     years -= 1;
     months += 12;
   }
-  if (years < 0) return { years: 0, months: 0, weeks: 0, days: 0 };
+  if (years < 0) return null;
 
   const birthDateObj = new Date(Date.UTC(by, bm - 1, bd));
   const todayDateObj = new Date(Date.UTC(ty, tm - 1, td));

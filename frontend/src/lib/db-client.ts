@@ -252,12 +252,20 @@ export const db = {
 };
 
 export const authClient = {
-  async signInWithPassword({ email, password }: { email: string; password: string }) {
+  async signInWithPassword({
+    email,
+    password,
+    rememberMe,
+  }: {
+    email: string;
+    password: string;
+    rememberMe?: boolean;
+  }) {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe: Boolean(rememberMe) }),
     });
     const json = await res.json();
     if (!res.ok) {

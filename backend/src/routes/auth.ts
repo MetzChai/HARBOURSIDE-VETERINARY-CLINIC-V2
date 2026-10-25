@@ -42,7 +42,7 @@ function getIpAddress(req: any): string {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body ?? {};
+    const { email, password, rememberMe } = req.body ?? {};
     if (!email || !password) {
       res.status(400).json({ error: "Email and password are required" });
       return;
@@ -92,8 +92,8 @@ router.post("/login", async (req, res) => {
 
     const user = result;
     await ensureUserProfile(user.id, user.email, user.fullName);
-    const token = await createSessionToken(user);
-    setSessionCookie(res, token);
+    const token = await createSessionToken(user, { rememberMe: Boolean(rememberMe) });
+    setSessionCookie(res, token, { rememberMe: Boolean(rememberMe) });
 
     res.json({
       user: { id: user.id, email: user.email, user_metadata: { full_name: user.fullName } },
@@ -132,10 +132,28 @@ router.get("/session", async (req, res) => {
 
 router.post("/signup", async (req, res) => {
   try {
-    const { firstName, middleName, lastName, email, password, confirmPassword, phone, address } = req.body ?? {};
+    const firstName = String(req.body?.firstName ?? "").trim();
+    const middleName = req.body?.middleName ? String(req.body.middleName).trim() : undefined;
+    const lastName = String(req.body?.lastName ?? "").trim();
+    const email = String(req.body?.email ?? "").trim();
+    const password = String(req.body?.password ?? "");
+    const confirmPassword = String(req.body?.confirmPassword ?? "");
+    const phone = req.body?.phone ? String(req.body.phone).trim() : undefined;
+    const address = req.body?.address ? String(req.body.address).trim() : undefined;
 
     if (!firstName || !lastName || !email || !password || !confirmPassword) {
       res.status(400).json({ error: "First Name, Last Name, Email, Password, and Confirm Password are required." });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      res.status(400).json({ error: "Please enter a valid email address." });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ error: "Password must be at least 6 characters long." });
       return;
     }
 

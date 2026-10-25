@@ -77,6 +77,8 @@ function getSecret() {
   return new TextEncoder().encode(secret);
 }
 
+import { getPool } from "../lib/db.js";
+
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
 }
@@ -85,16 +87,24 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
-export async function createSessionToken(user: SessionUser) {
+export interface SessionTokenOptions {
+  rememberMe?: boolean;
+}
+
+export async function createSessionToken(user: SessionUser, opts?: SessionTokenOptions) {
+  const rememberMe = Boolean(opts?.rememberMe);
+  const expiration = rememberMe ? "30d" : "1d";
+
   return new SignJWT({
     id: user.id,
     email: user.email,
     fullName: user.fullName,
     role: user.role,
+    rememberMe,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(expiration)
     .sign(getSecret());
 }
 
@@ -116,13 +126,17 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
   }
 }
 
-export function setSessionCookie(res: Response, token: string) {
+export function setSessionCookie(res: Response, token: string, opts?: SessionTokenOptions) {
+  const rememberMe = Boolean(opts?.rememberMe);
+  // 30 days for Remember Me; 1 day (24 hours) for standard sessions
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7 * 1000,
+    maxAge,
   });
 }
 
@@ -133,5 +147,22 @@ export function clearSessionCookie(res: Response) {
 export async function getSession(req: Request): Promise<SessionUser | null> {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return null;
-  return verifySessionToken(token);
+  const user = await verifySessionToken(token);
+  if (!user) return null;
+
+  // Enforce account status check: deactivated accounts must not use active sessions
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT account_status FROM users WHERE id = $1`,
+      [user.id]
+    );
+    if (!rows.length || rows[0].account_status === "Deactivated") {
+      return null;
+    }
+  } catch (err) {
+    console.error("[auth] Error checking account status for session:", err);
+  }
+
+  return user;
 }

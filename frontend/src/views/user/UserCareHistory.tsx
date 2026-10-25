@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Eye, Search, Filter, Heart } from "lucide-react";
+import { Printer, Eye, Search, Filter, Heart, FileText, ExternalLink } from "lucide-react";
 import { useRows } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH } from "@/lib/datetime";
@@ -54,6 +54,7 @@ export default function UserCareHistory() {
     orderBy: "date",
     ascending: false,
   });
+  const { data: dbAttachments = [] } = useRows<any>("care_attachments");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPetId, setFilterPetId] = useState("all");
@@ -434,6 +435,66 @@ export default function UserCareHistory() {
                     <p className="text-muted-foreground whitespace-pre-wrap">{selectedRecord.notes}</p>
                   </div>
                 )}
+
+                {(() => {
+                  const recordAtts = dbAttachments.filter((a: any) => a.care_record_id === selectedRecord.id);
+                  if (!recordAtts.length) return null;
+
+                  return (
+                    <div className="space-y-2 border-t pt-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                          Previous Medical Photos & Documents ({recordAtts.length})
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground italic">Historical Reference</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {recordAtts.map((att: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-md border bg-muted/20 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {att.file_type && att.file_type.includes("pdf") ? (
+                                <div className="h-8 w-8 rounded bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
+                                  <FileText className="h-4 w-4" />
+                                </div>
+                              ) : (
+                                <img
+                                  src={att.file_url}
+                                  alt={att.file_name}
+                                  className="h-8 w-8 rounded object-cover shrink-0 border"
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <a
+                                  href={att.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-brand-navy hover:underline truncate block max-w-[170px]"
+                                  title={att.file_name}
+                                >
+                                  {att.file_name}
+                                </a>
+                                {att.source_notes && (
+                                  <span className="text-[10px] text-muted-foreground block truncate">
+                                    {att.source_notes}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <a
+                              href={att.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-brand-navy hover:text-brand-navy-dark"
+                              title="Open document in new tab"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <DialogFooter className="pt-4 border-t">

@@ -1,7 +1,7 @@
 "use client";
 
 import { printDocument } from "@/lib/print";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { CLINIC_SERVICES } from "@/lib/appointment-slots";
 import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
+import { TablePagination } from "@/components/TablePagination";
 
 type TransactionRow = {
   id: string;
@@ -109,7 +110,6 @@ type LabRecordRow = {
 const formatPeso = (value: number | string | null | undefined) =>
   `₱${Number(value ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const ITEMS_PER_PAGE = 8;
 const TEST_TYPES = ["Blood Test", "Urinalysis", "Fecalysis", "Skin Scraping", "X-Ray / Ultrasound", "Other"];
 const LAB_STATUSES = ["Requested", "In Progress", "Completed", "Cancelled"];
 
@@ -184,12 +184,14 @@ export default function LabTransactions() {
   const [filterPaymentStatus, setFilterPaymentStatus] = useState("all");
   const [filterPaymentMethod, setFilterPaymentMethod] = useState("all");
   const [txnPage, setTxnPage] = useState(1);
+  const [txnPageSize, setTxnPageSize] = useState(10);
 
   // Search & Filters for Lab Records
   const [labSearch, setLabSearch] = useState("");
   const [filterTestType, setFilterTestType] = useState("all");
   const [filterLabStatus, setFilterLabStatus] = useState("all");
   const [labPage, setLabPage] = useState(1);
+  const [labPageSize, setLabPageSize] = useState(10);
 
   // Modals & Form States
   const [viewTxn, setViewTxn] = useState<TransactionRow | null>(null);
@@ -375,6 +377,11 @@ export default function LabTransactions() {
 
   // Save Transaction
   const handleSaveTxn = async () => {
+    if (!txnForm.pet_id && !txnForm.owner_id) {
+      toast.error("Please select a pet or owner for this transaction.");
+      return;
+    }
+
     if (!txnForm.services_rendered.trim()) {
       toast.error("Services rendered description is required.");
       return;
@@ -532,8 +539,16 @@ export default function LabTransactions() {
 
   // Save Lab Record (Insert or Update)
   const handleSaveLab = async () => {
-    if (!labForm.pet_id || !labForm.test_type) {
-      toast.error("Pet and Test Type are required.");
+    if (!labForm.pet_id) {
+      toast.error("Please select a pet.");
+      return;
+    }
+    if (!labForm.test_type || !labForm.test_type.trim()) {
+      toast.error("Test Type is required.");
+      return;
+    }
+    if (labForm.date_conducted && labForm.date_conducted > todayPH()) {
+      toast.error("Date conducted cannot be in the future.");
       return;
     }
 
@@ -651,12 +666,25 @@ export default function LabTransactions() {
     });
   }, [transactions, txnSearch, dateFrom, dateTo, filterPaymentStatus, filterPaymentMethod, petMap, ownerMap]);
 
+  useEffect(() => {
+    setTxnPage(1);
+  }, [txnSearch, dateFrom, dateTo, filterPaymentStatus, filterPaymentMethod]);
+
+  useEffect(() => {
+    setLabPage(1);
+  }, [labSearch, dateFrom, dateTo, filterTestType, filterLabStatus]);
+
+  useEffect(() => {
+    setTxnPage(1);
+    setLabPage(1);
+  }, [activeTab]);
+
   // Paginated Transactions
-  const totalTxnPages = Math.ceil(filteredTxns.length / ITEMS_PER_PAGE) || 1;
+  const totalTxnPages = Math.ceil(filteredTxns.length / txnPageSize) || 1;
   const paginatedTxns = useMemo(() => {
-    const start = (txnPage - 1) * ITEMS_PER_PAGE;
-    return filteredTxns.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredTxns, txnPage]);
+    const start = (txnPage - 1) * txnPageSize;
+    return filteredTxns.slice(start, start + txnPageSize);
+  }, [filteredTxns, txnPage, txnPageSize]);
 
   // Filtered Lab Records
   const filteredLabs = useMemo(() => {
@@ -686,11 +714,11 @@ export default function LabTransactions() {
   }, [labRecords, labSearch, dateFrom, dateTo, filterTestType, filterLabStatus, petMap, ownerMap]);
 
   // Paginated Lab Records
-  const totalLabPages = Math.ceil(filteredLabs.length / ITEMS_PER_PAGE) || 1;
+  const totalLabPages = Math.ceil(filteredLabs.length / labPageSize) || 1;
   const paginatedLabs = useMemo(() => {
-    const start = (labPage - 1) * ITEMS_PER_PAGE;
-    return filteredLabs.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredLabs, labPage]);
+    const start = (labPage - 1) * labPageSize;
+    return filteredLabs.slice(start, start + labPageSize);
+  }, [filteredLabs, labPage, labPageSize]);
 
   // Official Printable Transaction Receipt Generator
   const handlePrintReceipt = (txn: TransactionRow) => {
@@ -1060,36 +1088,14 @@ export default function LabTransactions() {
                   </Table>
 
                   {/* Pagination */}
-                  <div className="p-4 border-t flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      Showing {filteredTxns.length ? (txnPage - 1) * ITEMS_PER_PAGE + 1 : 0} to{" "}
-                      {Math.min(txnPage * ITEMS_PER_PAGE, filteredTxns.length)} of {filteredTxns.length} transactions
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={txnPage === 1}
-                        onClick={() => setTxnPage((p) => Math.max(p - 1, 1))}
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                      </Button>
-                      <span>
-                        Page {txnPage} of {totalTxnPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={txnPage >= totalTxnPages}
-                        onClick={() => setTxnPage((p) => Math.min(p + 1, totalTxnPages))}
-                      >
-                        Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
+                  <TablePagination
+                    currentPage={txnPage}
+                    totalItems={filteredTxns.length}
+                    pageSize={txnPageSize}
+                    onPageChange={setTxnPage}
+                    onPageSizeChange={setTxnPageSize}
+                    itemLabel="transactions"
+                  />
                 </>
               )}
             </CardContent>
@@ -1323,36 +1329,14 @@ export default function LabTransactions() {
                   </Table>
 
                   {/* Pagination */}
-                  <div className="p-4 border-t flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      Showing {filteredLabs.length ? (labPage - 1) * ITEMS_PER_PAGE + 1 : 0} to{" "}
-                      {Math.min(labPage * ITEMS_PER_PAGE, filteredLabs.length)} of {filteredLabs.length} lab records
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={labPage === 1}
-                        onClick={() => setLabPage((p) => Math.max(p - 1, 1))}
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                      </Button>
-                      <span>
-                        Page {labPage} of {totalLabPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={labPage >= totalLabPages}
-                        onClick={() => setLabPage((p) => Math.min(p + 1, totalLabPages))}
-                      >
-                        Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
+                  <TablePagination
+                    currentPage={labPage}
+                    totalItems={filteredLabs.length}
+                    pageSize={labPageSize}
+                    onPageChange={setLabPage}
+                    onPageSizeChange={setLabPageSize}
+                    itemLabel="lab records"
+                  />
                 </>
               )}
             </CardContent>
@@ -1571,6 +1555,7 @@ export default function LabTransactions() {
                 <Label className="text-xs font-bold text-[#1B3A5C]">Date Conducted</Label>
                 <Input
                   type="date"
+                  max={todayPH()}
                   value={labForm.date_conducted}
                   onChange={(e) => setLabForm({ ...labForm, date_conducted: e.target.value })}
                 />

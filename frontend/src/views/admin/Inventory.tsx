@@ -687,6 +687,12 @@ export default function Inventory() {
       return;
     }
 
+    const unit = addForm.unit.trim();
+    if (!unit) {
+      toast.error("Unit of measurement is required.");
+      return;
+    }
+
     const qty = Number(addForm.quantity || 0);
     if (isNaN(qty) || qty < 0) {
       toast.error("Current quantity cannot be negative.");
@@ -783,6 +789,12 @@ export default function Inventory() {
     const name = editForm.name.trim();
     if (!name) {
       toast.error("Item name is required.");
+      return;
+    }
+
+    const unit = editForm.unit.trim();
+    if (!unit) {
+      toast.error("Unit of measurement is required.");
       return;
     }
 

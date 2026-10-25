@@ -12,19 +12,20 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar, MessageSquare } from "lucide-react";
+import { Printer, Loader2, Plus, Pencil, Trash2, Eye, Search, Filter, Calendar, MessageSquare, Paperclip, Upload, FileText, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
 import { formatNowPH, isBeforeTodayPH, todayPH, toDateOnly } from "@/lib/datetime";
 import { db } from "@/lib/db-client";
-import { VET_OPTIONS } from "@/lib/appointment-slots";
+import { VET_OPTIONS, CLINIC_VETERINARIAN } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
 import { processPrescribedMedications } from "@/lib/careHistoryStock";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
+import { TablePagination } from "@/components/TablePagination";
 
 function toInputDate(value?: string | null) {
   if (!value) return "";
@@ -88,6 +89,7 @@ export default function CareHistory() {
   });
   const { data: inventoryItems = [] } = useRows<any>("inventory_items", { orderBy: "name" });
   const { data: dbBatches = [] } = useRows<any>("inventory_batches");
+  const { data: dbAttachments = [] } = useRows<any>("care_attachments");
   const invalidate = useInvalidate();
 
   // Multi-medication selection state
@@ -221,6 +223,8 @@ export default function CareHistory() {
   const [filterVet, setFilterVet] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals & form state
   const [saving, setSaving] = useState(false);
@@ -233,7 +237,7 @@ export default function CareHistory() {
   const [form, setForm] = useState({
     appointment_id: "",
     pet_id: "",
-    vet: "",
+    vet: CLINIC_VETERINARIAN,
     date: toInputDate(new Date().toISOString()),
     record_type: "checkup",
     chief_complaint: "",
@@ -250,6 +254,73 @@ export default function CareHistory() {
     outcome: "Completed",
     notes: "",
   });
+
+  type CareAttachmentItem = {
+    id?: string;
+    file_url: string;
+    file_name: string;
+    file_type: string;
+    file_size?: number;
+    public_id?: string;
+    source_notes?: string;
+    isNew?: boolean;
+  };
+
+  const [attachmentsList, setAttachmentsList] = useState<CareAttachmentItem[]>([]);
+  const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<string[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentSourceNotes, setAttachmentSourceNotes] = useState("");
+
+  const handleFileUpload = async (files: FileList) => {
+    setUploadingAttachment(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`File "${file.name}" exceeds the 10MB limit.`);
+          continue;
+        }
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/upload?folder=medical_records", {
+          method: "POST",
+          body: fd,
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          toast.error(json.error || `Failed to upload "${file.name}".`);
+          continue;
+        }
+        setAttachmentsList((prev) => [
+          ...prev,
+          {
+            file_url: json.url,
+            file_name: json.file_name || file.name,
+            file_type: json.file_type || file.type,
+            file_size: json.file_size || file.size,
+            public_id: json.public_id || undefined,
+            source_notes: attachmentSourceNotes.trim() || undefined,
+            isNew: true,
+          },
+        ]);
+        toast.success(`Attached "${file.name}"`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachmentsList((prev) => {
+      const target = prev[index];
+      if (target && target.id) {
+        setDeletedAttachmentIds((d) => [...d, target.id!]);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   const searchParams = useSearchParams();
   const aptId = searchParams?.get("aptId");
@@ -360,11 +431,21 @@ export default function CareHistory() {
     return true;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterPetId, filterOwnerId, filterCareType, filterVet, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, currentPage, pageSize]);
+
   const resetForm = () => {
     setForm({
       appointment_id: "",
       pet_id: pets[0]?.id || "",
-      vet: VET_OPTIONS[0] || "",
+      vet: CLINIC_VETERINARIAN,
       date: toInputDate(new Date().toISOString()),
       record_type: "checkup",
       chief_complaint: "",
@@ -382,6 +463,9 @@ export default function CareHistory() {
       notes: "",
     });
     setMedicationsList([]);
+    setAttachmentsList([]);
+    setDeletedAttachmentIds([]);
+    setAttachmentSourceNotes("");
   };
 
   const openAddModal = () => {
@@ -395,7 +479,7 @@ export default function CareHistory() {
     setForm({
       appointment_id: record.appointment_id || "",
       pet_id: record.pet_id || "",
-      vet: record.vet || "",
+      vet: record.vet || CLINIC_VETERINARIAN,
       date: toInputDate(record.date),
       record_type: String(record.record_type || "checkup").toLowerCase() === "vaccine" ? "vaccination" : record.record_type || "checkup",
       chief_complaint: record.chief_complaint || "",
@@ -437,6 +521,11 @@ export default function CareHistory() {
       }
     }
     setMedicationsList(medList);
+
+    const existingAtts = dbAttachments.filter((a: any) => a.care_record_id === record.id);
+    setAttachmentsList(existingAtts.map((a: any) => ({ ...a, isNew: false })));
+    setDeletedAttachmentIds([]);
+    setAttachmentSourceNotes(existingAtts[0]?.source_notes || "");
     setShowEditModal(true);
   };
 
@@ -446,8 +535,28 @@ export default function CareHistory() {
   };
 
   const handleSave = async () => {
-    if (!form.pet_id || !form.date || !form.vet.trim()) {
-      toast.error("Pet, visit date, and veterinarian/staff are required.");
+    if (!form.pet_id) {
+      toast.error("Please select a pet.");
+      return;
+    }
+    if (!form.date) {
+      toast.error("Visit date is required.");
+      return;
+    }
+    if (form.date > todayPH()) {
+      toast.error("Visit date cannot be in the future.");
+      return;
+    }
+    if (!form.vet.trim()) {
+      toast.error("Veterinarian / staff is required.");
+      return;
+    }
+    if ((form.record_type === "vaccination" || form.record_type === "vaccine") && !form.vaccine_used.trim()) {
+      toast.error("Vaccine product name is required for vaccination records.");
+      return;
+    }
+    if (form.record_type === "deworming" && !form.dewormer_used.trim()) {
+      toast.error("Dewormer product name is required for deworming records.");
       return;
     }
 
@@ -574,6 +683,27 @@ export default function CareHistory() {
       } as any);
     }
 
+    // Sync medical attachments
+    if (careRecordId) {
+      for (const delId of deletedAttachmentIds) {
+        await db.from("care_attachments").delete().eq("id", delId);
+      }
+      for (const att of attachmentsList.filter((a) => a.isNew)) {
+        await db.from("care_attachments").insert({
+          care_record_id: careRecordId,
+          pet_id: form.pet_id,
+          file_url: att.file_url,
+          file_name: att.file_name,
+          file_type: att.file_type,
+          file_size: att.file_size || 0,
+          public_id: att.public_id || null,
+          source_notes: att.source_notes || attachmentSourceNotes.trim() || null,
+          uploaded_by: user?.id || null,
+        } as any);
+      }
+      invalidate("care_attachments");
+    }
+
     setSaving(false);
 
     toast.success(targetId ? "Care History record updated." : "Care History record saved successfully.");
@@ -581,6 +711,7 @@ export default function CareHistory() {
     setEditingId(null);
     resetForm();
     invalidate("care_records");
+    invalidate("care_attachments");
     invalidate("vaccinations");
     invalidate("dewormings");
     invalidate("pets");
@@ -825,8 +956,8 @@ export default function CareHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRecords.length ? (
-                filteredRecords.map((r) => {
+              {paginatedRecords.length ? (
+                paginatedRecords.map((r) => {
                   const pet = petMap.get(r.pet_id);
                   const ownerName = pet?.owner_id ? ownerMap.get(pet.owner_id) || "—" : "—";
                   const detailSnippet =
@@ -924,6 +1055,14 @@ export default function CareHistory() {
               )}
             </TableBody>
           </Table>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredRecords.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="records"
+          />
         </CardContent>
       </Card>
 
@@ -995,24 +1134,19 @@ export default function CareHistory() {
                   <Label>Visit Date *</Label>
                   <Input
                     type="date"
+                    max={todayPH()}
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Veterinarian / Staff *</Label>
-                  <Select value={form.vet} onValueChange={(val) => setForm({ ...form, vet: val })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select vet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VET_OPTIONS.map((v) => (
-                        <SelectItem key={v} value={v}>
-                          {v}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    value={form.vet || CLINIC_VETERINARIAN}
+                    disabled
+                    readOnly
+                    className="bg-muted text-xs font-medium cursor-not-allowed text-foreground"
+                  />
                 </div>
               </div>
             </div>
@@ -1267,6 +1401,124 @@ export default function CareHistory() {
               </div>
             )}
 
+            {/* Previous Medical Photos and Documents */}
+            <div className="space-y-3 p-3.5 bg-slate-50/80 rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800">
+                    Previous Medical Photos and Documents
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional: Attach previous clinic records, external lab results, or wound progression photos.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] bg-white border-slate-300 text-slate-600">
+                  Optional
+                </Badge>
+              </div>
+
+              {/* Source of Previous Medical Record / Notes */}
+              <div className="space-y-1">
+                <Label className="text-xs">Source of Previous Medical Record / Notes About Previous Treatment</Label>
+                <Input
+                  placeholder="e.g. Records provided by owner from previous clinic, external biopsy..."
+                  value={attachmentSourceNotes}
+                  onChange={(e) => setAttachmentSourceNotes(e.target.value)}
+                  className="text-xs h-8 bg-white"
+                />
+              </div>
+
+              {/* File Picker & Upload Button */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-input bg-white hover:bg-slate-100 text-slate-800 shadow-xs transition-colors">
+                  <Upload className="h-3.5 w-3.5 text-brand-navy" />
+                  <span>{uploadingAttachment ? "Uploading..." : "Upload Photos / Documents"}</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    disabled={uploadingAttachment}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFileUpload(e.target.files);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                </label>
+                {uploadingAttachment && (
+                  <div className="flex items-center gap-1.5 text-xs text-brand-navy">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Uploading file...</span>
+                  </div>
+                )}
+                <span className="text-[11px] text-muted-foreground ml-auto">
+                  Accepted: JPEG, PNG, WebP, PDF (Max 10MB)
+                </span>
+              </div>
+
+              {/* Attachments Preview Grid */}
+              {attachmentsList.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  {attachmentsList.map((att, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-md border bg-white shadow-xs text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {att.file_type && att.file_type.includes("pdf") ? (
+                          <div className="h-9 w-9 rounded bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
+                            <FileText className="h-5 w-5" />
+                          </div>
+                        ) : (
+                          <img
+                            src={att.file_url}
+                            alt={att.file_name}
+                            className="h-9 w-9 rounded object-cover shrink-0 border"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <a
+                            href={att.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-brand-navy hover:underline truncate block max-w-[170px]"
+                            title={att.file_name}
+                          >
+                            {att.file_name}
+                          </a>
+                          <span className="text-[10px] text-muted-foreground block truncate">
+                            {att.source_notes || "Previous medical record"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 text-muted-foreground hover:text-foreground"
+                          title="View in new tab"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(idx)}
+                          className="p-1 text-destructive hover:text-destructive/80"
+                          title="Remove attachment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic pt-1">
+                  No previous medical photos or documents attached yet.
+                </p>
+              )}
+            </div>
+
             {/* Additional Notes */}
             <div className="space-y-1.5">
               <Label>Additional Notes</Label>
@@ -1442,6 +1694,66 @@ export default function CareHistory() {
                     <p className="text-muted-foreground whitespace-pre-wrap">{selectedRecord.notes}</p>
                   </div>
                 )}
+
+                {(() => {
+                  const recordAtts = dbAttachments.filter((a: any) => a.care_record_id === selectedRecord.id);
+                  if (!recordAtts.length) return null;
+
+                  return (
+                    <div className="space-y-2 border-t pt-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                          Previous Medical Photos & Documents ({recordAtts.length})
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground italic">Historical Reference</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {recordAtts.map((att: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-md border bg-muted/20 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {att.file_type && att.file_type.includes("pdf") ? (
+                                <div className="h-8 w-8 rounded bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
+                                  <FileText className="h-4 w-4" />
+                                </div>
+                              ) : (
+                                <img
+                                  src={att.file_url}
+                                  alt={att.file_name}
+                                  className="h-8 w-8 rounded object-cover shrink-0 border"
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <a
+                                  href={att.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-brand-navy hover:underline truncate block max-w-[170px]"
+                                  title={att.file_name}
+                                >
+                                  {att.file_name}
+                                </a>
+                                {att.source_notes && (
+                                  <span className="text-[10px] text-muted-foreground block truncate">
+                                    {att.source_notes}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <a
+                              href={att.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-brand-navy hover:text-brand-navy-dark"
+                              title="Open document in new tab"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <DialogFooter className="pt-4 border-t">

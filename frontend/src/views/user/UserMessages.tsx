@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { useMyOwner, useMyPets } from "@/hooks/useOwnerData";
 import { formatDateTimePH } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { TablePagination } from "@/components/TablePagination";
 import { toast } from "sonner";
 
 export default function UserMessages() {
@@ -35,6 +36,8 @@ export default function UserMessages() {
   const [replyBody, setReplyBody] = useState("");
   const [replyPetId, setReplyPetId] = useState("NONE");
   const [sending, setSending] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const myPetIds = useMemo(() => new Set(myPets.map((p: any) => p.id)), [myPets]);
 
@@ -58,6 +61,16 @@ export default function UserMessages() {
       return subj.includes(q) || body.includes(q) || type.includes(q);
     });
   }, [userMessages, search]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredMessages.length / pageSize) || 1;
+  const paginatedMessages = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredMessages.slice(start, start + pageSize);
+  }, [filteredMessages, currentPage, pageSize]);
 
   const petMap = useMemo(() => new Map(myPets.map((p: any) => [p.id, p])), [myPets]);
 
@@ -200,66 +213,76 @@ export default function UserMessages() {
           {isLoading ? (
             <PageSkeleton rows={6} />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Date & Time</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">From</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Target Pet</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Type</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Channel</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs">Subject / Message Content</TableHead>
-                  <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMessages.length ? (
-                  filteredMessages.map((m: any) => (
-                    <TableRow key={m.id} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">
-                        {formatDateTimePH(m.sent_at || m.created_at)}
-                      </TableCell>
-                      <TableCell className="text-xs font-semibold text-[#1B3A5C]">
-                        {String(m.sent_by || "").toLowerCase() === "owner" ? "You" : m.sent_by || "Clinic"}
-                      </TableCell>
-                      <TableCell className="font-semibold text-xs text-[#1B3A5C]">
-                        {petMap.get(m.pet_id)?.name || "General Notice"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[11px] font-semibold border-[#1FA8A8]/30 text-[#1B3A5C] bg-[#E8F6F6]">
-                          {m.message_type || "Notice"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{getChannelBadge(m.channel)}</TableCell>
-                      <TableCell className="text-xs max-w-[360px]">
-                        {m.subject ? <strong className="block text-[#1B3A5C] truncate">{m.subject}</strong> : null}
-                        <span className="text-muted-foreground line-clamp-2">{m.body}</span>
-                      </TableCell>
-                      <TableCell className="text-right pr-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-xs text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
-                          onClick={() => setSelectedMessage(m)}
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Read
-                        </Button>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#E8EEF4] hover:bg-[#E8EEF4]">
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Date & Time</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">From</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Target Pet</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Type</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Channel</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs">Subject / Message Content</TableHead>
+                    <TableHead className="text-[#1B3A5C] font-bold text-xs text-right pr-6">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedMessages.length ? (
+                    paginatedMessages.map((m: any) => (
+                      <TableRow key={m.id} className="hover:bg-slate-50 transition-colors">
+                        <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">
+                          {formatDateTimePH(m.sent_at || m.created_at)}
+                        </TableCell>
+                        <TableCell className="text-xs font-semibold text-[#1B3A5C]">
+                          {String(m.sent_by || "").toLowerCase() === "owner" ? "You" : m.sent_by || "Clinic"}
+                        </TableCell>
+                        <TableCell className="font-semibold text-xs text-[#1B3A5C]">
+                          {petMap.get(m.pet_id)?.name || "General Notice"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[11px] font-semibold border-[#1FA8A8]/30 text-[#1B3A5C] bg-[#E8F6F6]">
+                            {m.message_type || "Notice"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getChannelBadge(m.channel)}</TableCell>
+                        <TableCell className="text-xs max-w-[360px]">
+                          {m.subject ? <strong className="block text-[#1B3A5C] truncate">{m.subject}</strong> : null}
+                          <span className="text-muted-foreground line-clamp-2">{m.body}</span>
+                        </TableCell>
+                        <TableCell className="text-right pr-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
+                            onClick={() => setSelectedMessage(m)}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Read
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="p-0">
+                        <EmptyState
+                          icon={MessageSquare}
+                          title="No messages found."
+                          description="Clinic communications and notifications sent to you will appear here."
+                        />
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="p-0">
-                      <EmptyState
-                        icon={MessageSquare}
-                        title="No messages found."
-                        description="Clinic communications and notifications sent to you will appear here."
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredMessages.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="messages"
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -295,6 +318,20 @@ export default function UserMessages() {
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 leading-relaxed text-slate-800 whitespace-pre-wrap text-sm">
                   {selectedMessage.body}
                 </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  className="w-full bg-[#1B3A5C] text-white flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    setReplySubject(selectedMessage.subject ? (/^re:/i.test(selectedMessage.subject) ? selectedMessage.subject : `Re: ${selectedMessage.subject}`) : "Re: Clinic Notice");
+                    setReplyPetId(selectedMessage.pet_id || "NONE");
+                    setSelectedMessage(null);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <Send className="h-3.5 w-3.5" /> Reply to Clinic
+                </Button>
               </div>
             </div>
           </DialogContent>

@@ -30,6 +30,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Lock,
+  CornerUpLeft,
+  XCircle,
 } from "lucide-react";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
@@ -38,6 +41,7 @@ import { formatDate } from "@/lib/age";
 import { formatNowPH, todayPH } from "@/lib/datetime";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
+import { TablePagination } from "@/components/TablePagination";
 
 type MessageRow = {
   id: string;
@@ -57,8 +61,6 @@ type MessageRow = {
   owners?: { name: string; contact?: string; email?: string } | null;
   pets?: { name: string } | null;
 };
-
-const ITEMS_PER_PAGE = 8;
 
 const MESSAGE_TYPES = [
   "Custom Message",
@@ -111,6 +113,7 @@ export default function Messaging() {
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // View Message Modal
   const [viewMessage, setViewMessage] = useState<MessageRow | null>(null);
@@ -140,13 +143,11 @@ export default function Messaging() {
       const found = messages.find((m) => m.id === referencedMsgId);
       if (found) return found;
     }
-    if (selectedOwnerId && selectedOwnerId !== "ALL_OWNERS") {
-      return messages.find(
-        (m) => m.owner_id === selectedOwnerId && String(m.sent_by || "").toLowerCase() === "owner"
-      );
-    }
     return null;
-  }, [referencedMsgId, selectedOwnerId, messages]);
+  }, [referencedMsgId, messages]);
+
+  const isReplying = Boolean(referencedMsgId && targetQuestion);
+  const replyOwnerId = targetQuestion?.owner_id || selectedOwnerId;
 
   // Auto pre-fill Re: subject line when answering an owner question
   useEffect(() => {
@@ -237,13 +238,14 @@ export default function Messaging() {
       return;
     }
 
-    const isBroadcast = selectedOwnerId === "ALL_OWNERS" || (!selectedOwnerId && messageType === "General Announcement");
-    if (!selectedOwnerId && messageType !== "General Announcement") {
+    const effectiveOwnerId = isReplying ? replyOwnerId : selectedOwnerId;
+    const isBroadcast = !isReplying && (effectiveOwnerId === "ALL_OWNERS" || (!effectiveOwnerId && messageType === "General Announcement"));
+    if (!isBroadcast && !effectiveOwnerId) {
       toast.error("Please select a pet owner, or choose a general announcement to broadcast.");
       return;
     }
 
-    const owner = isBroadcast ? null : ownerMap.get(selectedOwnerId);
+    const owner = isBroadcast ? null : ownerMap.get(effectiveOwnerId);
     const targetPhone = owner?.contact || "";
     const targetEmail = owner?.email || "";
 
@@ -256,7 +258,7 @@ export default function Messaging() {
     }
 
     const payload = {
-      owner_id: isBroadcast ? null : selectedOwnerId || null,
+      owner_id: isBroadcast ? null : effectiveOwnerId || null,
       pet_id: isBroadcast || selectedPetId === "NONE" ? null : selectedPetId || null,
       phone: targetPhone || null,
       email: targetEmail || null,
@@ -267,6 +269,8 @@ export default function Messaging() {
       status: "SENT",
       sent_by: isAdmin ? "Admin" : "Staff",
       scheduled_at: scheduledIso,
+      in_reply_to_id: referencedMsgId || null,
+      referenced_message_id: referencedMsgId || null,
     };
 
     const { error } = await db.from("messages").insert(payload as any);
@@ -293,6 +297,7 @@ export default function Messaging() {
     setSubject("");
     setBody("");
     setScheduledAt("");
+    setReferencedMsgId(null);
 
     invalidate("messages");
   };
@@ -343,12 +348,16 @@ export default function Messaging() {
     });
   }, [messages, search, filterChannel, filterType, filterStatus, ownerMap, petMap]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterChannel, filterType, filterStatus]);
+
   // Pagination
-  const totalPages = Math.ceil(filteredMessages.length / ITEMS_PER_PAGE) || 1;
+  const totalPages = Math.ceil(filteredMessages.length / pageSize) || 1;
   const paginatedMessages = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredMessages.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredMessages, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredMessages.slice(start, start + pageSize);
+  }, [filteredMessages, currentPage, pageSize]);
 
   const getChannelBadge = (ch: string) => {
     switch (ch) {
@@ -497,49 +506,101 @@ export default function Messaging() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Recipient Owner */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-[#1B3A5C]">Recipient Pet Owner *</Label>
-                      <Select
-                        value={selectedOwnerId}
-                        onValueChange={(v) => {
-                          setSelectedOwnerId(v);
-                          setSelectedPetId("NONE");
-                        }}
-                      >
-                        <SelectTrigger className="focus:ring-[#1FA8A8]">
-                          <SelectValue placeholder="Select Pet Owner..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL_OWNERS">All pet owners (broadcast)</SelectItem>
-                          {owners.map((o) => (
-                            <SelectItem key={o.id} value={o.id}>
-                              {o.name} ({o.contact || o.email || "No contact"})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold text-[#1B3A5C]">
+                          {isReplying ? "Recipient Pet Owner (Reply Mode)" : "Recipient Pet Owner *"}
+                        </Label>
+                        {isReplying && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setReferencedMsgId(null);
+                              setSelectedOwnerId("");
+                              setSelectedPetId("NONE");
+                              setSubject("");
+                              setBody("");
+                            }}
+                          >
+                            <XCircle className="h-3 w-3 mr-1" /> Cancel Reply / New Message
+                          </Button>
+                        )}
+                      </div>
 
-                      {selectedOwnerId && selectedOwnerId !== "ALL_OWNERS" && (
-                        <div className="mt-2 text-xs bg-[#E8F6F6] text-[#1B3A5C] p-2.5 rounded-lg border border-[#1FA8A8]/30 flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <span className="font-bold">{ownerMap.get(selectedOwnerId)?.name}</span>
+                      {isReplying ? (
+                        <div className="p-3 rounded-lg border-2 border-[#1FA8A8]/40 bg-[#E8F6F6]/60 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-[#1B3A5C]">
+                              <Lock className="h-3.5 w-3.5 text-[#1FA8A8]" />
+                              <span>{ownerMap.get(replyOwnerId)?.name || targetQuestion?.owners?.name || "Pet Owner"}</span>
+                            </div>
+                            <Badge className="bg-[#1FA8A8] text-white text-[10px] font-semibold">
+                              Static Reply Recipient
+                            </Badge>
                           </div>
-                          <div className="flex items-center gap-3 text-[11px]">
-                            {ownerMap.get(selectedOwnerId)?.email && (
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground pt-1 border-t border-[#1FA8A8]/20">
+                            {ownerMap.get(replyOwnerId)?.email && (
                               <span className="flex items-center gap-1">
                                 <Mail className="h-3 w-3 text-[#1FA8A8]" />
-                                <a href={`mailto:${ownerMap.get(selectedOwnerId)?.email}`} className="hover:underline text-[#1FA8A8]">
-                                  {ownerMap.get(selectedOwnerId)?.email}
-                                </a>
+                                <span>{ownerMap.get(replyOwnerId)?.email}</span>
                               </span>
                             )}
-                            {ownerMap.get(selectedOwnerId)?.contact && (
+                            {ownerMap.get(replyOwnerId)?.contact && (
                               <span className="flex items-center gap-1">
                                 <Phone className="h-3 w-3 text-[#1FA8A8]" />
-                                {ownerMap.get(selectedOwnerId)?.contact}
+                                <span>{ownerMap.get(replyOwnerId)?.contact}</span>
                               </span>
                             )}
                           </div>
                         </div>
+                      ) : (
+                        <>
+                          <Select
+                            value={selectedOwnerId}
+                            onValueChange={(v) => {
+                              setSelectedOwnerId(v);
+                              setSelectedPetId("NONE");
+                            }}
+                          >
+                            <SelectTrigger className="focus:ring-[#1FA8A8]">
+                              <SelectValue placeholder="Select Pet Owner..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ALL_OWNERS">All pet owners (broadcast)</SelectItem>
+                              {owners.map((o) => (
+                                <SelectItem key={o.id} value={o.id}>
+                                  {o.name} ({o.contact || o.email || "No contact"})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {selectedOwnerId && selectedOwnerId !== "ALL_OWNERS" && (
+                            <div className="mt-2 text-xs bg-[#E8F6F6] text-[#1B3A5C] p-2.5 rounded-lg border border-[#1FA8A8]/30 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <span className="font-bold">{ownerMap.get(selectedOwnerId)?.name}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px]">
+                                {ownerMap.get(selectedOwnerId)?.email && (
+                                  <span className="flex items-center gap-1">
+                                    <Mail className="h-3 w-3 text-[#1FA8A8]" />
+                                    <a href={`mailto:${ownerMap.get(selectedOwnerId)?.email}`} className="hover:underline text-[#1FA8A8]">
+                                      {ownerMap.get(selectedOwnerId)?.email}
+                                    </a>
+                                  </span>
+                                )}
+                                {ownerMap.get(selectedOwnerId)?.contact && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3 text-[#1FA8A8]" />
+                                    {ownerMap.get(selectedOwnerId)?.contact}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -827,14 +888,36 @@ export default function Messaging() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right pr-4">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => setViewMessage(m)}
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                {m.owner_id && String(m.sent_by || "").toLowerCase() === "owner" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-[#1FA8A8] hover:text-[#198a8a] hover:bg-[#E8F6F6]"
+                                    onClick={() => {
+                                      setSelectedOwnerId(m.owner_id || "");
+                                      setSelectedPetId(m.pet_id || "NONE");
+                                      setReferencedMsgId(m.id);
+                                      setMessageType("Custom Message");
+                                      setSubject(m.subject ? (/^re:/i.test(m.subject) ? m.subject : `Re: ${m.subject}`) : "Re: Inquiry");
+                                      setBody("");
+                                      setActiveTab("compose");
+                                    }}
+                                    title="Reply to message"
+                                  >
+                                    <CornerUpLeft className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => setViewMessage(m)}
+                                  title="View Details"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -849,36 +932,14 @@ export default function Messaging() {
                   </Table>
 
                   {/* Pagination */}
-                  <div className="p-4 border-t flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      Showing {filteredMessages.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to{" "}
-                      {Math.min(currentPage * ITEMS_PER_PAGE, filteredMessages.length)} of {filteredMessages.length} logs
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                      </Button>
-                      <span>
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={currentPage >= totalPages}
-                        onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                      >
-                        Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
+                  <TablePagination
+                    currentPage={currentPage}
+                    totalItems={filteredMessages.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    itemLabel="logs"
+                  />
                 </>
               )}
             </CardContent>
@@ -902,9 +963,19 @@ export default function Messaging() {
 
               <div className="p-6 overflow-y-auto space-y-3 text-xs">
                 <div className="flex justify-between py-1 border-b">
-                  <span className="text-muted-foreground">Recipient Owner:</span>
-                  <span className="font-bold">{ownerMap.get(viewMessage.owner_id || "")?.name || viewMessage.owners?.name || "—"}</span>
+                  <span className="text-muted-foreground">
+                    {String(viewMessage.sent_by || "").toLowerCase() === "owner" ? "Sender (Owner):" : "Recipient Owner:"}
+                  </span>
+                  <span className="font-bold">{ownerMap.get(viewMessage.owner_id || "")?.name || viewMessage.owners?.name || (viewMessage.owner_id ? "—" : "All pet owners")}</span>
                 </div>
+                {viewMessage.owner_id && ownerMap.get(viewMessage.owner_id) && (
+                  <div className="flex justify-between py-1 border-b text-[11px] text-muted-foreground">
+                    <span>Contact Info:</span>
+                    <span>
+                      {[ownerMap.get(viewMessage.owner_id)?.email, ownerMap.get(viewMessage.owner_id)?.contact].filter(Boolean).join(" • ") || "No contact on file"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b">
                   <span className="text-muted-foreground">Target Pet:</span>
                   <span>{petMap.get(viewMessage.pet_id || "")?.name || viewMessage.pets?.name || "General"}</span>
@@ -931,18 +1002,19 @@ export default function Messaging() {
               <DialogFooter className="p-4 border-t bg-muted/30 gap-2">
                 {viewMessage.owner_id && String(viewMessage.sent_by || "").toLowerCase() === "owner" && (
                   <Button
-                    className="bg-[#1B3A5C] text-white"
+                    className="bg-[#1B3A5C] text-white flex items-center gap-1.5"
                     onClick={() => {
                       setSelectedOwnerId(viewMessage.owner_id || "");
                       setSelectedPetId(viewMessage.pet_id || "NONE");
+                      setReferencedMsgId(viewMessage.id);
                       setMessageType("Custom Message");
-                      setSubject(viewMessage.subject ? `Re: ${viewMessage.subject}` : "Reply from clinic");
+                      setSubject(viewMessage.subject ? (/^re:/i.test(viewMessage.subject) ? viewMessage.subject : `Re: ${viewMessage.subject}`) : "Re: Inquiry");
                       setBody("");
                       setViewMessage(null);
                       setActiveTab("compose");
                     }}
                   >
-                    Reply to owner
+                    <CornerUpLeft className="h-3.5 w-3.5" /> Reply to owner
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => setViewMessage(null)}>

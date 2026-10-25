@@ -187,8 +187,9 @@ model Pet {
   appointments Appointment[]
   vaccinations Vaccination[]
   dewormings   Deworming[]
-  careRecords  CareRecord[]
-  messages     Message[]
+  careRecords     CareRecord[]
+  careAttachments CareAttachment[]
+  messages        Message[]
 
   @@map("pets")
 }
@@ -265,8 +266,31 @@ model CareRecord {
   updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+  attachments CareAttachment[]
 
   @@map("care_records")
+}
+
+model CareAttachment {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  careRecordId String?     @map("care_record_id") @db.Uuid
+  petId        String      @map("pet_id") @db.Uuid
+  fileUrl      String      @map("file_url")
+  fileName     String      @map("file_name")
+  fileType     String      @map("file_type")
+  fileSize     Int         @default(0) @map("file_size")
+  publicId     String?     @map("public_id")
+  sourceNotes  String?     @map("source_notes")
+  uploadedBy   String?     @map("uploaded_by") @db.Uuid
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  careRecord   CareRecord? @relation(fields: [careRecordId], references: [id], onDelete: Cascade)
+  pet          Pet         @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+  @@index([careRecordId])
+  @@map("care_attachments")
 }
 
 model InventoryItem {
@@ -385,9 +409,12 @@ model Message {
   scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
   sentAt      DateTime? @default(now()) @map("sent_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  inReplyToId String?   @map("in_reply_to_id") @db.Uuid
 
-  owner Owner? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  pet   Pet?   @relation(fields: [petId], references: [id], onDelete: SetNull)
+  owner         Owner?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  pet           Pet?      @relation(fields: [petId], references: [id], onDelete: SetNull)
+  parentMessage Message?  @relation("MessageReplies", fields: [inReplyToId], references: [id], onDelete: SetNull)
+  replies       Message[] @relation("MessageReplies")
 
   @@map("messages")
 }

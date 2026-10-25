@@ -2,7 +2,7 @@
 
 import { printDocument } from "@/lib/print";
 import { getImageUrl } from "@/lib/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,11 +44,12 @@ import { toast } from "sonner";
 import { db } from "@/lib/db-client";
 import { useRows, useInvalidate } from "@/hooks/useRows";
 import { formatDate } from "@/lib/age";
-import { formatNowPH } from "@/lib/datetime";
+import { formatNowPH, todayPH, validateBirthDate } from "@/lib/datetime";
 import { formatTimeSlot } from "@/lib/appointment-slots";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { TablePagination } from "@/components/TablePagination";
 
 type OwnerRow = {
   id: string;
@@ -71,8 +72,6 @@ type OwnerRow = {
   created_at?: string;
 };
 
-const ITEMS_PER_PAGE = 8;
-
 export default function ManageOwners() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
@@ -90,6 +89,7 @@ export default function ManageOwners() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterWalkIn, setFilterWalkIn] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals
   const [viewOwner, setViewOwner] = useState<OwnerRow | null>(null);
@@ -151,15 +151,43 @@ export default function ManageOwners() {
   };
 
   const handleSaveOwner = async () => {
-    const fullName = [form.first_name, form.middle_name, form.last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-    if (!fullName) {
-      toast.error("First name and last name are required.");
+    if (!form.first_name.trim()) {
+      toast.error("Owner first name is required.");
       return;
     }
+
+    if (!form.last_name.trim()) {
+      toast.error("Owner last name is required.");
+      return;
+    }
+
+    if (form.birth_date) {
+      const birthVal = validateBirthDate(form.birth_date);
+      if (!birthVal.valid) {
+        toast.error(birthVal.error || "Please enter a valid birth date.");
+        return;
+      }
+    }
+
+    if (form.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(form.email.trim())) {
+        toast.error("Please enter a valid email address.");
+        return;
+      }
+    }
+
+    if (form.contact.trim()) {
+      const cleanContact = form.contact.replace(/\s+/g, "");
+      if (!/^[0-9+()\-]{7,20}$/.test(cleanContact)) {
+        toast.error("Please enter a valid contact phone number (e.g. 09171234567).");
+        return;
+      }
+    }
+
+    const fullName = [form.first_name.trim(), form.middle_name.trim(), form.last_name.trim()]
+      .filter(Boolean)
+      .join(" ");
 
     setSaving(true);
     const code = form.owner_code || `OWN-${Date.now().toString().slice(-6)}`;
@@ -245,12 +273,16 @@ export default function ManageOwners() {
     });
   }, [owners, search, filterStatus, filterWalkIn]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterStatus, filterWalkIn]);
+
   // Pagination
-  const totalPages = Math.ceil(filteredOwners.length / ITEMS_PER_PAGE) || 1;
+  const totalPages = Math.ceil(filteredOwners.length / pageSize) || 1;
   const paginatedOwners = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredOwners.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredOwners, currentPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredOwners.slice(start, start + pageSize);
+  }, [filteredOwners, currentPage, pageSize]);
 
   const ownerPets = (ownerId: string) => pets.filter((p) => p.owner_id === ownerId);
   const ownerPetIds = (ownerId: string) => new Set(ownerPets(ownerId).map((p) => p.id));
@@ -553,36 +585,14 @@ export default function ManageOwners() {
               </Table>
 
               {/* Pagination Controls */}
-              <div className="p-4 border-t flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Showing {filteredOwners.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to{" "}
-                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredOwners.length)} of {filteredOwners.length} owners
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                  </Button>
-                  <span>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                  >
-                    Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                  </Button>
-                </div>
-              </div>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredOwners.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="owners"
+              />
             </>
           )}
         </CardContent>
@@ -662,6 +672,7 @@ export default function ManageOwners() {
                 <Label className="text-xs">Birth Date</Label>
                 <Input
                   type="date"
+                  max={todayPH()}
                   value={form.birth_date}
                   onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
                 />
@@ -727,6 +738,7 @@ export default function ManageOwners() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Deactivated">Deactivated</SelectItem>
                     <SelectItem value="Inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>

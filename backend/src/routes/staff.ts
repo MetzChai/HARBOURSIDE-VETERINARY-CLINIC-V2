@@ -80,11 +80,29 @@ router.get("/", requireAuth, async (req: AuthedRequest, res) => {
 router.post("/", requireAuth, async (req: AuthedRequest, res) => {
   if (!requireAdmin(req, res)) return;
   try {
-    const { firstName, middleName, lastName, email, password, phone } = req.body ?? {};
-    const fullName = req.body?.fullName || [firstName, middleName, lastName].filter(Boolean).join(" ");
+    const firstName = req.body?.firstName ? String(req.body.firstName).trim() : "";
+    const middleName = req.body?.middleName ? String(req.body.middleName).trim() : undefined;
+    const lastName = req.body?.lastName ? String(req.body.lastName).trim() : "";
+    const email = String(req.body?.email ?? "").trim();
+    const password = String(req.body?.password ?? "");
+    const phone = req.body?.phone ? String(req.body.phone).trim() : undefined;
+    const fullName = req.body?.fullName
+      ? String(req.body.fullName).trim()
+      : [firstName, middleName, lastName].filter(Boolean).join(" ");
 
     if (!email || !password || (!fullName && (!firstName || !lastName))) {
       res.status(400).json({ error: "Email, Password, and Name are required." });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      res.status(400).json({ error: "Please enter a valid email address." });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ error: "Password must be at least 6 characters long." });
       return;
     }
 

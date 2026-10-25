@@ -37,6 +37,7 @@ import {
   APPOINTMENT_SLOTS,
   formatTimeSlot,
   VET_OPTIONS,
+  CLINIC_VETERINARIAN,
   APPOINTMENT_STATUSES,
   APPOINTMENT_TYPES,
   getStatusBadgeClass,
@@ -50,6 +51,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { TablePagination } from "@/components/TablePagination";
 
 export default function Schedule() {
   const { role, user } = useAuth();
@@ -73,6 +75,8 @@ export default function Schedule() {
   const [filterDate, setFilterDate] = useState("");
   const [filterPetId, setFilterPetId] = useState("all");
   const [filterOwnerId, setFilterOwnerId] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -90,7 +94,7 @@ export default function Schedule() {
     walk_in_owner: "",
     date: todayPH(),
     time: "",
-    vet: VET_OPTIONS[0] || "",
+    vet: CLINIC_VETERINARIAN,
     appointment_type: "Check-up",
     reason: "",
     notes: "",
@@ -202,6 +206,16 @@ export default function Schedule() {
     });
   }, [appointments, searchQuery, filterStatus, filterType, filterDate, filterPetId, filterOwnerId]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, filterType, filterDate, filterPetId, filterOwnerId]);
+
+  const totalPages = Math.ceil(filteredAppointments.length / pageSize) || 1;
+  const paginatedAppointments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAppointments.slice(start, start + pageSize);
+  }, [filteredAppointments, currentPage, pageSize]);
+
   const openAddModal = () => {
     setEditingId(null);
     setForm({
@@ -221,7 +235,7 @@ export default function Schedule() {
       walk_in_owner: "",
       date: a.date,
       time: a.time,
-      vet: a.vet || VET_OPTIONS[0],
+      vet: a.vet || CLINIC_VETERINARIAN,
       appointment_type: a.appointment_type || a.care_type || "Check-up",
       reason: a.reason || "",
       notes: a.notes || "",
@@ -241,8 +255,24 @@ export default function Schedule() {
     const isWalkIn = form.type === "walk_in";
     const hasPet = isWalkIn ? form.pet_id || form.walk_in_pet.trim() : form.pet_id;
 
-    if (!hasPet || !form.date || !form.time || !form.vet) {
-      toast.error("Pet, date, time, and veterinarian are required.");
+    if (!hasPet) {
+      toast.error("Please select a pet.");
+      return;
+    }
+    if (!form.date) {
+      toast.error("Please select a valid appointment date.");
+      return;
+    }
+    if (!form.time) {
+      toast.error("Please select an appointment time slot.");
+      return;
+    }
+    if (!form.vet) {
+      toast.error("Please select a veterinarian.");
+      return;
+    }
+    if (!form.reason.trim()) {
+      toast.error("Appointment reason is required.");
       return;
     }
 
@@ -626,8 +656,8 @@ export default function Schedule() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAppointments.length ? (
-                    filteredAppointments.map((a) => (
+                  {paginatedAppointments.length ? (
+                    paginatedAppointments.map((a) => (
                       <TableRow key={a.id} className={a.status === "Pending" || a.status === "Requested" ? "bg-amber-50/40" : undefined}>
                         <TableCell className="font-mono text-xs font-bold text-primary">
                           {a.appointment_number || `APT-${a.id.slice(0, 6)}`}
@@ -744,6 +774,14 @@ export default function Schedule() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredAppointments.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="appointments"
+              />
             </CardContent>
           </Card>
         </div>
@@ -867,18 +905,12 @@ export default function Schedule() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Veterinarian *</Label>
-                <Select value={form.vet} onValueChange={(val) => setForm({ ...form, vet: val })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select vet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VET_OPTIONS.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        {v}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={form.vet || CLINIC_VETERINARIAN}
+                  disabled
+                  readOnly
+                  className="bg-muted text-xs font-medium cursor-not-allowed text-foreground"
+                />
               </div>
 
               <div className="space-y-1.5">

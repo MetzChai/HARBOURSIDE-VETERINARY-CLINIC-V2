@@ -26,6 +26,7 @@ export const TABLES = [
   "lab_transaction_items",
   "lab_records",
   "messages",
+  "care_attachments",
 ] as const;
 
 export type TableName = (typeof TABLES)[number];

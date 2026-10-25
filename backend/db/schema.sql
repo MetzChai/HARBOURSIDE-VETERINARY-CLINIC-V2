@@ -273,6 +273,28 @@ ALTER TABLE care_records ADD COLUMN IF NOT EXISTS next_deworming_due date;
 DROP TRIGGER IF EXISTS trg_care_updated ON care_records;
 CREATE TRIGGER trg_care_updated BEFORE UPDATE ON care_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- ===== care_attachments =====
+CREATE TABLE IF NOT EXISTS care_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  care_record_id uuid REFERENCES care_records(id) ON DELETE CASCADE,
+  pet_id uuid NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+  file_url text NOT NULL,
+  file_name text NOT NULL,
+  file_type text NOT NULL,
+  file_size integer DEFAULT 0,
+  public_id text,
+  source_notes text,
+  uploaded_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_care_attachments_pet ON care_attachments(pet_id);
+CREATE INDEX IF NOT EXISTS idx_care_attachments_record ON care_attachments(care_record_id);
+
+DROP TRIGGER IF EXISTS trg_care_attachments_updated ON care_attachments;
+CREATE TRIGGER trg_care_attachments_updated BEFORE UPDATE ON care_attachments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- ===== inventory_items =====
 CREATE TABLE IF NOT EXISTS inventory_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

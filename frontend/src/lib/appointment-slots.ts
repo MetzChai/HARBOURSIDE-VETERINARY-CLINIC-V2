@@ -40,6 +40,7 @@ export function formatTimeSlot(timeStr?: string | null): string {
 }
 
 export const VET_OPTIONS: string[] = ["Dr. Alfredo B. Badiola Jr."];
+export const CLINIC_VETERINARIAN: string = VET_OPTIONS[0] || "Dr. Alfredo B. Badiola Jr.";
 
 export const APPOINTMENT_STATUSES = [
   "Requested",

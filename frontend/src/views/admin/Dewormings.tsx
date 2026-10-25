@@ -1,7 +1,7 @@
 "use client";
 
 import { printDocument } from "@/lib/print";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { SearchableSelect, type SearchableOption } from "@/components/SearchableSelect";
+import { CLINIC_VETERINARIAN } from "@/lib/appointment-slots";
+import { TablePagination } from "@/components/TablePagination";
 
 const STATUSES = ["Scheduled", "Completed", "Due Follow-up"] as const;
 
@@ -50,7 +52,9 @@ export default function Dewormings() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ pet_id: "", product: "", date_given: "", next_due: "", vet: "", status: "Scheduled", notes: "" });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [form, setForm] = useState({ pet_id: "", product: "", date_given: "", next_due: "", vet: CLINIC_VETERINARIAN, status: "Scheduled", notes: "" });
 
   const petName = (id: string) => pets.find((p) => p.id === id)?.name ?? "—";
 
@@ -63,6 +67,16 @@ export default function Dewormings() {
     petName(r.pet_id).toLowerCase().includes(search.toLowerCase()) ||
     (r.product ?? "").toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
 
   const reminders = useMemo(
     () => rows.filter((r) => isPastDue(r) || effectiveStatus(r) === "Due Follow-up"),
@@ -106,7 +120,7 @@ export default function Dewormings() {
     setSaving(false);
     toast.success("Deworming record saved to medical profile");
     setOpen(false);
-    setForm({ pet_id: "", product: "", date_given: "", next_due: "", vet: "", status: "Scheduled", notes: "" });
+    setForm({ pet_id: "", product: "", date_given: "", next_due: "", vet: CLINIC_VETERINARIAN, status: "Scheduled", notes: "" });
     invalidate("dewormings");
     invalidate("care_records");
   };
@@ -192,7 +206,10 @@ export default function Dewormings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Product</Label><Input value={form.product} onChange={(e) => setForm((p) => ({ ...p, product: e.target.value }))} placeholder="e.g. Drontal Plus" /></div>
-                  <div className="space-y-2"><Label>Attending Vet</Label><Input value={form.vet} onChange={(e) => setForm((p) => ({ ...p, vet: e.target.value }))} placeholder="Dr. ..." /></div>
+                  <div className="space-y-2">
+                    <Label>Attending Vet</Label>
+                    <Input value={form.vet || CLINIC_VETERINARIAN} disabled readOnly className="bg-muted font-medium cursor-not-allowed" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Date Given</Label><Input type="date" value={form.date_given} onChange={(e) => setForm((p) => ({ ...p, date_given: e.target.value }))} /></div>
@@ -247,45 +264,55 @@ export default function Dewormings() {
               <PageSkeleton rows={6} />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pet</TableHead><TableHead>Product</TableHead><TableHead>Date Given</TableHead>
-                  <TableHead>Next Due</TableHead><TableHead>Vet</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{petName(r.pet_id)}</TableCell>
-                    <TableCell>{r.product}</TableCell>
-                    <TableCell>{formatDate(r.date_given)}</TableCell>
-                    <TableCell>{formatDate(r.next_due)}</TableCell>
-                    <TableCell>{r.vet ?? "—"}</TableCell>
-                    <TableCell>
-                      <Select value={effectiveStatus(r)} onValueChange={(v) => updateStatus(r.id, v)}>
-                        <SelectTrigger className="h-8 w-[150px] border-0 bg-transparent p-0 hover:bg-accent/50 focus:ring-1">
-                          <Badge variant={statusVariant(effectiveStatus(r))} className="cursor-pointer">{effectiveStatus(r)}</Badge>
-                        </SelectTrigger>
-                        <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button size="icon" variant="ghost" onClick={() => printRecord(r)} title="Print record">
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
+            <>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="p-0">
-                      <EmptyState icon={Bug} title="No records found." description="Add a deworming record or adjust your search." />
-                    </TableCell>
+                    <TableHead>Pet</TableHead><TableHead>Product</TableHead><TableHead>Date Given</TableHead>
+                    <TableHead>Next Due</TableHead><TableHead>Vet</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{petName(r.pet_id)}</TableCell>
+                      <TableCell>{r.product}</TableCell>
+                      <TableCell>{formatDate(r.date_given)}</TableCell>
+                      <TableCell>{formatDate(r.next_due)}</TableCell>
+                      <TableCell>{r.vet ?? "—"}</TableCell>
+                      <TableCell>
+                        <Select value={effectiveStatus(r)} onValueChange={(v) => updateStatus(r.id, v)}>
+                          <SelectTrigger className="h-8 w-[150px] border-0 bg-transparent p-0 hover:bg-accent/50 focus:ring-1">
+                            <Badge variant={statusVariant(effectiveStatus(r))} className="cursor-pointer">{effectiveStatus(r)}</Badge>
+                          </SelectTrigger>
+                          <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="icon" variant="ghost" onClick={() => printRecord(r)} title="Print record">
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="p-0">
+                        <EmptyState icon={Bug} title="No records found." description="Add a deworming record or adjust your search." />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="records"
+              />
+            </>
           )}
         </CardContent>
       </Card>

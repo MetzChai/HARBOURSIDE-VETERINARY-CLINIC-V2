@@ -52,6 +52,46 @@ export function daysFromTodayPH(value?: string | null): number | null {
   return Math.round(diff / MS_PER_DAY);
 }
 
+/** Validate that a string represents a real, valid calendar date (catches Feb 30, Nov 31, invalid strings, etc.) */
+export function isValidCalendarDate(dateStr: string): boolean {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (year < 1800 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+  const dateObj = new Date(Date.UTC(year, month - 1, day));
+  return (
+    dateObj.getUTCFullYear() === year &&
+    dateObj.getUTCMonth() === month - 1 &&
+    dateObj.getUTCDate() === day
+  );
+}
+
+/**
+ * Validate birth date:
+ * 1. Must represent a valid calendar date.
+ * 2. Cannot be later than current date in clinic timezone (Asia/Manila).
+ * 3. Must be year 1900 or later.
+ */
+export function validateBirthDate(dob: unknown): { valid: boolean; error?: string; normalized?: string | null } {
+  if (dob === null || dob === undefined || dob === "") {
+    return { valid: true, normalized: null };
+  }
+  const dateStr = toDateOnly(dob);
+  if (!dateStr || !isValidCalendarDate(dateStr)) {
+    return { valid: false, error: "Please enter a valid birth date." };
+  }
+  const [year] = dateStr.split("-").map(Number);
+  if (year < 1900) {
+    return { valid: false, error: "Birth date year must be 1900 or later." };
+  }
+  const today = todayPH();
+  if (dateStr > today) {
+    return { valid: false, error: "Birth date cannot be in the future." };
+  }
+  return { valid: true, normalized: dateStr };
+}
+
 export function isOnOrBeforeTodayPH(value?: string | null): boolean {
   const days = daysFromTodayPH(value);
   return days !== null && days <= 0;

@@ -4,6 +4,7 @@ import { getPool, isTableName, parseSelect, quoteIdent, type TableName } from ".
 import { APPOINTMENT_SLOTS, isSlotBlockingStatus, normalizeCareType } from "../lib/appointment-slots.js";
 import { toDateOnly, nowPHIso, todayPH, nowTimePH } from "../lib/datetime.js";
 import { buildInventoryDeductionPlan, validateInventoryDeductionPlan } from "./inventory-integration.js";
+import { validateEntityData } from "./data-validation.js";
 
 type Filter = { column: string; value: unknown };
 
@@ -153,6 +154,7 @@ export async function buildOwnerScope(
     case "vaccinations":
     case "dewormings":
     case "care_records":
+    case "care_attachments":
       return petIds.length
         ? { clause: `t.pet_id = ANY($1::uuid[])`, params: [petIds] }
         : { clause: "FALSE", params: [] };
@@ -1296,7 +1298,19 @@ export async function queryInsert(opts: {
         if (!String(payload.body ?? "").trim()) {
           throw new Error("Message body is required.");
         }
+        const replyId = payload.in_reply_to_id ?? row.in_reply_to_id ?? row.referenced_message_id;
+        if (replyId) {
+          const { rows: origRows } = await (client ?? pool).query(
+            `SELECT owner_id FROM messages WHERE id = $1`,
+            [replyId]
+          );
+          if (origRows.length > 0 && origRows[0].owner_id) {
+            payload.owner_id = origRows[0].owner_id;
+          }
+        }
       }
+
+      await validateEntityData(table, payload, false, client ?? pool);
 
       if (table === "care_records") {
         const aptId = (payload.appointment_id ?? payload.appointmentId) as string | undefined;
@@ -1744,6 +1758,8 @@ export async function queryUpdate(opts: {
         }
       }
     }
+
+    await validateEntityData(table, data, true, poolOrClient);
 
     if (table === "lab_transactions") {
       const idFilter = opts.filters.find((f) => f.column === "id");
@@ -2852,7 +2868,13 @@ export async function toggleAccountStatus(adminUserId: string, targetUserId: str
   if (adminUserId === targetUserId && status === "Deactivated") {
     throw new Error("Administrators cannot deactivate their own account.");
   }
-  await pool.query(`UPDATE users SET account_status = $1 WHERE id = $2`, [status, targetUserId]);
+  const { rows: targetRows } = await pool.query(`SELECT id, email, account_status FROM users WHERE id = $1`, [targetUserId]);
+  if (!targetRows.length) {
+    throw new Error("User account not found.");
+  }
+
+  await pool.query(`UPDATE users SET account_status = $1, updated_at = now() WHERE id = $2`, [status, targetUserId]);
+  await pool.query(`UPDATE owners SET account_status = $1, updated_at = now() WHERE user_id = $2`, [status, targetUserId]);
   return { success: true, status };
 }
 
@@ -2939,6 +2961,22 @@ export async function ensureExtraTables(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_user_notif_user_id ON user_notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_notif_notif_id ON user_notifications(notification_id);
+
+      CREATE TABLE IF NOT EXISTS care_attachments (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        care_record_id uuid REFERENCES care_records(id) ON DELETE CASCADE,
+        pet_id uuid NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+        file_url text NOT NULL,
+        file_name text NOT NULL,
+        file_type text NOT NULL,
+        file_size integer NOT NULL DEFAULT 0,
+        public_id text,
+        source_notes text,
+        uploaded_by text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_care_attachments_care_record_id ON care_attachments(care_record_id);
+      CREATE INDEX IF NOT EXISTS idx_care_attachments_pet_id ON care_attachments(pet_id);
     `);
   } catch (err) {
     console.error("[data] Error ensuring extra tables:", err);
